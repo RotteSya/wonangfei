@@ -57,6 +57,14 @@ struct SettingsView: View {
                     SettingsRow(title: "计入加班") {
                         WNFToggle(isOn: $state.includeOvertime)
                     }
+                    if state.includeOvertime {
+                        Text("下班后金额会继续增长，并单独显示为加班多挣。")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(WNFTheme.muted)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                     SettingsRow(title: "截图隐藏工资", isLast: true) {
                         WNFToggle(isOn: $state.privacyMode)
                     }
@@ -104,7 +112,7 @@ struct SettingsView: View {
                     .foregroundStyle(Color.white)
                 HStack(spacing: 6) {
                     YenBadge(size: 13)
-                    Text("时薪 \(state.privacyMode ? "¥••" : "¥\(Int(day.hourlyRate))") · \(state.hasLunchBreak ? "已忍 \(Int(Double(day.workdayMinutes) / 60 * 9.4)) 小时" : "不午休")")
+                    Text("时薪 \(state.privacyMode ? "¥••" : "¥\(Int(day.hourlyRate))") · \(state.hasLunchBreak ? "已忍 \(Int(Double(day.regularWorkdayMinutes) / 60 * 9.4)) 小时" : "不午休")")
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(Color.white.opacity(0.58))
                 }

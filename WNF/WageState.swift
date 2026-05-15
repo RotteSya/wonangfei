@@ -1,23 +1,32 @@
 import Foundation
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
 
 final class WageState: ObservableObject {
-    @Published var monthlySalary: Double = 18_000
-    @Published var workdaysPerMonth: Int = 26
-    @Published var workStart: DateComponents = DateComponents(hour: 9, minute: 30)
-    @Published var workEnd: DateComponents = DateComponents(hour: 18, minute: 30)
-    @Published var lunchStart: DateComponents = DateComponents(hour: 12, minute: 0)
-    @Published var lunchEnd: DateComponents = DateComponents(hour: 13, minute: 0)
-    @Published var hasLunchBreak = true
-    @Published var includeOvertime = true
-    @Published var privacyMode = false
-    @Published var selectedWeekdays: Set<Int> = [0, 1, 2, 3, 4]
+    @Published var monthlySalary: Double = WageSettings.default.monthlySalary { didSet { persistSettings() } }
+    @Published var workdaysPerMonth: Int = WageSettings.default.workdaysPerMonth { didSet { persistSettings() } }
+    @Published var workStart: DateComponents = WageSettings.default.workStart.dateComponents { didSet { persistSettings() } }
+    @Published var workEnd: DateComponents = WageSettings.default.workEnd.dateComponents { didSet { persistSettings() } }
+    @Published var lunchStart: DateComponents = WageSettings.default.lunchStart.dateComponents { didSet { persistSettings() } }
+    @Published var lunchEnd: DateComponents = WageSettings.default.lunchEnd.dateComponents { didSet { persistSettings() } }
+    @Published var hasLunchBreak = WageSettings.default.hasLunchBreak { didSet { persistSettings() } }
+    @Published var includeOvertime = WageSettings.default.includeOvertime { didSet { persistSettings() } }
+    @Published var privacyMode = WageSettings.default.privacyMode { didSet { persistSettings() } }
+    @Published var selectedWeekdays: Set<Int> = WageSettings.default.selectedWeekdays { didSet { persistSettings() } }
     @Published private(set) var currentDate = Date()
 
     private var clockTimer: Timer?
+    private var endedWorkdayKey: String? {
+        didSet { persistSettings() }
+    }
 
     init() {
+        apply(WNFSharedStore.loadSettings(from: WNFSharedStore.appDefaults, key: WNFSharedStore.appSettingsKey) ?? .default)
+        persistSettings(reloadWidget: false)
+
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
-            self?.currentDate = Date()
+            self?.tick()
         }
         RunLoop.main.add(timer, forMode: .common)
         clockTimer = timer
@@ -28,17 +37,28 @@ final class WageState: ObservableObject {
     }
 
     var calculation: WageDay {
-        let currentTime = DateComponents.calendar.dateComponents([.hour, .minute, .second], from: currentDate)
-        return WageCalculator.compute(
+        WageCalculator.compute(settings: settings, now: currentDate)
+    }
+
+    var settings: WageSettings {
+        WageSettings(
             monthlySalary: monthlySalary,
             workdaysPerMonth: workdaysPerMonth,
-            workStart: workStart,
-            workEnd: workEnd,
-            lunchStart: lunchStart,
-            lunchEnd: lunchEnd,
+            workStart: WageTime(workStart),
+            workEnd: WageTime(workEnd),
+            lunchStart: WageTime(lunchStart),
+            lunchEnd: WageTime(lunchEnd),
             hasLunchBreak: hasLunchBreak,
-            now: currentTime
+            includeOvertime: includeOvertime,
+            overtimeMultiplier: WageSettings.default.overtimeMultiplier,
+            privacyMode: privacyMode,
+            selectedWeekdays: selectedWeekdays,
+            endedWorkdayKey: endedWorkdayKey
         )
+    }
+
+    func endToday() {
+        endedWorkdayKey = WageCalendar.dayKey(for: currentDate)
     }
 
     func bindingForTime(_ keyPath: ReferenceWritableKeyPath<WageState, DateComponents>) -> Date {
@@ -48,167 +68,37 @@ final class WageState: ObservableObject {
     func updateTime(_ keyPath: ReferenceWritableKeyPath<WageState, DateComponents>, date: Date) {
         self[keyPath: keyPath] = DateComponents.calendar.dateComponents([.hour, .minute], from: date)
     }
-}
 
-struct WageDay {
-    var startMinute: Int
-    var endMinute: Int
-    var lunchStartMinute: Int
-    var lunchEndMinute: Int
-    var workdayMinutes: Int
-    var hourlyRate: Double
-    var elapsedPaidMinutes: Int
-    var elapsedPaidSeconds: Int
-    var earnedToday: Double
-    var targetToday: Double
-    var status: WorkStatus
-    var wallToEndMinutes: Int
-
-    var progress: Double {
-        let workdaySeconds = workdayMinutes * 60
-        guard workdaySeconds > 0 else { return 0 }
-        return min(1, max(0, Double(elapsedPaidSeconds) / Double(workdaySeconds)))
-    }
-}
-
-enum WorkStatus {
-    case before
-    case morning
-    case lunch
-    case afternoon
-    case done
-
-    var label: String {
-        switch self {
-        case .before: "尚未开工"
-        case .morning: "上午搬砖中"
-        case .lunch: "午休回血"
-        case .afternoon: "下午挺挺"
-        case .done: "今日通关"
+    private func tick() {
+        currentDate = Date()
+        if let endedWorkdayKey, endedWorkdayKey != WageCalendar.dayKey(for: currentDate) {
+            self.endedWorkdayKey = nil
         }
     }
 
-    var quote: String {
-        switch self {
-        case .before: "别急，钱还没开始挣。"
-        case .morning: "早上的两小时最值钱。"
-        case .lunch: "吃饭的时候不发工资。"
-        case .afternoon: "再忍忍，钱在涨。"
-        case .done: "今天又把房租挣回来了。"
+    private func apply(_ settings: WageSettings) {
+        monthlySalary = settings.monthlySalary
+        workdaysPerMonth = settings.workdaysPerMonth
+        workStart = settings.workStart.dateComponents
+        workEnd = settings.workEnd.dateComponents
+        lunchStart = settings.lunchStart.dateComponents
+        lunchEnd = settings.lunchEnd.dateComponents
+        hasLunchBreak = settings.hasLunchBreak
+        includeOvertime = settings.includeOvertime
+        privacyMode = settings.privacyMode
+        selectedWeekdays = settings.selectedWeekdays
+        endedWorkdayKey = settings.endedWorkdayKey
+    }
+
+    private func persistSettings(reloadWidget: Bool = true) {
+        let current = settings
+        WNFSharedStore.save(current, to: WNFSharedStore.appDefaults, key: WNFSharedStore.appSettingsKey)
+        WNFSharedStore.save(current, to: WNFSharedStore.widgetDefaults, key: WNFSharedStore.widgetSettingsKey)
+
+        #if canImport(WidgetKit)
+        if reloadWidget {
+            WidgetCenter.shared.reloadAllTimelines()
         }
-    }
-
-    var mascotAsset: String {
-        switch self {
-        case .before: "CowFrontSad"
-        case .morning: "CowThreeQ"
-        case .lunch: "CowFrontSad"
-        case .afternoon: "CowFrontSad"
-        case .done: "CowThreeQ"
-        }
-    }
-}
-
-enum WageCalculator {
-    static func compute(
-        monthlySalary: Double,
-        workdaysPerMonth: Int,
-        workStart: DateComponents,
-        workEnd: DateComponents,
-        lunchStart: DateComponents,
-        lunchEnd: DateComponents,
-        hasLunchBreak: Bool,
-        now: DateComponents
-    ) -> WageDay {
-        let startMinute = workStart.minutesInDay
-        let endMinute = workEnd.minutesInDay
-        let rawLunchStart = hasLunchBreak ? lunchStart.minutesInDay : endMinute
-        let rawLunchEnd = hasLunchBreak ? lunchEnd.minutesInDay : endMinute
-        let lunchStartMinute = min(rawLunchStart, rawLunchEnd)
-        let lunchEndMinute = max(rawLunchStart, rawLunchEnd)
-        let lunchLength = max(0, lunchEndMinute - lunchStartMinute)
-        let workdayMinutes = max(1, endMinute - startMinute - lunchLength)
-        let hourlyRate = monthlySalary / (Double(max(1, workdaysPerMonth)) * (Double(workdayMinutes) / 60))
-        let startSecond = startMinute * 60
-        let endSecond = endMinute * 60
-        let lunchStartSecond = lunchStartMinute * 60
-        let lunchEndSecond = lunchEndMinute * 60
-        let nowSecond = now.secondsInDay
-        let nowMinute = nowSecond / 60
-
-        var elapsedSeconds = 0
-        if nowSecond > startSecond {
-            elapsedSeconds = min(nowSecond, endSecond) - startSecond
-            let lunchOverlap = max(0, min(nowSecond, lunchEndSecond) - lunchStartSecond)
-            elapsedSeconds = max(0, elapsedSeconds - lunchOverlap)
-        }
-
-        let status: WorkStatus
-        if nowMinute < startMinute {
-            status = .before
-        } else if nowMinute < lunchStartMinute {
-            status = .morning
-        } else if nowMinute < lunchEndMinute {
-            status = .lunch
-        } else if nowMinute < endMinute {
-            status = .afternoon
-        } else {
-            status = .done
-        }
-
-        let earnedToday = hourlyRate / 3600 * Double(elapsedSeconds)
-        let targetToday = hourlyRate / 60 * Double(workdayMinutes)
-        return WageDay(
-            startMinute: startMinute,
-            endMinute: endMinute,
-            lunchStartMinute: lunchStartMinute,
-            lunchEndMinute: lunchEndMinute,
-            workdayMinutes: workdayMinutes,
-            hourlyRate: hourlyRate,
-            elapsedPaidMinutes: elapsedSeconds / 60,
-            elapsedPaidSeconds: elapsedSeconds,
-            earnedToday: earnedToday,
-            targetToday: targetToday,
-            status: status,
-            wallToEndMinutes: max(0, Int(ceil(Double(endSecond - nowSecond) / 60)))
-        )
-    }
-}
-
-extension DateComponents {
-    static let calendar: Calendar = {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .current
-        return calendar
-    }()
-
-    var minutesInDay: Int {
-        (hour ?? 0) * 60 + (minute ?? 0)
-    }
-
-    var secondsInDay: Int {
-        minutesInDay * 60 + (second ?? 0)
-    }
-
-    var clockText: String {
-        String(format: "%02d:%02d", hour ?? 0, minute ?? 0)
-    }
-}
-
-enum WNFFormat {
-    static func money(_ value: Double, privacy: Bool) -> String {
-        privacy ? "¥••••" : "¥\(Int(value.rounded()).formatted(.number.grouping(.automatic)))"
-    }
-
-    static func moneyDecimal(_ value: Double, privacy: Bool) -> String {
-        privacy ? "¥•••.••" : String(format: "¥%.2f", value)
-    }
-
-    static func duration(_ minutes: Int) -> String {
-        let hours = minutes / 60
-        let mins = minutes % 60
-        if hours <= 0 { return "\(mins)min" }
-        if mins == 0 { return "\(hours)h" }
-        return "\(hours)h\(mins)min"
+        #endif
     }
 }

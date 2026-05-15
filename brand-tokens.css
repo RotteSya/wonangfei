@@ -1,0 +1,83 @@
+:root {
+  /* Color: core surfaces */
+  --wnf-bg: #FFF6E5;
+  --wnf-bg-oklch: oklch(97.56% 0.0244 83.4);
+  --wnf-bg-warm: #FCEAB7;
+  --wnf-bg-warm-oklch: oklch(93.92% 0.0684 90.9);
+  --wnf-surface: #FFFFFF;
+  --wnf-surface-soft: #FFF1D2;
+  --wnf-surface-soft-oklch: oklch(96.13% 0.0432 86.6);
+
+  /* Color: brand */
+  --wnf-yellow: #FFC83D;
+  --wnf-yellow-oklch: oklch(85.94% 0.1583 85.8);
+  --wnf-gold: #FFD24D;
+  --wnf-gold-oklch: oklch(87.99% 0.1535 89.8);
+  --wnf-ink: #0D0D0D;
+  --wnf-ink-oklch: oklch(15.91% 0 89.9);
+  --wnf-ink-soft: #3A3530;
+  --wnf-ink-soft-oklch: oklch(33.24% 0.0112 67.4);
+  --wnf-muted: #9A938A;
+  --wnf-muted-oklch: oklch(66.66% 0.0155 74.4);
+  --wnf-hairline: rgba(13,13,13,0.08);
+
+  /* Color: accents and states */
+  --wnf-cyan: #00E5FF;
+  --wnf-cyan-oklch: oklch(84.42% 0.1457 209.3);
+  --wnf-cyan-soft: #B6F5FB;
+  --wnf-cyan-soft-oklch: oklch(92.99% 0.0635 203.5);
+  --wnf-coral: #FF5C57;
+  --wnf-coral-oklch: oklch(69.02% 0.1993 25.5);
+  --wnf-coral-soft: #FFD7D2;
+  --wnf-coral-soft-oklch: oklch(91.16% 0.0455 26.4);
+  --wnf-pink: #FFB1A6;
+  --wnf-pink-soft: #FFE3DD;
+
+  /* Typography */
+  --wnf-font-display: "ZCOOL QingKe HuangYou", "Nunito", "PingFang SC", -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+  --wnf-font-body: "Nunito", "PingFang SC", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --wnf-font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Spacing scale */
+  --wnf-space-1: 4px;
+  --wnf-space-2: 6px;
+  --wnf-space-3: 8px;
+  --wnf-space-4: 10px;
+  --wnf-space-5: 12px;
+  --wnf-space-6: 14px;
+  --wnf-space-7: 16px;
+  --wnf-space-8: 18px;
+  --wnf-space-9: 20px;
+  --wnf-space-10: 22px;
+  --wnf-space-11: 24px;
+  --wnf-space-12: 28px;
+  --wnf-space-13: 32px;
+
+  /* Radius scale */
+  --wnf-radius-xs: 7px;
+  --wnf-radius-sm: 10px;
+  --wnf-radius-md: 12px;
+  --wnf-radius-lg: 16px;
+  --wnf-radius-xl: 18px;
+  --wnf-radius-card: 22px;
+  --wnf-radius-hero: 28px;
+  --wnf-radius-pill: 999px;
+  --wnf-radius-device: 48px;
+
+  /* Elevation */
+  --wnf-shadow-yellow: 0 12px 28px rgba(255,200,61,0.30);
+  --wnf-shadow-ink: 0 6px 18px rgba(13,13,13,0.22);
+  --wnf-shadow-card: 0 0 0 0.5px rgba(0,0,0,0.06), 0 2px 6px rgba(0,0,0,0.04);
+  --wnf-shadow-device: 0 40px 80px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.10);
+
+  /* Motion */
+  --wnf-ease-ios: cubic-bezier(.32,.72,0,1);
+  --wnf-duration-fast: 0.2s;
+  --wnf-duration-normal: 0.25s;
+  --wnf-duration-slow: 0.3s;
+}
+
+.wnf-tabular {
+  font-family: var(--wnf-font-mono);
+  font-variant-numeric: tabular-nums;
+}

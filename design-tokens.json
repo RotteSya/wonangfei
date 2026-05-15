@@ -1,0 +1,56 @@
+{
+  "name": "窝囊费 Design Tokens",
+  "version": "2026-05-15",
+  "colors": {
+    "bg": { "hex": "#FFF6E5", "oklch": "oklch(97.56% 0.0244 83.4)", "usage": "app background, phone frame surface" },
+    "bgWarm": { "hex": "#FCEAB7", "oklch": "oklch(93.92% 0.0684 90.9)", "usage": "warm hero tint and large soft areas" },
+    "surface": { "hex": "#FFFFFF", "oklch": "oklch(100.00% 0.0000 89.9)", "usage": "cards, rows, inputs" },
+    "surfaceSoft": { "hex": "#FFF1D2", "oklch": "oklch(96.13% 0.0432 86.6)", "usage": "inactive chips, input shells, soft badges" },
+    "yellow": { "hex": "#FFC83D", "oklch": "oklch(85.94% 0.1583 85.8)", "usage": "primary brand fill, active chart bars, active switch knob" },
+    "gold": { "hex": "#FFD24D", "oklch": "oklch(87.99% 0.1535 89.8)", "usage": "coin gradients and yen tag" },
+    "ink": { "hex": "#0D0D0D", "oklch": "oklch(15.91% 0 89.9)", "usage": "headlines, primary controls, black cards" },
+    "inkSoft": { "hex": "#3A3530", "oklch": "oklch(33.24% 0.0112 67.4)", "usage": "secondary body and cow marks" },
+    "muted": { "hex": "#9A938A", "oklch": "oklch(66.66% 0.0155 74.4)", "usage": "supporting labels and helper copy" },
+    "cyan": { "hex": "#00E5FF", "oklch": "oklch(84.42% 0.1457 209.3)", "usage": "secondary data signal" },
+    "cyanSoft": { "hex": "#B6F5FB", "oklch": "oklch(92.99% 0.0635 203.5)", "usage": "privacy/settings soft icon background" },
+    "coral": { "hex": "#FF5C57", "oklch": "oklch(69.02% 0.1993 25.5)", "usage": "warning, overtime, emotional heat" },
+    "coralSoft": { "hex": "#FFD7D2", "oklch": "oklch(91.16% 0.0455 26.4)", "usage": "soft overtime setting background" },
+    "hairline": { "rgba": "rgba(13,13,13,0.08)", "usage": "0.5px borders and row dividers" }
+  },
+  "typography": {
+    "display": "\"ZCOOL QingKe HuangYou\", \"Nunito\", \"PingFang SC\", -apple-system, BlinkMacSystemFont, \"SF Pro Display\", sans-serif",
+    "body": "\"Nunito\", \"PingFang SC\", -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
+    "mono": "\"JetBrains Mono\", ui-monospace, \"SF Mono\", Menlo, monospace",
+    "rules": [
+      "Use display font for brand wordmark, large yen numbers, section titles, and playful Chinese one-liners.",
+      "Use body font for labels, descriptions, controls, and row text.",
+      "Use mono font with tabular numerics for salary, hourly rate, time, chart values, and all financial figures."
+    ]
+  },
+  "spacing": {
+    "base": 4,
+    "scalePx": [4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 28, 32],
+    "screenMargin": 18,
+    "sectionLabelInset": "20px 28px 8px",
+    "cardPadding": "14px 16px",
+    "heroPadding": "20px 22px 22px",
+    "tabBarBottom": 18
+  },
+  "radii": {
+    "control": 10,
+    "chip": 12,
+    "smallIcon": 16,
+    "thumbnail": 18,
+    "card": 22,
+    "hero": 28,
+    "pill": 999,
+    "device": 48
+  },
+  "motion": {
+    "standardEase": "cubic-bezier(.32,.72,0,1)",
+    "fast": "0.2s",
+    "normal": "0.25s",
+    "slow": "0.3s",
+    "principle": "Short, tactile state changes only. No decorative motion competing with money numbers."
+  }
+}

@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8" />
+<title>窝囊费 · 丧萌有理 · 自嘲无罪</title>
+<link rel="icon" href="data:," />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=ZCOOL+QingKe+HuangYou&family=Nunito:wght@500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; padding: 0; background: #efece6; font-family: "Nunito","PingFang SC", system-ui, sans-serif; }
+  *, *::before, *::after { box-sizing: border-box; }
+</style>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="ios-frame.jsx"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="cow.jsx"></script>
+<script type="text/babel" src="shared.jsx"></script>
+<script type="text/babel" src="home.jsx"></script>
+<script type="text/babel" src="settings.jsx"></script>
+<script type="text/babel" src="stats.jsx"></script>
+
+<script type="text/babel">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "monthlySalary": 18000,
+  "workdaysPerMonth": 26,
+  "workStart": "09:30",
+  "workEnd": "18:30",
+  "lunchStart": "12:00",
+  "lunchEnd": "13:00",
+  "noLunch": false,
+  "weekdays": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "overtime": true,
+  "privacy": false,
+  "nowTime": "15:24"
+}/*EDITMODE-END*/;
+
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+
+  const cfg = {
+    monthlySalary: Number(t.monthlySalary) || 0,
+    workdaysPerMonth: Number(t.workdaysPerMonth) || 21,
+    workStart: t.workStart,
+    workEnd: t.workEnd,
+    lunchStart: t.lunchStart,
+    lunchEnd: t.lunchEnd,
+    noLunch: !!t.noLunch,
+    weekdays: t.weekdays,
+    overtime: t.overtime,
+  };
+  const nowMin = parseHM(t.nowTime);
+  const onPriv = () => setTweak('privacy', !t.privacy);
+
+  // Setters passed down so settings actually mutates state.
+  const actions = {
+    setSalary: (v) => setTweak('monthlySalary', Math.max(0, Math.round(v))),
+    setWorkdays: (v) => setTweak('workdaysPerMonth', Math.max(1, Math.min(31, Math.round(v)))),
+    toggleWeekday: (i) => {
+      const s = new Set(t.weekdays || []);
+      if (s.has(i)) s.delete(i); else s.add(i);
+      setTweak('weekdays', Array.from(s).sort((a, b) => a - b));
+    },
+    setTime: (key, value) => setTweak(key, value),
+    setNoLunch: (v) => setTweak('noLunch', !!v),
+    setOvertime: (v) => setTweak('overtime', !!v),
+    setPrivacy: (v) => setTweak('privacy', !!v),
+  };
+
+  return (
+    <>
+      <DesignCanvas defaultZoom={0.78}>
+
+        <DCSection id="screens" title="窝囊费 · 三个核心页面"
+          subtitle="首页突出今日窝囊费一个数字。统计 + 设置完整呈现。">
+
+          <DCArtboard id="home" label="首页 · Hero（一个最重要的数字）" width={402} height={874}>
+            <Frame statusTime={t.nowTime}>
+              <HomeScreen cfg={cfg} nowMin={nowMin} privacy={t.privacy}
+                onPrivacy={onPriv} />
+            </Frame>
+          </DCArtboard>
+
+          <DCArtboard id="stats" label="记录页 · 可点 周/月/年 · 可点柱状图" width={402} height={874}>
+            <Frame statusTime={t.nowTime}>
+              <StatsScreen cfg={cfg} privacy={t.privacy} onPrivacy={onPriv} />
+            </Frame>
+          </DCArtboard>
+
+          <DCArtboard id="settings" label="我的 · 表单可操作·可选“没有午休”" width={402} height={874}>
+            <Frame statusTime={t.nowTime}>
+              <SettingsScreen cfg={cfg} privacy={t.privacy} onPrivacy={onPriv} actions={actions} />
+            </Frame>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="times" title="首页 · 一天的不同时刻"
+          subtitle="同一个屏幕在不同时间点的样子 — 上午、午休、下午、下班后。可以在 Tweaks 里改 “当前时间” 看任何时刻。">
+          <DCArtboard id="morning" label="09:42 · 刚到工位" width={402} height={874}>
+            <Frame statusTime="09:42">
+              <HomeScreen cfg={cfg} nowMin={parseHM('09:42')} privacy={t.privacy}
+                onPrivacy={onPriv} />
+            </Frame>
+          </DCArtboard>
+          <DCArtboard id="lunch" label="12:34 · 午休" width={402} height={874}>
+            <Frame statusTime="12:34">
+              <HomeScreen cfg={cfg} nowMin={parseHM('12:34')} privacy={t.privacy}
+                onPrivacy={onPriv} />
+            </Frame>
+          </DCArtboard>
+          <DCArtboard id="afternoon" label="17:55 · 还差一点" width={402} height={874}>
+            <Frame statusTime="17:55">
+              <HomeScreen cfg={cfg} nowMin={parseHM('17:55')} privacy={t.privacy}
+                onPrivacy={onPriv} />
+            </Frame>
+          </DCArtboard>
+          <DCArtboard id="done" label="19:30 · 下班" width={402} height={874}>
+            <Frame statusTime="19:30">
+              <HomeScreen cfg={cfg} nowMin={parseHM('19:30')} privacy={t.privacy}
+                onPrivacy={onPriv} />
+            </Frame>
+          </DCArtboard>
+        </DCSection>
+
+      </DesignCanvas>
+
+      <TweaksPanel title="Tweaks · 窝囊费">
+        <TweakSection label="工资" />
+        <TweakNumber label="月薪 (¥)" value={t.monthlySalary} min={3000} max={100000} step={500}
+          onChange={(v) => setTweak('monthlySalary', v)} />
+        <TweakSlider label="月工作日" value={t.workdaysPerMonth} min={15} max={26} step={1} unit="天"
+          onChange={(v) => setTweak('workdaysPerMonth', v)} />
+
+        <TweakSection label="时间" />
+        <TweakText label="当前时间" value={t.nowTime}
+          onChange={(v) => setTweak('nowTime', v)} />
+        <TweakToggle label="没有午休" value={t.noLunch}
+          onChange={(v) => setTweak('noLunch', v)} />
+        <TweakText label="上班" value={t.workStart}
+          onChange={(v) => setTweak('workStart', v)} />
+        <TweakText label="下班" value={t.workEnd}
+          onChange={(v) => setTweak('workEnd', v)} />
+        <TweakText label="午休开始" value={t.lunchStart}
+          onChange={(v) => setTweak('lunchStart', v)} />
+        <TweakText label="午休结束" value={t.lunchEnd}
+          onChange={(v) => setTweak('lunchEnd', v)} />
+
+        <TweakSection label="状态" />
+        <TweakToggle label="截图隐藏工资" value={t.privacy}
+          onChange={(v) => setTweak('privacy', v)} />
+        <TweakToggle label="计入加班" value={t.overtime}
+          onChange={(v) => setTweak('overtime', v)} />
+      </TweaksPanel>
+    </>
+  );
+}
+
+function Frame({ children, statusTime }) {
+  return (
+    <div style={{
+      width: 402, height: 874, borderRadius: 48, overflow: 'hidden',
+      position: 'relative', background: '#FFF6E5',
+      boxShadow: '0 40px 80px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.10)',
+      fontFamily: 'Nunito, "PingFang SC", system-ui, sans-serif',
+    }}>
+      <div style={{
+        position: 'absolute', top: 11, left: '50%', transform: 'translateX(-50%)',
+        width: 126, height: 37, borderRadius: 24, background: '#000', zIndex: 50,
+      }} />
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }}>
+        <IOSStatusBar time={statusTime} />
+      </div>
+      <div style={{ height: '100%', position: 'relative' }}>{children}</div>
+      <div style={{
+        position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 90,
+        height: 34, display: 'flex', justifyContent: 'center', alignItems: 'flex-end',
+        paddingBottom: 8, pointerEvents: 'none',
+      }}>
+        <div style={{
+          width: 139, height: 5, borderRadius: 100,
+          background: 'rgba(0,0,0,0.25)',
+        }} />
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

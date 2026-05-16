@@ -20,3 +20,4 @@
 - Preserve local-first behavior; no remote backend is involved in this app state.
 - Keep `HomeSprite.mov` as the homepage mascot media when it is bundled. Static mascot assets are the fallback for missing media, while Widget continues to use static `WageDisplayModel.mascotAsset` images.
 - When changing Widget behavior, keep App and Widget on the same `WageSettings` / `WageCalculator` / `WageDisplayModel` contract.
+- Onboarding hero images live in `WNF/Assets.xcassets/OnboardingP1.imageset`, `OnboardingP2.imageset`, and `OnboardingP4.imageset`; current 2026-05-16 source files are `/Users/shelingzhao/Documents/窝囊费素材/引导/p1.png`, `p2.png`, and `p4.png`. Preserve RGBA transparency when replacing them; RGB conversion causes visible white rectangles on device.

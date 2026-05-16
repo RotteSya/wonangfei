@@ -20,6 +20,22 @@
 |---|---|
 | `WNF/HomeSprite.mov` | Bundled homepage mascot loop. `HomeView` uses it for all homepage states when present; state-specific static mascot assets remain the fallback if the MOV is missing. Current 2026-05-16 source replacement is `/Users/shelingzhao/Movies/CapCut/0515(1).mov` (`HEVC with Alpha`, 2160 x 2160, about 10.03s, 42,898,189 bytes). |
 
+## Native Onboarding Assets
+
+| Asset | Size | Source | Role |
+|---|---:|---|---|
+| `WNF/Assets.xcassets/OnboardingP1.imageset/onboarding-p1.png` | 1536 x 1024 | `/Users/shelingzhao/Documents/窝囊费素材/引导/p1.png` | First onboarding hero image. |
+| `WNF/Assets.xcassets/OnboardingP2.imageset/onboarding-p2.png` | 1536 x 1024 | `/Users/shelingzhao/Documents/窝囊费素材/引导/p2.png` | Salary setup onboarding hero image. |
+| `WNF/Assets.xcassets/OnboardingP4.imageset/onboarding-p4.png` | 1536 x 1024 | `/Users/shelingzhao/Documents/窝囊费素材/引导/p4.png` | Final onboarding hero image. |
+| `WNF/Assets.xcassets/OnboardingLunchSleep.imageset/onboarding-lunch-sleep.png` | 1024 x 1024 | `/Users/shelingzhao/Documents/窝囊费素材/引导/午休.png` | Lunch-break onboarding state when lunch is enabled. |
+| `WNF/Assets.xcassets/OnboardingLunchWake.imageset/onboarding-lunch-wake.png` | 1024 x 1024 | `/Users/shelingzhao/Documents/窝囊费素材/引导/午休睡醒.png` | Lunch-break onboarding state when lunch is disabled. |
+
+The p1, p2, and p4 hero assets are transparent PNGs and must stay RGBA. Before shipping or replacing them, verify with:
+
+```sh
+sips -g hasAlpha WNF/Assets.xcassets/OnboardingP1.imageset/onboarding-p1.png WNF/Assets.xcassets/OnboardingP2.imageset/onboarding-p2.png WNF/Assets.xcassets/OnboardingP4.imageset/onboarding-p4.png
+```
+
 ## Reference Screens
 
 The folder `assets/reference-screens/` contains the imported visual material set. These files are preserved as references for palette, mascot direction, logo feel, app-surface rhythm, and brand manual material.

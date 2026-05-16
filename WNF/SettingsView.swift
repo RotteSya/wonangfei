@@ -163,7 +163,7 @@ struct SettingsView: View {
                         .accessibilityValue(state.selectedWeekdays.contains(index) ? "已选择" : "未选择")
                     }
                 }
-                Text("已选 \(state.selectedWeekdays.count) 天 · 每周窝囊 \(state.selectedWeekdays.count) 次")
+                Text("每周窝囊\(state.selectedWeekdays.count)天")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(WNFTheme.muted)
             }

@@ -119,7 +119,7 @@ function SettingsScreen({ cfg, privacy, onPrivacy, actions, onNavigate }) {
           </div>
           <div style={{
             marginTop: 8, fontSize: 10.5, color: T.muted, fontWeight: 700,
-          }}>已选 {cfg.weekdays.length} 天 · 每周窝囊 {cfg.weekdays.length} 次</div>
+          }}>每周窝囊{cfg.weekdays.length}天</div>
         </div>
       </Section>
 

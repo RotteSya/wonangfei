@@ -17,18 +17,38 @@ struct SettingsView: View {
 
                 SectionCard(title: "收入") {
                     SettingsRow(title: "月薪 · 税后") {
-                        Stepper(value: $state.monthlySalary, in: 0...100_000, step: 500) {
-                            Text(state.privacyMode ? "¥••,••• /月" : "¥\(Int(state.monthlySalary).formatted()) /月")
-                                .font(.system(size: 14, weight: .black, design: .monospaced))
-                        }
-                        .labelsHidden()
+                        ValueStepper(
+                            valueText: state.privacyMode ? "¥••,•••" : "¥\(Int(state.monthlySalary).formatted())",
+                            editTitle: "设置月薪",
+                            editPlaceholder: "输入月薪",
+                            editInitialText: { "\(Int(state.monthlySalary))" },
+                            width: 172,
+                            decrementAccessibilityLabel: "减少月薪",
+                            incrementAccessibilityLabel: "增加月薪",
+                            valueAccessibilityLabel: "快速设置月薪",
+                            canDecrement: state.monthlySalary > 0,
+                            canIncrement: state.monthlySalary < 100_000,
+                            onCommitText: { text in state.setMonthlySalary(from: text) },
+                            onDecrement: { state.adjustMonthlySalary(by: -500) },
+                            onIncrement: { state.adjustMonthlySalary(by: 500) }
+                        )
                     }
                     SettingsRow(title: "每月工作日") {
-                        Stepper(value: $state.workdaysPerMonth, in: 1...31) {
-                            Text("\(state.workdaysPerMonth) 天")
-                                .font(.system(size: 14, weight: .black, design: .monospaced))
-                        }
-                        .labelsHidden()
+                        ValueStepper(
+                            valueText: "\(state.workdaysPerMonth) 天",
+                            editTitle: "设置每月工作日",
+                            editPlaceholder: "输入工作日",
+                            editInitialText: { "\(state.workdaysPerMonth)" },
+                            width: 136,
+                            decrementAccessibilityLabel: "减少每月工作日",
+                            incrementAccessibilityLabel: "增加每月工作日",
+                            valueAccessibilityLabel: "快速设置每月工作日",
+                            canDecrement: state.workdaysPerMonth > 1,
+                            canIncrement: state.workdaysPerMonth < 31,
+                            onCommitText: { text in state.setWorkdaysPerMonth(from: text) },
+                            onDecrement: { state.adjustWorkdaysPerMonth(by: -1) },
+                            onIncrement: { state.adjustWorkdaysPerMonth(by: 1) }
+                        )
                     }
                     SettingsRow(title: "时薪 · 自动算", isLast: true) {
                         Text(state.privacyMode ? "¥••.•/h" : String(format: "¥%.1f/h", day.hourlyRate))
@@ -130,11 +150,7 @@ struct SettingsView: View {
                 HStack(spacing: 6) {
                     ForEach(Array(["一", "二", "三", "四", "五", "六", "日"].enumerated()), id: \.offset) { index, label in
                         Button {
-                            if state.selectedWeekdays.contains(index) {
-                                state.selectedWeekdays.remove(index)
-                            } else {
-                                state.selectedWeekdays.insert(index)
-                            }
+                            state.toggleWeekday(index)
                         } label: {
                             Text(label)
                                 .font(.system(size: 16, weight: .black, design: .rounded))
@@ -143,6 +159,8 @@ struct SettingsView: View {
                                 .background(state.selectedWeekdays.contains(index) ? WNFTheme.ink : WNFTheme.surfaceSoft, in: RoundedRectangle(cornerRadius: 12))
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("周\(label)")
+                        .accessibilityValue(state.selectedWeekdays.contains(index) ? "已选择" : "未选择")
                     }
                 }
                 Text("已选 \(state.selectedWeekdays.count) 天 · 每周窝囊 \(state.selectedWeekdays.count) 次")
@@ -166,6 +184,95 @@ struct SettingsView: View {
                 .lineSpacing(4)
         }
         .padding(.top, 8)
+    }
+}
+
+private struct ValueStepper: View {
+    var valueText: String
+    var editTitle: String
+    var editPlaceholder: String
+    var editInitialText: () -> String
+    var width: CGFloat
+    var decrementAccessibilityLabel: String
+    var incrementAccessibilityLabel: String
+    var valueAccessibilityLabel: String
+    var canDecrement: Bool
+    var canIncrement: Bool
+    var onCommitText: (String) -> Void
+    var onDecrement: () -> Void
+    var onIncrement: () -> Void
+
+    @State private var draftText = ""
+    @State private var isQuickEditorPresented = false
+
+    var body: some View {
+        HStack(spacing: 0) {
+            controlButton(
+                systemName: "minus",
+                accessibilityLabel: decrementAccessibilityLabel,
+                isEnabled: canDecrement,
+                action: onDecrement
+            )
+
+            Button {
+                draftText = editInitialText()
+                isQuickEditorPresented = true
+            } label: {
+                Text(valueText)
+                    .font(.system(size: 14, weight: .black, design: .monospaced))
+                    .foregroundStyle(WNFTheme.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                    .frame(maxWidth: .infinity, minHeight: 38)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(valueAccessibilityLabel)
+            .accessibilityValue(valueText)
+
+            controlButton(
+                systemName: "plus",
+                accessibilityLabel: incrementAccessibilityLabel,
+                isEnabled: canIncrement,
+                action: onIncrement
+            )
+        }
+        .frame(width: width, height: 38)
+        .background(Color.black.opacity(0.06), in: Capsule())
+        .accessibilityElement(children: .contain)
+        .alert(editTitle, isPresented: $isQuickEditorPresented) {
+            TextField(editPlaceholder, text: $draftText)
+                .keyboardType(.numberPad)
+            Button("取消", role: .cancel) {}
+            Button("确定") {
+                onCommitText(draftText)
+            }
+        } message: {
+            Text("直接输入数字即可")
+        }
+    }
+
+    private func controlButton(
+        systemName: String,
+        accessibilityLabel: String,
+        isEnabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button {
+            withAnimation(.snappy(duration: 0.18)) {
+                action()
+            }
+        } label: {
+            Image(systemName: systemName)
+                .font(.system(size: 15, weight: .black))
+                .foregroundStyle(WNFTheme.ink)
+                .frame(width: 42, height: 38)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.32)
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 

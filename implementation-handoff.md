@@ -18,6 +18,8 @@ The runnable entry and live prototype files are:
 - `design-canvas.jsx`：Open Design preview canvas and artboards.
 - `tweaks-panel.jsx`：internal preview controls.
 
+Current `main` note: commits after `bdaa6ef` reverted the earlier widget/persistence split. The active native implementation is the single `WNF/` app target with settings state in `WNF/WageState.swift`; there is no current `WNFWidget/`, `WageCore.swift`, or `WageDisplayModel.swift` in this checkout.
+
 ## Core State
 
 Default app state lives in `窝囊费.html` under `TWEAK_DEFAULTS`:
@@ -73,9 +75,9 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 
 ### 我的页
 
-- Salary number must be editable by click/tap.
-- Salary step controls change in increments of 500.
-- Monthly workdays stepper is bounded from 1 to 31.
+- Salary and monthly-workday rows use a shared SwiftUI value stepper: `- / +` buttons handle precise increments, and tapping the center value opens a numeric quick-entry alert.
+- Salary quick entry accepts digits and clamps to `0...100000`; salary step controls change in increments of 500.
+- Monthly workdays quick entry accepts digits and clamps to `1...31`; monthly workday step controls change in increments of 1.
 - Weekday pills toggle active state.
 - Time controls use native time input.
 - 午休 switch hides/reveals lunch rows and recomputes hourly rate.

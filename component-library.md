@@ -134,16 +134,14 @@
 
 - Pattern: stepper buttons around an inline editable money number.
 - Step: `500`.
-- Keyboard:
-  - Enter commits.
-  - Escape restores previous value.
-  - Blur commits.
-- Privacy mode: displays masked value, but still allows editing when clicked.
+- Native SwiftUI behavior: tapping the center value opens a numeric quick-entry alert; confirming commits through the same bounded state setter used by the stepper buttons.
+- Privacy mode: displays a masked value in the row, but the quick editor opens with the unmasked numeric salary from app state.
 
 ### Stepper
 
 - Pattern: small minus / value / plus inside soft yellow shell.
 - Use for bounded numeric settings like monthly workdays.
+- Native SwiftUI behavior: the center value is also a button that opens a numeric quick-entry alert. Monthly workdays clamp to `1...31`; salary clamps to `0...100000`.
 
 ### TimeRow
 

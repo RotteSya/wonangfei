@@ -48,6 +48,48 @@ final class WageState: ObservableObject {
     func updateTime(_ keyPath: ReferenceWritableKeyPath<WageState, DateComponents>, date: Date) {
         self[keyPath: keyPath] = DateComponents.calendar.dateComponents([.hour, .minute], from: date)
     }
+
+    func adjustMonthlySalary(by delta: Double) {
+        setMonthlySalary(monthlySalary + delta)
+    }
+
+    func setMonthlySalary(_ value: Double) {
+        monthlySalary = min(max(value, 0), 100_000)
+    }
+
+    func setMonthlySalary(from text: String) {
+        guard let value = Double(text.numericCharactersOnly) else { return }
+        setMonthlySalary(value)
+    }
+
+    func adjustWorkdaysPerMonth(by delta: Int) {
+        setWorkdaysPerMonth(workdaysPerMonth + delta)
+    }
+
+    func setWorkdaysPerMonth(_ value: Int) {
+        workdaysPerMonth = min(max(value, 1), 31)
+    }
+
+    func setWorkdaysPerMonth(from text: String) {
+        guard let value = Int(text.numericCharactersOnly) else { return }
+        setWorkdaysPerMonth(value)
+    }
+
+    func toggleWeekday(_ index: Int) {
+        var nextWeekdays = selectedWeekdays
+        if nextWeekdays.contains(index) {
+            nextWeekdays.remove(index)
+        } else {
+            nextWeekdays.insert(index)
+        }
+        selectedWeekdays = nextWeekdays
+    }
+}
+
+private extension String {
+    var numericCharactersOnly: String {
+        filter(\.isNumber)
+    }
 }
 
 struct WageDay {

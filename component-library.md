@@ -114,6 +114,7 @@
 - Use on: native SwiftUI onboarding pages.
 - Source: `WNF/OnboardingView.swift`.
 - Static image pages: `OnboardingP1`, `OnboardingP2`, `OnboardingP4`.
+- Page 1 wraps `OnboardingP1` in `OnboardingIntroPage`, using a taller visual area and no accessory card.
 - Lunch-state page:
   - `OnboardingLunchSleep` appears when `WageState.hasLunchBreak` is true.
   - `OnboardingLunchWake` appears when `WageState.hasLunchBreak` is false.

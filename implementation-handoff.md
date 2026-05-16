@@ -25,8 +25,9 @@ Current `main` note: commits after `bdaa6ef` reverted the earlier widget/persist
 Source: `WNF/OnboardingView.swift`
 
 - Four pages: app framing, salary setup, work/lunch setup, completion summary.
+- Page 1 uses a dedicated intro layout with a taller `OnboardingP1` hero and no accessory hint card; pages 2-4 keep the compact hero plus setup/summary card pattern.
 - `OnboardingImageStore` preloads and prepares hero images off the main path before display.
-- `OnboardingImagePanel` handles pages 1, 2, and 4.
+- `OnboardingImagePanel` handles static hero rendering for pages 1, 2, and 4.
 - `LunchImagePanel` crossfades page 3 between `OnboardingLunchSleep` and `OnboardingLunchWake` based on `WageState.hasLunchBreak`.
 - `OnboardingP1`, `OnboardingP2`, `OnboardingLunchSleep`, `OnboardingLunchWake`, and `OnboardingP4` are all asset-catalog image names. Their PNG files live under `WNF/Assets.xcassets`.
 

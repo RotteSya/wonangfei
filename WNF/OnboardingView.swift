@@ -46,6 +46,7 @@ struct OnboardingView: View {
     var body: some View {
         GeometryReader { proxy in
             let visualHeight = min(max(proxy.size.height * 0.28, 204), 260)
+            let introVisualHeight = min(max(proxy.size.height * 0.40, 300), 370)
 
             VStack(spacing: 0) {
                 OnboardingHeader(
@@ -56,14 +57,11 @@ struct OnboardingView: View {
                 .padding(.top, 6)
 
                 TabView(selection: $page) {
-                    OnboardingPage(
-                        title: "先别破防，看看今天能挣多少窝囊费",
-                        lead: "上班已经够委屈了，至少知道自己每秒能挣多少钱。"
-                    ) {
-                        OnboardingImagePanel(imageName: "OnboardingP1", height: visualHeight)
-                    } accessory: {
-                        OnboardingHintCard(title: "工资拆开看", subtitle: "每小时都算数，钱一秒一秒回来。")
-                    }
+                    OnboardingIntroPage(
+                        title: "准备开工！看看今天能挣多少窝囊费？",
+                        lead: "上班已经够委屈了，至少知道自己每秒能挣多少。",
+                        visualHeight: introVisualHeight
+                    )
                     .tag(0)
 
                     OnboardingPage(
@@ -131,7 +129,7 @@ struct OnboardingView: View {
         switch page {
         case 1: "月薪设置"
         case 2: "作息确认"
-        case 3: "准备开工"
+        case 3: "设置完成"
         default: "窝囊费"
         }
     }
@@ -236,12 +234,53 @@ private struct OnboardingPage<Visual: View, Accessory: View>: View {
     }
 }
 
+private struct OnboardingIntroPage: View {
+    var title: String
+    var lead: String
+    var visualHeight: CGFloat
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            OnboardingImagePanel(
+                imageName: "OnboardingP1",
+                height: visualHeight,
+                imageScale: 1.12,
+                imageOffset: CGSize(width: 0, height: 8)
+            )
+
+            Spacer(minLength: 28)
+
+            VStack(alignment: .leading, spacing: 11) {
+                Text(title)
+                    .font(.system(size: 31, weight: .black, design: .rounded))
+                    .foregroundStyle(WNFTheme.ink)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(lead)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(WNFTheme.muted)
+                    .lineSpacing(4)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 4)
+
+            Spacer(minLength: 14)
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 18)
+        .padding(.bottom, 6)
+    }
+}
+
 private struct OnboardingImagePanel: View {
     @EnvironmentObject private var imageStore: OnboardingImageStore
 
     var imageName: String
     var height: CGFloat
     var maxImageWidth: CGFloat? = nil
+    var imageScale: CGFloat = 1
+    var imageOffset: CGSize = .zero
 
     var body: some View {
         ZStack {
@@ -262,6 +301,8 @@ private struct OnboardingImagePanel: View {
                 .frame(maxWidth: maxImageWidth)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
+                .scaleEffect(imageScale)
+                .offset(imageOffset)
                 .blendMode(.multiply)
                 .saturation(1.05)
                 .contrast(1.02)
@@ -342,31 +383,6 @@ private struct CachedOnboardingImage: View {
                     .resizable()
             }
         }
-    }
-}
-
-private struct OnboardingHintCard: View {
-    var title: String
-    var subtitle: String
-
-    var body: some View {
-        HStack(spacing: 12) {
-            YenBadge(size: 30)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.system(size: 15, weight: .black))
-                    .foregroundStyle(WNFTheme.ink)
-                Text(subtitle)
-                    .font(.system(size: 12, weight: .heavy))
-                    .foregroundStyle(WNFTheme.muted)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(14)
-        .background(Color.white.opacity(0.9), in: RoundedRectangle(cornerRadius: 22))
-        .overlay(RoundedRectangle(cornerRadius: 22).stroke(WNFTheme.hairline, lineWidth: 0.5))
     }
 }
 

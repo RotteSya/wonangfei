@@ -119,6 +119,9 @@ struct RootView: View {
                 .animation(.easeInOut(duration: 0.18), value: homeSharePresented)
                 .zIndex(1)
 
+            ShareCardBackdrop(isPresented: homeSharePresented, onDismiss: dismissShareCard)
+                .zIndex(2)
+
             if homeSharePresented {
                 ShareCardOverlay(
                     day: day,
@@ -221,6 +224,21 @@ struct RootView: View {
 
     private var shareDurationText: String {
         shareCardHidesSensitiveInfo ? "••h••min" : WNFFormat.duration(day.elapsedPaidMinutes)
+    }
+}
+
+private struct ShareCardBackdrop: View {
+    var isPresented: Bool
+    var onDismiss: () -> Void
+
+    var body: some View {
+        Color(red: 0.27, green: 0.25, blue: 0.21)
+            .opacity(isPresented ? 0.46 : 0)
+            .ignoresSafeArea(.container, edges: .all)
+            .contentShape(Rectangle())
+            .allowsHitTesting(isPresented)
+            .onTapGesture(perform: onDismiss)
+            .animation(.easeInOut(duration: 0.18), value: isPresented)
     }
 }
 

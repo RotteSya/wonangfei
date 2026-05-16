@@ -100,29 +100,21 @@ struct ShareCardOverlay: View {
 
     var body: some View {
         GeometryReader { proxy in
-            ZStack {
-                Color(red: 0.27, green: 0.25, blue: 0.21)
-                    .opacity(0.46)
-                    .ignoresSafeArea()
-                    .onTapGesture(perform: onDismiss)
-
-                WonangfeiShareCard(
-                    day: day,
-                    hidesSensitiveInfo: hidesSensitiveInfo,
-                    showsControls: true,
-                    onTogglePrivacy: {
-                        withAnimation(.snappy(duration: 0.18)) {
-                            hidesSensitiveInfo.toggle()
-                        }
-                    },
-                    onShare: onShare,
-                    onDismiss: onDismiss
-                )
-                .frame(width: min(proxy.size.width - 82, 330))
-                .shadow(color: .black.opacity(0.24), radius: 24, y: 16)
-                .position(x: proxy.size.width / 2, y: proxy.size.height * 0.51)
-            }
-            .frame(width: proxy.size.width, height: proxy.size.height)
+            WonangfeiShareCard(
+                day: day,
+                hidesSensitiveInfo: hidesSensitiveInfo,
+                showsControls: true,
+                onTogglePrivacy: {
+                    withAnimation(.snappy(duration: 0.18)) {
+                        hidesSensitiveInfo.toggle()
+                    }
+                },
+                onShare: onShare,
+                onDismiss: onDismiss
+            )
+            .frame(width: min(proxy.size.width - 82, 330))
+            .shadow(color: .black.opacity(0.24), radius: 24, y: 16)
+            .position(x: proxy.size.width / 2, y: proxy.size.height * 0.51)
         }
         .ignoresSafeArea(.container, edges: .all)
     }

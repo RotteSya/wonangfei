@@ -46,6 +46,7 @@ struct TopBar: View {
                 .accessibilityLabel(state.privacyMode ? "显示工资" : "隐藏工资")
             }
         }
+        .frame(maxWidth: .infinity)
         .padding(.horizontal, 22)
         .padding(.top, 8)
     }

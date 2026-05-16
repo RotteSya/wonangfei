@@ -25,7 +25,7 @@ enum RecordPeriod: String, CaseIterable, Identifiable {
 }
 
 struct RecordBar: Identifiable {
-    var id = UUID()
+    var id: String { key }
     var key: String
     var title: String
     var multiplier: Double
@@ -76,25 +76,27 @@ struct RecordsView: View {
                 TopBar()
                     .padding(.top, 2)
 
-                heroCard
+                VStack(spacing: 14) {
+                    heroCard
 
-                HStack(spacing: 10) {
-                    MetricTile(label: period == .week ? "本周日均" : period == .month ? "月日均" : "年日均", value: WNFFormat.money(day.targetToday, privacy: state.privacyMode), subtitle: "每天的窝囊费", big: true)
-                    MetricTile(label: "加班挣到", value: WNFFormat.money(day.targetToday * 1.7, privacy: state.privacyMode), subtitle: "丧但还顶得住", accent: WNFTheme.coral, big: true)
+                    HStack(spacing: 10) {
+                        MetricTile(label: period == .week ? "本周日均" : period == .month ? "月日均" : "年日均", value: WNFFormat.money(day.targetToday, privacy: state.privacyMode), subtitle: "每天的窝囊费", big: true)
+                        MetricTile(label: "加班挣到", value: WNFFormat.money(day.targetToday * 1.7, privacy: state.privacyMode), subtitle: "丧但还顶得住", accent: WNFTheme.coral, big: true)
+                    }
+
+                    HStack(spacing: 10) {
+                        MetricTile(label: "时薪", value: state.privacyMode ? "¥••/h" : "¥\(Int(day.hourlyRate))/h", subtitle: "基于税后月薪", accent: WNFTheme.cyan)
+                        MetricTile(label: "已窝囊", value: "\(Int(Double(day.workdayMinutes) / 60 * 9.4))h", subtitle: "9.4 个工作日")
+                    }
+
+                    achievementCard
+
+                    chartCard
+
+                    badgeCard
                 }
-
-                HStack(spacing: 10) {
-                    MetricTile(label: "时薪", value: state.privacyMode ? "¥••/h" : "¥\(Int(day.hourlyRate))/h", subtitle: "基于税后月薪", accent: WNFTheme.cyan)
-                    MetricTile(label: "已窝囊", value: "\(Int(Double(day.workdayMinutes) / 60 * 9.4))h", subtitle: "9.4 个工作日")
-                }
-
-                achievementCard
-
-                chartCard
-
-                badgeCard
+                .padding(.horizontal, 18)
             }
-            .padding(.horizontal, 18)
             .padding(.bottom, 105)
         }
         .background(WNFTheme.bg)
@@ -189,20 +191,6 @@ struct RecordsView: View {
             }
 
             BarChart(bars: bars, dailyAverage: day.targetToday, selectedBarID: $selectedBarID, privacy: state.privacyMode)
-
-            HStack {
-                Text("点击柱子查看明细")
-                Spacer()
-                if selectedBarID != nil {
-                    Button("取消选中") {
-                        selectedBarID = nil
-                    }
-                    .font(.system(size: 11, weight: .heavy))
-                    .foregroundStyle(WNFTheme.ink)
-                }
-            }
-            .font(.system(size: 11, weight: .bold))
-            .foregroundStyle(WNFTheme.muted)
         }
         .padding(16)
         .background(Color.white, in: RoundedRectangle(cornerRadius: 22))
@@ -247,45 +235,57 @@ private struct BarChart: View {
         HStack(alignment: .bottom, spacing: bars.count > 8 ? 4 : 10) {
             ForEach(bars) { bar in
                 let selected = selectedBarID == bar.id
-                VStack(spacing: 6) {
-                    ZStack(alignment: .bottom) {
-                        if selected {
-                            Text("\(bar.title) \(WNFFormat.money(bar.multiplier * dailyAverage, privacy: privacy))")
-                                .font(.system(size: 10, weight: .heavy))
-                                .foregroundStyle(Color.white)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 5)
-                                .background(WNFTheme.ink, in: Capsule())
-                                .offset(y: -104)
-                                .fixedSize()
+                Group {
+                    if bar.isFuture {
+                        barColumn(bar: bar, selected: selected)
+                    } else {
+                        Button {
+                            withAnimation(.snappy(duration: 0.2)) {
+                                selectedBarID = selected ? nil : bar.id
+                            }
+                        } label: {
+                            barColumn(bar: bar, selected: selected)
                         }
-
-                        RoundedRectangle(cornerRadius: bars.count > 8 ? 4 : 8)
-                            .fill(barColor(bar: bar, selected: selected))
-                            .frame(width: bars.count > 8 ? 16 : 24, height: bar.isFuture ? 6 : max(8, 100 * bar.multiplier / maxMultiplier))
-                            .offset(y: selected ? -2 : 0)
-                            .shadow(color: selected ? .black.opacity(0.24) : .clear, radius: 9, y: 5)
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("\(bar.title) \(WNFFormat.money(bar.multiplier * dailyAverage, privacy: privacy))")
+                        .accessibilityValue(selected ? "已选中" : "未选中")
                     }
-                    .frame(height: 130, alignment: .bottom)
-
-                    Text(bar.key)
-                        .font(.system(size: bars.count > 8 ? 9 : 11, weight: bar.isToday || selected ? .heavy : .bold))
-                        .foregroundStyle(bar.isToday || selected ? WNFTheme.ink : WNFTheme.muted)
                 }
                 .frame(maxWidth: .infinity)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    guard !bar.isFuture else { return }
-                    withAnimation(.snappy(duration: 0.2)) {
-                        selectedBarID = selected ? nil : bar.id
-                    }
-                }
             }
         }
     }
 
+    private func barColumn(bar: RecordBar, selected: Bool) -> some View {
+        VStack(spacing: 6) {
+            ZStack(alignment: .bottom) {
+                if selected {
+                    Text("\(bar.title) \(WNFFormat.money(bar.multiplier * dailyAverage, privacy: privacy))")
+                        .font(.system(size: 10, weight: .heavy))
+                        .foregroundStyle(Color.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(WNFTheme.ink, in: Capsule())
+                        .offset(y: -104)
+                        .fixedSize()
+                }
+
+                RoundedRectangle(cornerRadius: bars.count > 8 ? 4 : 8)
+                    .fill(barColor(bar: bar, selected: selected))
+                    .frame(width: bars.count > 8 ? 16 : 24, height: bar.isFuture ? 6 : max(8, 100 * bar.multiplier / maxMultiplier))
+                    .offset(y: selected ? -2 : 0)
+                    .shadow(color: selected ? .black.opacity(0.24) : .clear, radius: 9, y: 5)
+            }
+            .frame(height: 130, alignment: .bottom)
+
+            Text(bar.key)
+                .font(.system(size: bars.count > 8 ? 9 : 11, weight: bar.isToday || selected ? .heavy : .bold))
+                .foregroundStyle(bar.isToday || selected ? WNFTheme.ink : WNFTheme.muted)
+        }
+    }
+
     private func barColor(bar: RecordBar, selected: Bool) -> Color {
-        if selected || bar.isToday { return WNFTheme.ink }
+        if selected { return WNFTheme.ink }
         if bar.isFuture { return Color(red: 0.95, green: 0.92, blue: 0.82) }
         return WNFTheme.yellow
     }

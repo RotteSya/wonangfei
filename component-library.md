@@ -26,7 +26,8 @@
 - Structure: `Wordmark` left, one right-side action.
 - Home right action: share button, labeled `分享今日窝囊费`.
 - Record/settings right action: `PrivacyToggle`.
-- Padding: `14px 20px 8px`.
+- Native contract: owns full-width layout and `22pt` horizontal padding, so the left wordmark and right action align across all three primary screens.
+- Prototype padding: `14px 20px 8px`.
 - Use on: all three primary app screens.
 
 ### TabBar
@@ -135,12 +136,12 @@
 ### BarChart
 
 - Current use: record page weekly/monthly/yearly data.
-- Bars: yellow for completed periods, ink for current/selected, pale cream for future.
+- Bars: yellow for completed/current periods until selected, ink only for selected, pale cream for future.
 - Interaction:
   - tap available bar to select;
   - selected bar jumps by `-2px`;
   - callout appears above selected bar;
-  - tap again or "取消选中" clears state.
+  - tap the selected bar again to clear state.
 - Year view: compact bar gaps and smaller labels.
 
 ### SalaryEditor

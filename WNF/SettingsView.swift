@@ -13,94 +13,96 @@ struct SettingsView: View {
                 TopBar()
                     .padding(.top, 2)
 
-                profileBanner
+                VStack(spacing: 16) {
+                    profileBanner
 
-                SectionCard(title: "收入") {
-                    SettingsRow(title: "月薪 · 税后") {
-                        ValueStepper(
-                            valueText: state.privacyMode ? "¥••,•••" : "¥\(Int(state.monthlySalary).formatted())",
-                            editTitle: "设置月薪",
-                            editPlaceholder: "输入月薪",
-                            editInitialText: { "\(Int(state.monthlySalary))" },
-                            width: 172,
-                            decrementAccessibilityLabel: "减少月薪",
-                            incrementAccessibilityLabel: "增加月薪",
-                            valueAccessibilityLabel: "快速设置月薪",
-                            canDecrement: state.monthlySalary > 0,
-                            canIncrement: state.monthlySalary < 100_000,
-                            onCommitText: { text in state.setMonthlySalary(from: text) },
-                            onDecrement: { state.adjustMonthlySalary(by: -500) },
-                            onIncrement: { state.adjustMonthlySalary(by: 500) }
-                        )
-                    }
-                    SettingsRow(title: "每月工作日") {
-                        ValueStepper(
-                            valueText: "\(state.workdaysPerMonth) 天",
-                            editTitle: "设置每月工作日",
-                            editPlaceholder: "输入工作日",
-                            editInitialText: { "\(state.workdaysPerMonth)" },
-                            width: 136,
-                            decrementAccessibilityLabel: "减少每月工作日",
-                            incrementAccessibilityLabel: "增加每月工作日",
-                            valueAccessibilityLabel: "快速设置每月工作日",
-                            canDecrement: state.workdaysPerMonth > 1,
-                            canIncrement: state.workdaysPerMonth < 31,
-                            onCommitText: { text in state.setWorkdaysPerMonth(from: text) },
-                            onDecrement: { state.adjustWorkdaysPerMonth(by: -1) },
-                            onIncrement: { state.adjustWorkdaysPerMonth(by: 1) }
-                        )
-                    }
-                    SettingsRow(title: "时薪 · 自动算", isLast: true) {
-                        Text(state.privacyMode ? "¥••.•/h" : String(format: "¥%.1f/h", day.hourlyRate))
-                            .font(.system(size: 13, weight: .black, design: .monospaced))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(WNFTheme.yellow, in: Capsule())
-                    }
-                }
-
-                weekdaysCard
-
-                SectionCard(title: "时间") {
-                    TimePickerRow(title: "上班", components: $state.workStart)
-                    TimePickerRow(title: "下班", components: $state.workEnd)
-                    SettingsRow(title: "午休") {
-                        WNFToggle(isOn: $state.hasLunchBreak)
-                    }
-                    if state.hasLunchBreak {
-                        TimePickerRow(title: "午休开始", components: $state.lunchStart)
-                        TimePickerRow(title: "午休结束", components: $state.lunchEnd, isLast: true)
-                    }
-                }
-
-                SectionCard(title: "其它") {
-                    SettingsRow(title: "计入加班", isLast: true) {
-                        WNFToggle(isOn: $state.includeOvertime)
-                    }
-                }
-
-                SectionCard(title: "引导") {
-                    SettingsRow(title: "重新设置工资/时间", isLast: true) {
-                        Button {
-                            onShowOnboarding()
-                        } label: {
-                            HStack(spacing: 6) {
-                                Text("再走一遍")
-                                Image(systemName: "arrow.right")
-                            }
-                            .font(.system(size: 13, weight: .black))
-                            .foregroundStyle(Color.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(WNFTheme.ink, in: Capsule())
+                    SectionCard(title: "收入") {
+                        SettingsRow(title: "月薪 · 税后") {
+                            ValueStepper(
+                                valueText: state.privacyMode ? "¥••,•••" : "¥\(Int(state.monthlySalary).formatted())",
+                                editTitle: "设置月薪",
+                                editPlaceholder: "输入月薪",
+                                editInitialText: { "\(Int(state.monthlySalary))" },
+                                width: 172,
+                                decrementAccessibilityLabel: "减少月薪",
+                                incrementAccessibilityLabel: "增加月薪",
+                                valueAccessibilityLabel: "快速设置月薪",
+                                canDecrement: state.monthlySalary > 0,
+                                canIncrement: state.monthlySalary < 100_000,
+                                onCommitText: { text in state.setMonthlySalary(from: text) },
+                                onDecrement: { state.adjustMonthlySalary(by: -500) },
+                                onIncrement: { state.adjustMonthlySalary(by: 500) }
+                            )
                         }
-                        .buttonStyle(.plain)
+                        SettingsRow(title: "每月工作日") {
+                            ValueStepper(
+                                valueText: "\(state.workdaysPerMonth) 天",
+                                editTitle: "设置每月工作日",
+                                editPlaceholder: "输入工作日",
+                                editInitialText: { "\(state.workdaysPerMonth)" },
+                                width: 136,
+                                decrementAccessibilityLabel: "减少每月工作日",
+                                incrementAccessibilityLabel: "增加每月工作日",
+                                valueAccessibilityLabel: "快速设置每月工作日",
+                                canDecrement: state.workdaysPerMonth > 1,
+                                canIncrement: state.workdaysPerMonth < 31,
+                                onCommitText: { text in state.setWorkdaysPerMonth(from: text) },
+                                onDecrement: { state.adjustWorkdaysPerMonth(by: -1) },
+                                onIncrement: { state.adjustWorkdaysPerMonth(by: 1) }
+                            )
+                        }
+                        SettingsRow(title: "时薪 · 自动算", isLast: true) {
+                            Text(state.privacyMode ? "¥••.•/h" : String(format: "¥%.1f/h", day.hourlyRate))
+                                .font(.system(size: 13, weight: .black, design: .monospaced))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(WNFTheme.yellow, in: Capsule())
+                        }
                     }
-                }
 
-                footer
+                    weekdaysCard
+
+                    SectionCard(title: "时间") {
+                        TimePickerRow(title: "上班", components: $state.workStart)
+                        TimePickerRow(title: "下班", components: $state.workEnd)
+                        SettingsRow(title: "午休") {
+                            WNFToggle(isOn: $state.hasLunchBreak)
+                        }
+                        if state.hasLunchBreak {
+                            TimePickerRow(title: "午休开始", components: $state.lunchStart)
+                            TimePickerRow(title: "午休结束", components: $state.lunchEnd, isLast: true)
+                        }
+                    }
+
+                    SectionCard(title: "其它") {
+                        SettingsRow(title: "计入加班", isLast: true) {
+                            WNFToggle(isOn: $state.includeOvertime)
+                        }
+                    }
+
+                    SectionCard(title: "引导") {
+                        SettingsRow(title: "重新设置工资/时间", isLast: true) {
+                            Button {
+                                onShowOnboarding()
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Text("再走一遍")
+                                    Image(systemName: "arrow.right")
+                                }
+                                .font(.system(size: 13, weight: .black))
+                                .foregroundStyle(Color.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(WNFTheme.ink, in: Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    footer
+                }
+                .padding(.horizontal, 18)
             }
-            .padding(.horizontal, 18)
             .padding(.bottom, 105)
         }
         .background(WNFTheme.bg)

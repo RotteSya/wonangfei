@@ -2,9 +2,9 @@
 
 ## Mascot Assets
 
-| Asset | Size | Role |
+| Asset | Size | Current Role |
 |---|---:|---|
-| `assets/mascot/hero-mascot.png` | 1254 x 1254 | Approved mascot thumbnail for record achievement and settings profile banner |
+| `assets/mascot/hero-mascot.png` | 1254 x 1254 | Current approved mascot thumbnail for record achievement and settings profile banner |
 | `assets/mascot/cow-0-front-sad.png` | 512 x 576 | Cow pose: front sad |
 | `assets/mascot/cow-1-three-q-sad.png` | 512 x 576 | Cow pose: three-quarter sad |
 | `assets/mascot/cow-2-side-back.png` | 512 x 576 | Cow pose: side/back |
@@ -13,12 +13,6 @@
 | `assets/mascot/cow-5-back-tail.png` | 512 x 576 | Cow pose: back with tail |
 | `assets/mascot/cow-6-side-look.png` | 512 x 576 | Cow pose: side look |
 | `assets/mascot/cow-7-three-q-sad-2.png` | 512 x 576 | Cow pose: alternate three-quarter |
-
-## Native App Media
-
-| Asset | Role |
-|---|---|
-| `WNF/HomeSprite.mov` | Optional animated homepage mascot loop used during active work states; after-work/overtime/day-off states may downshift to static mascot assets through `WageDisplayModel`. |
 
 ## Reference Screens
 

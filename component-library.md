@@ -1,6 +1,6 @@
 # Component Library
 
-组件来源：2026-05-16 活跃原型 `assets/source/*.jsx`。以下是交付后可复用的产品组件定义。
+组件来源：当前活跃原型 `assets/source/*.jsx`。以下是交付后可复用的产品组件定义。
 
 ## Foundation
 
@@ -24,7 +24,7 @@
 ### TopBar
 
 - Structure: `Wordmark` left, one right-side action.
-- Right action in the 2026-05-16 prototype: `PrivacyToggle`.
+- Current right action: `PrivacyToggle`.
 - Padding: `14px 20px 8px`.
 - Use on: all three primary app screens.
 
@@ -58,7 +58,7 @@
   - `back-tail`: `assets/mascot/cow-5-back-tail.png`
   - `side-look`: `assets/mascot/cow-6-side-look.png`
   - `three-q-2`: `assets/mascot/cow-7-three-q-sad-2.png`
-- Replacement mascot in the 2026-05-16 package: `assets/mascot/hero-mascot.png`
+- Current replacement mascot: `assets/mascot/hero-mascot.png`
 - Rule: Avoid placing yellow-body mascot variants directly on full yellow backgrounds unless there is enough edge contrast.
 
 ### YenBadge
@@ -100,7 +100,7 @@
 
 ### SegTabs
 
-- 2026-05-16 use: 周 / 月 / 年 on record page.
+- Current use: 周 / 月 / 年 on record page.
 - Container: ink pill, `padding: 3px`, radius `999px`.
 - Active item: yellow fill, ink text.
 - Inactive item: transparent, white at 65%.
@@ -108,8 +108,8 @@
 
 ### BarChart
 
-- 2026-05-16 use: record page weekly/monthly/yearly data.
-- Bars: yellow for completed days, ink for selected day, pale cream for future days.
+- Current use: record page weekly/monthly/yearly data.
+- Bars: yellow for past, ink for today/selected, pale cream for future.
 - Interaction:
   - tap available bar to select;
   - selected bar jumps by `-2px`;
@@ -143,7 +143,7 @@
 - Switch size: `50 x 30`.
 - On track: ink; on knob: yellow.
 - Off track: `#D7D2C5`; off knob: white.
-- 2026-05-16 toggles:
+- Current toggles:
   - 午休: on = has lunch break, off = no lunch.
   - 计入加班.
   - 截图隐藏工资.

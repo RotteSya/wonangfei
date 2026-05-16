@@ -77,6 +77,12 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 
 ## Interaction Requirements
 
+### 全局 Tab
+
+- 底部 `首页 / 记录 / 我的` tab 使用自定义 SwiftUI `AppTabBar`。
+- 切换 tab 时，主内容按 tab 顺序做横向滑入/滑出并叠加淡入淡出：向右侧 tab 前进时新页面从右进入，返回左侧 tab 时新页面从左进入。
+- 底部胶囊选中态和页面内容过渡共用同一次 `snappy` 动画。
+
 ### 引导页
 
 - First launch shows the four-screen onboarding flow before the main tab UI.

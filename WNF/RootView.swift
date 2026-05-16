@@ -22,10 +22,19 @@ enum AppTab: String, CaseIterable, Identifiable {
         case .settings: "person"
         }
     }
+
+    var order: Int {
+        switch self {
+        case .home: 0
+        case .records: 1
+        case .settings: 2
+        }
+    }
 }
 
 struct RootView: View {
     @State private var selectedTab: AppTab = .home
+    @State private var tabTransitionDirection = 1
     @State private var entryAnimating = false
     @State private var entryExpanded = false
     @State private var homeSharePresented = false
@@ -90,24 +99,56 @@ struct RootView: View {
         ZStack(alignment: .bottom) {
             WNFTheme.bg.ignoresSafeArea()
 
-            Group {
-                switch selectedTab {
-                case .home:
-                    HomeView(isShareCardPresented: $homeSharePresented)
-                case .records:
-                    RecordsView()
-                case .settings:
-                    SettingsView {
-                        onboardingCompleted = false
-                    }
-                }
-            }
+            currentTabContent
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .id(selectedTab)
+            .transition(tabContentTransition)
+            .clipped()
             .zIndex(homeSharePresented ? 2 : 0)
 
-            AppTabBar(selectedTab: $selectedTab)
+            AppTabBar(selectedTab: tabSelection)
                 .padding(.bottom, 10)
                 .allowsHitTesting(!homeSharePresented)
+        }
+    }
+
+    private var tabSelection: Binding<AppTab> {
+        Binding(
+            get: { selectedTab },
+            set: { selectTab($0) }
+        )
+    }
+
+    @ViewBuilder
+    private var currentTabContent: some View {
+        switch selectedTab {
+        case .home:
+            HomeView(isShareCardPresented: $homeSharePresented)
+        case .records:
+            RecordsView()
+        case .settings:
+            SettingsView {
+                onboardingCompleted = false
+            }
+        }
+    }
+
+    private var tabContentTransition: AnyTransition {
+        let insertionEdge: Edge = tabTransitionDirection >= 0 ? .trailing : .leading
+        let removalEdge: Edge = tabTransitionDirection >= 0 ? .leading : .trailing
+
+        return .asymmetric(
+            insertion: .move(edge: insertionEdge).combined(with: .opacity),
+            removal: .move(edge: removalEdge).combined(with: .opacity)
+        )
+    }
+
+    private func selectTab(_ tab: AppTab) {
+        guard tab != selectedTab else { return }
+        tabTransitionDirection = tab.order > selectedTab.order ? 1 : -1
+
+        withAnimation(.snappy(duration: 0.32, extraBounce: 0.02)) {
+            selectedTab = tab
         }
     }
 }
@@ -119,9 +160,7 @@ struct AppTabBar: View {
         HStack(spacing: 4) {
             ForEach(AppTab.allCases) { tab in
                 Button {
-                    withAnimation(.snappy(duration: 0.25)) {
-                        selectedTab = tab
-                    }
+                    selectedTab = tab
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: tab.symbol)

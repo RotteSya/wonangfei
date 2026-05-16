@@ -37,6 +37,7 @@
 - Inactive state: transparent item, ink-soft label/icon.
 - Position: absolute bottom `18px`.
 - Interaction: tap target is the full button, active item expands horizontally.
+- Native transition: tab content slides horizontally by tab order and crossfades; bottom selected state animates with the same snappy timing.
 
 ## Brand
 

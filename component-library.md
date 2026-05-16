@@ -109,6 +109,17 @@
 - Body: headline copy, small cow pose, dashed-inner stats panel with `今日窝囊费` and `上班上了多久`, and branded footer.
 - Overlay: home content remains underneath but blurred and dimmed; tapping outside closes the card.
 
+### Onboarding Hero Panel
+
+- Use on: native SwiftUI onboarding pages.
+- Source: `WNF/OnboardingView.swift`.
+- Static image pages: `OnboardingP1`, `OnboardingP2`, `OnboardingP4`.
+- Lunch-state page:
+  - `OnboardingLunchSleep` appears when `WageState.hasLunchBreak` is true.
+  - `OnboardingLunchWake` appears when `WageState.hasLunchBreak` is false.
+- Visual treatment: transparent PNG over the panel's soft white/yellow glow, with slight saturation/contrast and a light shadow.
+- Rule: replace the asset-catalog PNGs directly and verify alpha on the target files before building.
+
 ## Controls
 
 ### SegTabs

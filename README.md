@@ -54,9 +54,20 @@ XcodeBuildMCP 已在 `.xcodebuildmcp/config.yaml` 持久化默认值：project `
 
 - 首页工资实时计算、隐私打码、进度条。
 - 首页分享卡片：背景虚化、今日窝囊费/上班时长、卡片内隐藏敏感信息、系统分享和退出。
+- 首次启动引导：4 屏 SwiftUI onboarding、跳过/返回/分页控制、月薪/作息/午休设置和最终确认。
 - 记录页周 / 月 / 年切换、柱状图选中态、成就和徽章模块。
 - 我的页月薪和每月工作日支持 `- / +` 微调，也支持点中间数字弹出快速输入框；时间、午休、加班和隐私状态可编辑。
 - `assets/mascot` 中的主吉祥物和 Cow pose 已接入 `WNF/Assets.xcassets`。
+
+引导页 hero 图位于 `WNF/Assets.xcassets`，源文件来自 `/Users/shelingzhao/Documents/窝囊费素材/引导/`：
+
+- `p1.png` -> `OnboardingP1.imageset/onboarding-p1.png`
+- `p2.png` -> `OnboardingP2.imageset/onboarding-p2.png`
+- `p3午休.png` -> `OnboardingLunchSleep.imageset/onboarding-lunch-sleep.png`
+- `p3睡醒.png` -> `OnboardingLunchWake.imageset/onboarding-lunch-wake.png`
+- `p4.png` -> `OnboardingP4.imageset/onboarding-p4.png`
+
+这些 PNG 必须保持 `1536 x 1024` 和 alpha 通道。替换后先用 `sips -g pixelWidth -g pixelHeight -g hasAlpha <file>` 检查目标 asset，再构建。
 
 ## Source of Truth
 

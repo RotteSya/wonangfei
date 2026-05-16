@@ -20,6 +20,28 @@ The runnable entry and live prototype files are:
 
 Current `main` note: commits after `bdaa6ef` reverted the earlier widget/persistence split. The active native implementation is the single `WNF/` app target with settings state in `WNF/WageState.swift`; there is no current `WNFWidget/`, `WageCore.swift`, or `WageDisplayModel.swift` in this checkout.
 
+## Native Onboarding
+
+Source: `WNF/OnboardingView.swift`
+
+- Four pages: app framing, salary setup, work/lunch setup, completion summary.
+- `OnboardingImageStore` preloads and prepares hero images off the main path before display.
+- `OnboardingImagePanel` handles pages 1, 2, and 4.
+- `LunchImagePanel` crossfades page 3 between `OnboardingLunchSleep` and `OnboardingLunchWake` based on `WageState.hasLunchBreak`.
+- `OnboardingP1`, `OnboardingP2`, `OnboardingLunchSleep`, `OnboardingLunchWake`, and `OnboardingP4` are all asset-catalog image names. Their PNG files live under `WNF/Assets.xcassets`.
+
+Hero asset mapping from the local material folder:
+
+| Source file | App asset |
+|---|---|
+| `/Users/shelingzhao/Documents/窝囊费素材/引导/p1.png` | `WNF/Assets.xcassets/OnboardingP1.imageset/onboarding-p1.png` |
+| `/Users/shelingzhao/Documents/窝囊费素材/引导/p2.png` | `WNF/Assets.xcassets/OnboardingP2.imageset/onboarding-p2.png` |
+| `/Users/shelingzhao/Documents/窝囊费素材/引导/p3午休.png` | `WNF/Assets.xcassets/OnboardingLunchSleep.imageset/onboarding-lunch-sleep.png` |
+| `/Users/shelingzhao/Documents/窝囊费素材/引导/p3睡醒.png` | `WNF/Assets.xcassets/OnboardingLunchWake.imageset/onboarding-lunch-wake.png` |
+| `/Users/shelingzhao/Documents/窝囊费素材/引导/p4.png` | `WNF/Assets.xcassets/OnboardingP4.imageset/onboarding-p4.png` |
+
+All five target PNGs are expected to remain `1536 x 1024` with `hasAlpha: yes`. Before handing off a replacement, compare source/target hashes when possible and run `sips -g pixelWidth -g pixelHeight -g hasAlpha` on the target asset-catalog files.
+
 ## Core State
 
 Default app state lives in `窝囊费.html` under `TWEAK_DEFAULTS`:
@@ -53,6 +75,14 @@ Source: `shared.jsx -> computeDay(cfg, nowMin)`
 Important: the settings UI label says `午休`. Switch on means "has lunch break"; switch off means "没有午休". The data flag remains `noLunch`.
 
 ## Interaction Requirements
+
+### 引导页
+
+- First launch shows the four-screen onboarding flow before the main tab UI.
+- Header title changes per page and the skip button moves directly to the final page before completion.
+- Page 2 salary controls commit through `WageState`.
+- Page 3 work time and lunch controls update the same settings state used by the main app.
+- Page 3 hero crossfades between the lunch sleep/wake assets when 午休 is toggled.
 
 ### 首页
 
@@ -103,6 +133,7 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 - Native iOS entry: open `WNF.xcodeproj`, scheme `WNF`, bundle id `com.wonangfei.app`, iOS deployment target `17.0`.
 - Current simulator validation used `iPhone 17` on iOS `26.5`; `build_sim` and `build_run_sim` both succeeded with no diagnostics.
 - XcodeBuildMCP defaults are committed under `.xcodebuildmcp/config.yaml`, so agents can call `build_sim`, `build_run_sim`, `snapshot_ui`, `tap`, and `screenshot` without re-entering project defaults.
+- 2026-05-17 onboarding hero replacement validation: five source PNGs from `/Users/shelingzhao/Documents/窝囊费素材/引导/` matched their target asset-catalog SHA-256 hashes, all target files reported `1536 x 1024` and `hasAlpha: yes`, and `build_sim` succeeded.
 - Home share card verification covered opening the card, masking sensitive values, presenting the iOS share sheet, closing with the x button, and closing by tapping outside the card.
 - The source prototype still includes Open Design canvas and tweak controls. For production, move only the screen components and shared tokens into the app shell.
 - `assets/reference-screens/` contains visual inputs and may include duplicate imported versions. Treat it as reference material, not production bundle.

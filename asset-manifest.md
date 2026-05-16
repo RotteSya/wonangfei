@@ -40,9 +40,24 @@ The folder `assets/source/` contains the current prototype implementation at pac
 - `design-canvas.jsx`
 - `tweaks-panel.jsx`
 
+## Native Onboarding Assets
+
+These files are shipped through `WNF/Assets.xcassets` and are used by `WNF/OnboardingView.swift`.
+
+| Source file | Asset catalog file | Current role |
+|---|---|---|
+| `/Users/shelingzhao/Documents/窝囊费素材/引导/p1.png` | `WNF/Assets.xcassets/OnboardingP1.imageset/onboarding-p1.png` | Page 1 hero |
+| `/Users/shelingzhao/Documents/窝囊费素材/引导/p2.png` | `WNF/Assets.xcassets/OnboardingP2.imageset/onboarding-p2.png` | Page 2 salary setup hero |
+| `/Users/shelingzhao/Documents/窝囊费素材/引导/p3午休.png` | `WNF/Assets.xcassets/OnboardingLunchSleep.imageset/onboarding-lunch-sleep.png` | Page 3 hero when lunch break is enabled |
+| `/Users/shelingzhao/Documents/窝囊费素材/引导/p3睡醒.png` | `WNF/Assets.xcassets/OnboardingLunchWake.imageset/onboarding-lunch-wake.png` | Page 3 hero when lunch break is disabled |
+| `/Users/shelingzhao/Documents/窝囊费素材/引导/p4.png` | `WNF/Assets.xcassets/OnboardingP4.imageset/onboarding-p4.png` | Page 4 completion hero |
+
+All five onboarding hero PNGs should stay `1536 x 1024` with alpha. A white rectangle around the hero on device means the asset-catalog PNG lost transparency; the soft glow behind the hero is expected from `OnboardingImagePanel` / `LunchImagePanel`.
+
 ## Production Asset Guidance
 
 - Do not ship all reference screens inside the production app.
 - Keep `hero-mascot.png` and whichever `cow-*` poses are actually used by shipped screens.
 - Compress large reference images only after deciding which are part of final marketing or App Store material.
 - Preserve transparent PNG edges for cow poses; avoid placing yellow variants on yellow hero cards without contrast treatment.
+- Preserve transparent PNG edges for onboarding hero assets, especially the two page-3 lunch-state variants.

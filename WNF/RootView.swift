@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 enum AppTab: String, CaseIterable, Identifiable {
     case home
@@ -33,12 +34,18 @@ enum AppTab: String, CaseIterable, Identifiable {
 }
 
 struct RootView: View {
+    @EnvironmentObject private var state: WageState
     @State private var selectedTab: AppTab = .home
     @State private var tabTransitionDirection = 1
     @State private var entryAnimating = false
     @State private var entryExpanded = false
     @State private var homeSharePresented = false
+    @State private var shareCardHidesSensitiveInfo = false
+    @State private var activityItems: [Any] = []
+    @State private var isActivityPresented = false
     @AppStorage("wnf.onboarding.completed") private var onboardingCompleted = false
+
+    private var day: WageDay { state.calculation }
 
     var body: some View {
         ZStack {
@@ -103,12 +110,30 @@ struct RootView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .id(selectedTab)
             .transition(tabContentTransition)
-            .modifier(TabContentClipModifier(isEnabled: !homeSharePresented))
-            .zIndex(homeSharePresented ? 2 : 0)
+            .clipped()
 
             AppTabBar(selectedTab: tabSelection)
                 .padding(.bottom, 10)
+                .opacity(homeSharePresented ? 0 : 1)
                 .allowsHitTesting(!homeSharePresented)
+                .animation(.easeInOut(duration: 0.18), value: homeSharePresented)
+                .zIndex(1)
+
+            if homeSharePresented {
+                ShareCardOverlay(
+                    day: day,
+                    hidesSensitiveInfo: $shareCardHidesSensitiveInfo,
+                    onShare: presentSystemShare,
+                    onDismiss: dismissShareCard
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .ignoresSafeArea(.container, edges: .all)
+                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .center)))
+                .zIndex(3)
+            }
+        }
+        .sheet(isPresented: $isActivityPresented) {
+            ActivityView(activityItems: activityItems)
         }
     }
 
@@ -123,7 +148,7 @@ struct RootView: View {
     private var currentTabContent: some View {
         switch selectedTab {
         case .home:
-            HomeView(isShareCardPresented: $homeSharePresented)
+            HomeView(isShareCardPresented: $homeSharePresented, onShare: presentShareCard)
         case .records:
             RecordsView()
         case .settings:
@@ -151,17 +176,51 @@ struct RootView: View {
             selectedTab = tab
         }
     }
-}
 
-private struct TabContentClipModifier: ViewModifier {
-    var isEnabled: Bool
-
-    func body(content: Content) -> some View {
-        if isEnabled {
-            content.clipped()
-        } else {
-            content
+    private func presentShareCard() {
+        guard selectedTab == .home else { return }
+        shareCardHidesSensitiveInfo = state.privacyMode
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+            homeSharePresented = true
         }
+    }
+
+    private func dismissShareCard() {
+        withAnimation(.easeOut(duration: 0.2)) {
+            homeSharePresented = false
+        }
+    }
+
+    @MainActor
+    private func presentSystemShare() {
+        let exportCard = WonangfeiShareCard(
+            day: day,
+            hidesSensitiveInfo: shareCardHidesSensitiveInfo,
+            showsControls: false,
+            onTogglePrivacy: {},
+            onShare: {},
+            onDismiss: {}
+        )
+        .frame(width: 360)
+
+        let renderer = ImageRenderer(content: exportCard)
+        renderer.scale = UIScreen.main.scale
+        renderer.proposedSize = ProposedViewSize(width: 360, height: nil)
+
+        if let image = renderer.uiImage {
+            activityItems = [image]
+        } else {
+            activityItems = [shareFallbackText]
+        }
+        isActivityPresented = true
+    }
+
+    private var shareFallbackText: String {
+        "今天挣了 \(WNFFormat.moneyDecimal(day.earnedToday, privacy: shareCardHidesSensitiveInfo))，上班上了 \(shareDurationText)。"
+    }
+
+    private var shareDurationText: String {
+        shareCardHidesSensitiveInfo ? "••h••min" : WNFFormat.duration(day.elapsedPaidMinutes)
     }
 }
 

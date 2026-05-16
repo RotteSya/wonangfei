@@ -98,6 +98,7 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 - `RootView` owns the stable full-screen backdrop, share card presentation, and export sheet so the dimmed safe-area coverage does not depend on the card transition or tab-content transition; `HomeView` only requests presentation and blurs its own home content while the card is open.
 - Share card presentation uses opacity-only insertion/removal so the card bounds stay fixed throughout the transition.
 - Share card content must include `今日窝囊费` and `上班上了多久`.
+- Share card title/subtitle copy is selected from `ShareCardCopy.pool` every time the home share action opens the card. The picker excludes the currently displayed pair when possible, so repeated opens visibly refresh the wording.
 - Share card controls:
   - eye button masks/unmasks card-sensitive values only;
   - share button renders the card without controls and presents iOS `UIActivityViewController`;

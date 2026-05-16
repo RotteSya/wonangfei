@@ -40,6 +40,7 @@ struct RootView: View {
     @State private var entryAnimating = false
     @State private var entryExpanded = false
     @State private var homeSharePresented = false
+    @State private var shareCardCopy = ShareCardCopy.default
     @State private var shareCardHidesSensitiveInfo = false
     @State private var activityItems: [Any] = []
     @State private var isActivityPresented = false
@@ -125,6 +126,7 @@ struct RootView: View {
             if homeSharePresented {
                 ShareCardOverlay(
                     day: day,
+                    copy: shareCardCopy,
                     hidesSensitiveInfo: $shareCardHidesSensitiveInfo,
                     onShare: presentSystemShare,
                     onDismiss: dismissShareCard
@@ -182,6 +184,7 @@ struct RootView: View {
 
     private func presentShareCard() {
         guard selectedTab == .home else { return }
+        shareCardCopy = ShareCardCopy.random(excluding: shareCardCopy)
         shareCardHidesSensitiveInfo = state.privacyMode
         withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
             homeSharePresented = true
@@ -198,6 +201,7 @@ struct RootView: View {
     private func presentSystemShare() {
         let exportCard = WonangfeiShareCard(
             day: day,
+            copy: shareCardCopy,
             hidesSensitiveInfo: shareCardHidesSensitiveInfo,
             showsControls: false,
             onTogglePrivacy: {},

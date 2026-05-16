@@ -92,8 +92,52 @@ private struct HeroHomePage: View {
     }
 }
 
+struct ShareCardCopy: Equatable {
+    var title: String
+    var subtitle: String
+
+    static let `default` = ShareCardCopy(
+        title: "今天没有赢，\n但到账了。",
+        subtitle: "工位把我按住，工资负责安慰。"
+    )
+
+    static let pool: [ShareCardCopy] = [
+        .default,
+        ShareCardCopy(
+            title: "人在工位，\n钱在路上。",
+            subtitle: "今天又把生活按时熬过一段。"
+        ),
+        ShareCardCopy(
+            title: "今天也没翻身，\n但有进账。",
+            subtitle: "打工的委屈，先折成数字存起来。"
+        ),
+        ShareCardCopy(
+            title: "班是上的，\n钱是到账的。",
+            subtitle: "没有热血剧情，只有稳定入账。"
+        ),
+        ShareCardCopy(
+            title: "又被工作拿捏，\n也被工资哄好。",
+            subtitle: "今天的窝囊，明天再继续算。"
+        ),
+        ShareCardCopy(
+            title: "体面没赢，\n余额加分。",
+            subtitle: "把不想上班的心情，换成可见进度。"
+        ),
+        ShareCardCopy(
+            title: "工位困住我，\n到账放过我。",
+            subtitle: "今天的辛苦，有数字替我作证。"
+        )
+    ]
+
+    static func random(excluding current: ShareCardCopy) -> ShareCardCopy {
+        let nextPool = pool.filter { $0 != current }
+        return nextPool.randomElement() ?? current
+    }
+}
+
 struct ShareCardOverlay: View {
     var day: WageDay
+    var copy: ShareCardCopy
     @Binding var hidesSensitiveInfo: Bool
     var onShare: () -> Void
     var onDismiss: () -> Void
@@ -102,6 +146,7 @@ struct ShareCardOverlay: View {
         ZStack {
             WonangfeiShareCard(
                 day: day,
+                copy: copy,
                 hidesSensitiveInfo: hidesSensitiveInfo,
                 showsControls: true,
                 onTogglePrivacy: {
@@ -124,6 +169,7 @@ struct ShareCardOverlay: View {
 
 struct WonangfeiShareCard: View {
     var day: WageDay
+    var copy: ShareCardCopy = .default
     var hidesSensitiveInfo: Bool
     var showsControls: Bool
     var onTogglePrivacy: () -> Void
@@ -201,13 +247,15 @@ struct WonangfeiShareCard: View {
 
             HStack(alignment: .top, spacing: 10) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("今天没有赢，\n但到账了.")
+                    Text(copy.title)
                         .font(.system(size: 27, weight: .black, design: .rounded))
                         .foregroundStyle(WNFTheme.ink)
                         .lineSpacing(-2)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.82)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Text("工位把我按住，工资负责安慰。")
+                    Text(copy.subtitle)
                         .font(.system(size: 12, weight: .heavy))
                         .foregroundStyle(WNFTheme.inkSoft)
                         .lineLimit(2)

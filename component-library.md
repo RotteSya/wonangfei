@@ -104,11 +104,22 @@
 - Use on: home page share overlay.
 - Container: rounded cream card, max width close to `330px` on iPhone 17 portrait.
 - Header: yellow band with compact mascot, `窝囊费`, `今日窝囊战报`, and three icon controls.
+- Copy behavior: `RootView` refreshes the active `ShareCardCopy` from `ShareCardCopy.pool` whenever the home share action opens the card. The current pair is excluded when possible, so consecutive opens do not repeat the same wording.
 - Controls:
   - eye / eye slash masks only the card amount and duration;
   - share exports a control-free card image through iOS system share;
   - x closes the overlay.
-- Body: headline copy, small cow pose, dashed-inner stats panel with `今日窝囊费` and `上班上了多久`, and branded footer.
+- Body: active headline pair, small cow pose, dashed-inner stats panel with `今日窝囊费` and `上班上了多久`, and branded footer.
+- Active copy:
+  - Title: `今天没有赢，但到账了。`
+  - Subtitle: `工位把我按住，工资负责安慰。`
+- Alternate title/subtitle copy pool:
+  - `人在工位，钱在路上。` / `今天又把生活按时熬过一段。`
+  - `今天也没翻身，但有进账。` / `打工的委屈，先折成数字存起来。`
+  - `班是上的，钱是到账的。` / `没有热血剧情，只有稳定入账。`
+  - `又被工作拿捏，也被工资哄好。` / `今天的窝囊，明天再继续算。`
+  - `体面没赢，余额加分。` / `把不想上班的心情，换成可见进度。`
+  - `工位困住我，到账放过我。` / `今天的辛苦，有数字替我作证。`
 - Overlay: home content remains underneath but blurred and dimmed across the full screen, including status bar and bottom home-indicator areas; tapping outside closes the card.
 
 ### Onboarding Hero Panel

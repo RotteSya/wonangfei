@@ -32,6 +32,8 @@ struct HomeView: View {
                     onShare: presentSystemShare,
                     onDismiss: dismissShareCard
                 )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .ignoresSafeArea(.container, edges: .all)
                 .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .center)))
                 .zIndex(3)
             }
@@ -181,7 +183,9 @@ private struct ShareCardOverlay: View {
                 .shadow(color: .black.opacity(0.24), radius: 24, y: 16)
                 .position(x: proxy.size.width / 2, y: proxy.size.height * 0.51)
             }
+            .frame(width: proxy.size.width, height: proxy.size.height)
         }
+        .ignoresSafeArea(.container, edges: .all)
     }
 }
 

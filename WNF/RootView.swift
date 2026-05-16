@@ -103,7 +103,7 @@ struct RootView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .id(selectedTab)
             .transition(tabContentTransition)
-            .clipped()
+            .modifier(TabContentClipModifier(isEnabled: !homeSharePresented))
             .zIndex(homeSharePresented ? 2 : 0)
 
             AppTabBar(selectedTab: tabSelection)
@@ -149,6 +149,18 @@ struct RootView: View {
 
         withAnimation(.snappy(duration: 0.32, extraBounce: 0.02)) {
             selectedTab = tab
+        }
+    }
+}
+
+private struct TabContentClipModifier: ViewModifier {
+    var isEnabled: Bool
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.clipped()
+        } else {
+            content
         }
     }
 }

@@ -94,7 +94,7 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 ### 首页
 
 - Top-right action opens the share card; it no longer toggles privacy on the home page.
-- Opening the share card blurs the existing home content and adds a dimmed overlay.
+- Opening the share card blurs the existing home content and adds a full-bleed dimmed overlay that covers the status bar and bottom home-indicator areas.
 - Share card content must include `今日窝囊费` and `上班上了多久`.
 - Share card controls:
   - eye button masks/unmasks card-sensitive values only;

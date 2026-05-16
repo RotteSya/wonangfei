@@ -109,7 +109,7 @@
   - share exports a control-free card image through iOS system share;
   - x closes the overlay.
 - Body: headline copy, small cow pose, dashed-inner stats panel with `今日窝囊费` and `上班上了多久`, and branded footer.
-- Overlay: home content remains underneath but blurred and dimmed; tapping outside closes the card.
+- Overlay: home content remains underneath but blurred and dimmed across the full screen, including status bar and bottom home-indicator areas; tapping outside closes the card.
 
 ### Onboarding Hero Panel
 

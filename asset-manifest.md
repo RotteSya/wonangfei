@@ -18,7 +18,7 @@
 
 | Asset | Role |
 |---|---|
-| `WNF/HomeSprite.mov` | Optional animated homepage mascot loop used during active work states; after-work/overtime/day-off states may downshift to static mascot assets through `WageDisplayModel`. |
+| `WNF/HomeSprite.mov` | Bundled homepage mascot loop. `HomeView` uses it for all homepage states when present; state-specific static mascot assets remain the fallback if the MOV is missing. Current 2026-05-16 source replacement is `/Users/shelingzhao/Movies/CapCut/0515(1).mov` (`HEVC with Alpha`, 2160 x 2160, about 10.03s, 42,898,189 bytes). |
 
 ## Reference Screens
 

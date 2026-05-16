@@ -18,5 +18,5 @@
 ## Working Rules
 
 - Preserve local-first behavior; no remote backend is involved in this app state.
-- Keep `HomeSprite.mov` as an optional animated homepage asset. Downshift to state-specific static mascot assets for after-work/overtime/day-off if the animation would imply active work.
+- Keep `HomeSprite.mov` as the homepage mascot media when it is bundled. Static mascot assets are the fallback for missing media, while Widget continues to use static `WageDisplayModel.mascotAsset` images.
 - When changing Widget behavior, keep App and Widget on the same `WageSettings` / `WageCalculator` / `WageDisplayModel` contract.

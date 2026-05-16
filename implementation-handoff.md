@@ -64,6 +64,7 @@ Native calculation is split from presentation:
 - `WageDisplayModel` derives homepage titles, speech copy, summary rows, mascot choice, and widget copy.
 - Non-workdays resolve to `dayOff` before overtime is considered, so Saturday/Sunday or unselected weekdays never auto-start overtime.
 - `includeOvertime` uses a `1.0x` multiplier in this pass. The field exists as `overtimeMultiplier`, but there is no settings UI for it.
+- As of 2026-05-16, `WageDisplayModel.usesAnimatedSprite` is true for all homepage statuses. `HomeView` loads bundled `WNF/HomeSprite.mov` when present and only falls back to `mascotAsset` static images if the MOV resource is missing. Widget rendering still uses static `mascotAsset` images.
 
 ## Widget Contract
 
@@ -126,4 +127,4 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 - `assets/reference-screens/` contains visual inputs and may include duplicate imported versions. Treat it as reference material, not production bundle.
 - `assets/mascot/hero-mascot.png` is currently used in both record achievement card and settings profile banner.
 - The root app fixes the package asset paths through `WNF_MASCOT_ROOT`, so the same screen components work from both `/index.html` and `/assets/source/wonangfei.html`.
-- The old 8-pose cow set remains useful for home screen state changes.
+- The old 8-pose cow set remains useful as a missing-media fallback and for non-home surfaces that still render static mascot assets.

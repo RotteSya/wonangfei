@@ -68,7 +68,7 @@ These files are copied into the app bundle through the Xcode resources phase and
 
 | Source file | App resource | Current role |
 |---|---|---|
-| `/Users/shelingzhao/Documents/窝囊费素材/精灵图/打电脑.mp4` | `WNF/home-typing.mp4` | Home mascot loop clip |
-| `/Users/shelingzhao/Documents/窝囊费素材/精灵图/无聊.mp4` | `WNF/home-bored.mp4` | Home mascot loop clip |
+| `/Users/shelingzhao/Documents/窝囊费素材/精灵图/打电脑透明.mov` | `WNF/home-typing.mov` | Transparent home mascot loop clip |
+| `/Users/shelingzhao/Documents/窝囊费素材/精灵图/无聊透明.mov` | `WNF/home-bored.mov` | Transparent home mascot loop clip |
 
-Both source clips are 960 x 960 mp4 files, about 15 seconds each. The native player mutes them and loops by shuffling the two clips once per cycle.
+Both source clips are 1080 x 1080 QuickTime movies, about 15 seconds each, encoded as HEVC with Alpha. The native player mutes them and loops by shuffling the two clips once per cycle.

@@ -53,14 +53,14 @@ XcodeBuildMCP 已在 `.xcodebuildmcp/config.yaml` 持久化默认值：project `
 已实现：
 
 - 首页工资实时计算、隐私打码、进度条。
-- 首页吉祥物位使用循环视频序列：`home-typing.mp4` 和 `home-bored.mp4` 每轮随机排序后连续播放。
+- 首页吉祥物位使用透明循环视频序列：`home-typing.mov` 和 `home-bored.mov` 每轮随机排序后连续播放。
 - 首页分享卡片：背景虚化、今日窝囊费/上班时长、卡片内隐藏敏感信息、系统分享和退出。
 - 底部 tab 切换：页面内容按 tab 顺序横向滑入/滑出，并与胶囊选中态同步过渡。
 - 首次启动引导：4 屏 SwiftUI onboarding、第一页参考大图优先的 intro 布局、跳过/返回/分页控制、月薪/作息/午休设置和最终确认。
 - 记录页周 / 月 / 年切换、柱状图选中态、成就和徽章模块。
 - 我的页月薪和每月工作日支持 `- / +` 微调，也支持点中间数字弹出快速输入框；时间、午休和加班状态可编辑。
 - `assets/mascot` 中的主吉祥物和 Cow pose 已接入 `WNF/Assets.xcassets`。
-- 首页视频源来自 `/Users/shelingzhao/Documents/窝囊费素材/精灵图/打电脑.mp4` 和 `/Users/shelingzhao/Documents/窝囊费素材/精灵图/无聊.mp4`，当前以 `WNF/home-typing.mp4`、`WNF/home-bored.mp4` 打包进 app resources。
+- 首页视频源来自 `/Users/shelingzhao/Documents/窝囊费素材/精灵图/打电脑透明.mov` 和 `/Users/shelingzhao/Documents/窝囊费素材/精灵图/无聊透明.mov`，当前以 `WNF/home-typing.mov`、`WNF/home-bored.mov` 打包进 app resources。
 
 引导页 hero 图位于 `WNF/Assets.xcassets`，源文件来自 `/Users/shelingzhao/Documents/窝囊费素材/引导/`：
 

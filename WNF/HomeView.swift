@@ -150,16 +150,19 @@ private final class PlayerLayerView: UIView {
 }
 
 private final class HomeMascotVideoController: ObservableObject {
-    let player = AVPlayer()
+    let player = AVQueuePlayer()
     private let clips: [HomeMascotVideoClip]
     private var pendingClips: [HomeMascotVideoClip] = []
     private var lastPlayedClip: HomeMascotVideoClip?
     private var endObserver: NSObjectProtocol?
+    private let minimumQueuedItemCount = 3
 
     init(clips: [HomeMascotVideoClip] = HomeMascotVideoClip.all) {
         self.clips = clips
         player.isMuted = true
         player.allowsExternalPlayback = false
+        player.actionAtItemEnd = .advance
+        installEndObserver()
     }
 
     deinit {
@@ -169,33 +172,39 @@ private final class HomeMascotVideoController: ObservableObject {
     }
 
     func start() {
-        if player.currentItem == nil {
-            playNextClip()
-        } else {
-            player.play()
-        }
+        fillQueue()
+        player.play()
     }
 
     func pause() {
         player.pause()
     }
 
-    private func playNextClip() {
+    private func fillQueue() {
         guard !clips.isEmpty else { return }
+
+        while player.items().count < minimumQueuedItemCount {
+            guard let item = makeNextItem() else { return }
+            player.insert(item, after: nil)
+        }
+    }
+
+    private func makeNextItem() -> AVPlayerItem? {
+        guard !clips.isEmpty else { return nil }
 
         for _ in clips.indices {
             guard let clip = nextClip(),
-                  let url = Bundle.main.url(forResource: clip.resourceName, withExtension: "mp4")
+                  let url = Bundle.main.url(forResource: clip.resourceName, withExtension: "mov")
             else {
                 continue
             }
 
             let item = AVPlayerItem(url: url)
-            installEndObserver(for: item)
-            player.replaceCurrentItem(with: item)
-            player.play()
-            return
+            item.preferredForwardBufferDuration = 1
+            return item
         }
+
+        return nil
     }
 
     private func nextClip() -> HomeMascotVideoClip? {
@@ -214,17 +223,13 @@ private final class HomeMascotVideoController: ObservableObject {
         return clip
     }
 
-    private func installEndObserver(for item: AVPlayerItem) {
-        if let endObserver {
-            NotificationCenter.default.removeObserver(endObserver)
-        }
-
+    private func installEndObserver() {
         endObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
-            object: item,
+            object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.playNextClip()
+            self?.fillQueue()
         }
     }
 }

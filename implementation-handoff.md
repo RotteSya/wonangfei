@@ -94,7 +94,7 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 ### 首页
 
 - Top-right action opens the share card; it no longer toggles privacy on the home page.
-- The home mascot slot now renders `WNF/home-typing.mp4` and `WNF/home-bored.mp4` through an `AVPlayerLayer` SwiftUI wrapper. `HomeMascotVideoController` shuffles the clip order for each full cycle, avoids repeating the last clip at the cycle boundary, mutes playback, and pauses when the view disappears or the scene becomes inactive.
+- The home mascot slot now renders transparent `WNF/home-typing.mov` and `WNF/home-bored.mov` clips through an `AVPlayerLayer` SwiftUI wrapper. `HomeMascotVideoController` uses an `AVQueuePlayer`, keeps upcoming local clips prequeued, shuffles the clip order for each full cycle, avoids repeating the last clip at the cycle boundary, mutes playback, and pauses when the view disappears or the scene becomes inactive.
 - Opening the share card blurs the existing home content and adds a full-bleed dimmed overlay that covers the status bar and bottom home-indicator areas.
 - `RootView` owns the stable full-screen backdrop, share card presentation, and export sheet so the dimmed safe-area coverage does not depend on the card transition or tab-content transition; `HomeView` only requests presentation and blurs its own home content while the card is open.
 - Share card presentation uses opacity-only insertion/removal so the card bounds stay fixed throughout the transition.

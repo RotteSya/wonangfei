@@ -80,20 +80,6 @@ Native calculation is split from presentation:
 
 Important: the settings UI label says `午休`. Switch on means "has lunch break"; switch off means "没有午休". The data flag remains `noLunch`.
 
-## Onboarding Asset Contract
-
-- Native onboarding source: `WNF/OnboardingView.swift`.
-- Fast local copy preview: `tools/onboarding-copy-editor.html`.
-- Runtime assets:
-  - `OnboardingP1` -> `WNF/Assets.xcassets/OnboardingP1.imageset/onboarding-p1.png`
-  - `OnboardingP2` -> `WNF/Assets.xcassets/OnboardingP2.imageset/onboarding-p2.png`
-  - `OnboardingP4` -> `WNF/Assets.xcassets/OnboardingP4.imageset/onboarding-p4.png`
-  - `OnboardingLunchSleep` -> `WNF/Assets.xcassets/OnboardingLunchSleep.imageset/onboarding-lunch-sleep.png`
-  - `OnboardingLunchWake` -> `WNF/Assets.xcassets/OnboardingLunchWake.imageset/onboarding-lunch-wake.png`
-- 2026-05-16 asset source for p1/p2/p4: `/Users/shelingzhao/Documents/窝囊费素材/引导/`.
-- p1, p2, and p4 are transparent PNG hero images. Preserve the RGBA alpha channel when replacing files; an RGB conversion will show as a white rectangle on device.
-- `OnboardingImagePanel` adds its own soft white/yellow glow behind the image, so a faint ambient background is expected even when the PNG itself is transparent.
-
 ## Interaction Requirements
 
 ### 记录页

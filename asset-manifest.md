@@ -61,3 +61,14 @@ All five onboarding hero PNGs should stay `1536 x 1024` with alpha. A white rect
 - Compress large reference images only after deciding which are part of final marketing or App Store material.
 - Preserve transparent PNG edges for cow poses; avoid placing yellow variants on yellow hero cards without contrast treatment.
 - Preserve transparent PNG edges for onboarding hero assets, especially the two page-3 lunch-state variants.
+
+## Native Home Media
+
+These files are copied into the app bundle through the Xcode resources phase and are used by `WNF/HomeView.swift`.
+
+| Source file | App resource | Current role |
+|---|---|---|
+| `/Users/shelingzhao/Documents/窝囊费素材/精灵图/打电脑.mp4` | `WNF/home-typing.mp4` | Home mascot loop clip |
+| `/Users/shelingzhao/Documents/窝囊费素材/精灵图/无聊.mp4` | `WNF/home-bored.mp4` | Home mascot loop clip |
+
+Both source clips are 960 x 960 mp4 files, about 15 seconds each. The native player mutes them and loops by shuffling the two clips once per cycle.

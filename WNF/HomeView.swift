@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 import UIKit
 
@@ -66,10 +67,8 @@ private struct HeroHomePage: View {
             Spacer(minLength: 16)
 
             ZStack(alignment: .topLeading) {
-                Image(day.status.mascotAsset)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: 285)
+                HomeMascotVideoSequence()
+                    .frame(width: 285, height: 285)
                     .frame(maxWidth: .infinity)
 
                 Text(day.status.quote)
@@ -90,6 +89,153 @@ private struct HeroHomePage: View {
             .padding(.bottom, 145)
         }
     }
+}
+
+private struct HomeMascotVideoSequence: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var controller = HomeMascotVideoController()
+
+    var body: some View {
+        HomeMascotPlayerView(player: controller.player)
+            .accessibilityHidden(true)
+            .onAppear {
+                controller.start()
+            }
+            .onDisappear {
+                controller.pause()
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase == .active {
+                    controller.start()
+                } else {
+                    controller.pause()
+                }
+            }
+    }
+}
+
+private struct HomeMascotPlayerView: UIViewRepresentable {
+    let player: AVPlayer
+
+    func makeUIView(context: Context) -> PlayerLayerView {
+        let view = PlayerLayerView()
+        view.playerLayer.player = player
+        view.playerLayer.videoGravity = .resizeAspect
+        return view
+    }
+
+    func updateUIView(_ uiView: PlayerLayerView, context: Context) {
+        uiView.playerLayer.player = player
+    }
+}
+
+private final class PlayerLayerView: UIView {
+    override class var layerClass: AnyClass {
+        AVPlayerLayer.self
+    }
+
+    var playerLayer: AVPlayerLayer {
+        layer as! AVPlayerLayer
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .clear
+        isOpaque = false
+    }
+
+    required init?(coder: NSCoder) {
+        nil
+    }
+}
+
+private final class HomeMascotVideoController: ObservableObject {
+    let player = AVPlayer()
+    private let clips: [HomeMascotVideoClip]
+    private var pendingClips: [HomeMascotVideoClip] = []
+    private var lastPlayedClip: HomeMascotVideoClip?
+    private var endObserver: NSObjectProtocol?
+
+    init(clips: [HomeMascotVideoClip] = HomeMascotVideoClip.all) {
+        self.clips = clips
+        player.isMuted = true
+        player.allowsExternalPlayback = false
+    }
+
+    deinit {
+        if let endObserver {
+            NotificationCenter.default.removeObserver(endObserver)
+        }
+    }
+
+    func start() {
+        if player.currentItem == nil {
+            playNextClip()
+        } else {
+            player.play()
+        }
+    }
+
+    func pause() {
+        player.pause()
+    }
+
+    private func playNextClip() {
+        guard !clips.isEmpty else { return }
+
+        for _ in clips.indices {
+            guard let clip = nextClip(),
+                  let url = Bundle.main.url(forResource: clip.resourceName, withExtension: "mp4")
+            else {
+                continue
+            }
+
+            let item = AVPlayerItem(url: url)
+            installEndObserver(for: item)
+            player.replaceCurrentItem(with: item)
+            player.play()
+            return
+        }
+    }
+
+    private func nextClip() -> HomeMascotVideoClip? {
+        if pendingClips.isEmpty {
+            pendingClips = clips.shuffled()
+            if clips.count > 1,
+               pendingClips.first == lastPlayedClip,
+               let nextIndex = pendingClips.dropFirst().firstIndex(where: { $0 != lastPlayedClip }) {
+                pendingClips.swapAt(0, nextIndex)
+            }
+        }
+
+        guard !pendingClips.isEmpty else { return nil }
+        let clip = pendingClips.removeFirst()
+        lastPlayedClip = clip
+        return clip
+    }
+
+    private func installEndObserver(for item: AVPlayerItem) {
+        if let endObserver {
+            NotificationCenter.default.removeObserver(endObserver)
+        }
+
+        endObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: item,
+            queue: .main
+        ) { [weak self] _ in
+            self?.playNextClip()
+        }
+    }
+}
+
+private struct HomeMascotVideoClip: Equatable {
+    var resourceName: String
+
+    static let all = [
+        HomeMascotVideoClip(resourceName: "home-typing"),
+        HomeMascotVideoClip(resourceName: "home-bored")
+    ]
 }
 
 struct ShareCardCopy: Equatable {

@@ -5,6 +5,7 @@
 The runnable entry and live prototype files are:
 
 - `WNF.xcodeproj` / `WNF/`：native SwiftUI iOS implementation of the current app design.
+- `.xcodebuildmcp/config.yaml`：persisted XcodeBuildMCP defaults for the native app, including project, scheme, simulator, and bundle id.
 - `index.html`：implemented static app shell. It renders the actual product screens, keeps the iPhone frame as the primary surface, exposes desktop/mobile control panels, persists local state, and links back to the handoff docs.
 - `窝囊费.html`：entry shell, tweak state, iPhone frame, three core screens and comparison boards.
 - `wonangfei.html`：same entry shell copied with an ASCII filename for safer handoff.
@@ -44,12 +45,23 @@ Source: `shared.jsx -> computeDay(cfg, nowMin)`
 4. Compute hourly rate:
    - `hourlyRate = monthlySalary / (workdaysPerMonth * (workdayLen / 60))`
 5. Compute elapsed paid minutes up to `nowMin`, subtracting lunch overlap.
-6. Compute earned today:
+6. Compute current-day earnings:
    - `earnedToday = hourlyRate / 60 * elapsedPaid`
 
 Important: the settings UI label says `午休`. Switch on means "has lunch break"; switch off means "没有午休". The data flag remains `noLunch`.
 
 ## Interaction Requirements
+
+### 首页
+
+- Top-right action opens the share card; it no longer toggles privacy on the home page.
+- Opening the share card blurs the existing home content and adds a dimmed overlay.
+- Share card content must include `今日窝囊费` and `上班上了多久`.
+- Share card controls:
+  - eye button masks/unmasks card-sensitive values only;
+  - share button renders the card without controls and presents iOS `UIActivityViewController`;
+  - x button closes the card.
+- Tapping outside the card closes the card. While the card is open, bottom tab bar interaction is disabled.
 
 ### 记录页
 
@@ -88,6 +100,8 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 
 - Native iOS entry: open `WNF.xcodeproj`, scheme `WNF`, bundle id `com.wonangfei.app`, iOS deployment target `17.0`.
 - Current simulator validation used `iPhone 17` on iOS `26.5`; `build_sim` and `build_run_sim` both succeeded with no diagnostics.
+- XcodeBuildMCP defaults are committed under `.xcodebuildmcp/config.yaml`, so agents can call `build_sim`, `build_run_sim`, `snapshot_ui`, `tap`, and `screenshot` without re-entering project defaults.
+- Home share card verification covered opening the card, masking sensitive values, presenting the iOS share sheet, closing with the x button, and closing by tapping outside the card.
 - The source prototype still includes Open Design canvas and tweak controls. For production, move only the screen components and shared tokens into the app shell.
 - `assets/reference-screens/` contains visual inputs and may include duplicate imported versions. Treat it as reference material, not production bundle.
 - `assets/mascot/hero-mascot.png` is currently used in both record achievement card and settings profile banner.

@@ -1,27 +1,100 @@
 import SwiftUI
+import UIKit
 
 struct HomeView: View {
     @EnvironmentObject private var state: WageState
+    @Binding private var isShareCardPresented: Bool
+    @State private var shareCardHidesSensitiveInfo = false
+    @State private var activityItems: [Any] = []
+    @State private var isActivityPresented = false
 
     private var day: WageDay { state.calculation }
+
+    init(isShareCardPresented: Binding<Bool> = .constant(false)) {
+        self._isShareCardPresented = isShareCardPresented
+    }
 
     var body: some View {
         ZStack {
             WNFTheme.bg.ignoresSafeArea()
 
-            HeroHomePage(day: day)
+            HeroHomePage(day: day, onShare: presentShareCard)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .blur(radius: isShareCardPresented ? 18 : 0)
+                .scaleEffect(isShareCardPresented ? 0.985 : 1)
+                .allowsHitTesting(!isShareCardPresented)
+                .animation(.easeInOut(duration: 0.2), value: isShareCardPresented)
+
+            if isShareCardPresented {
+                ShareCardOverlay(
+                    day: day,
+                    hidesSensitiveInfo: $shareCardHidesSensitiveInfo,
+                    onShare: presentSystemShare,
+                    onDismiss: dismissShareCard
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .center)))
+                .zIndex(3)
+            }
         }
+        .sheet(isPresented: $isActivityPresented) {
+            ActivityView(activityItems: activityItems)
+        }
+    }
+
+    private func presentShareCard() {
+        shareCardHidesSensitiveInfo = state.privacyMode
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+            isShareCardPresented = true
+        }
+    }
+
+    private func dismissShareCard() {
+        withAnimation(.easeOut(duration: 0.2)) {
+            isShareCardPresented = false
+        }
+    }
+
+    @MainActor
+    private func presentSystemShare() {
+        let exportCard = WonangfeiShareCard(
+            day: day,
+            hidesSensitiveInfo: shareCardHidesSensitiveInfo,
+            showsControls: false,
+            onTogglePrivacy: {},
+            onShare: {},
+            onDismiss: {}
+        )
+        .frame(width: 360)
+
+        let renderer = ImageRenderer(content: exportCard)
+        renderer.scale = UIScreen.main.scale
+        renderer.proposedSize = ProposedViewSize(width: 360, height: nil)
+
+        if let image = renderer.uiImage {
+            activityItems = [image]
+        } else {
+            activityItems = [shareFallbackText]
+        }
+        isActivityPresented = true
+    }
+
+    private var shareFallbackText: String {
+        "今天挣了 \(WNFFormat.moneyDecimal(day.earnedToday, privacy: shareCardHidesSensitiveInfo))，上班上了 \(shareDurationText)。"
+    }
+
+    private var shareDurationText: String {
+        shareCardHidesSensitiveInfo ? "••h••min" : WNFFormat.duration(day.elapsedPaidMinutes)
     }
 }
 
 private struct HeroHomePage: View {
     @EnvironmentObject private var state: WageState
     var day: WageDay
+    var onShare: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            TopBar()
+            TopBar(onShare: onShare)
                 .padding(.top, 2)
 
             VStack(alignment: .leading, spacing: 14) {
@@ -76,6 +149,245 @@ private struct HeroHomePage: View {
             .padding(.bottom, 145)
         }
     }
+}
+
+private struct ShareCardOverlay: View {
+    var day: WageDay
+    @Binding var hidesSensitiveInfo: Bool
+    var onShare: () -> Void
+    var onDismiss: () -> Void
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                Color(red: 0.27, green: 0.25, blue: 0.21)
+                    .opacity(0.46)
+                    .ignoresSafeArea()
+                    .onTapGesture(perform: onDismiss)
+
+                WonangfeiShareCard(
+                    day: day,
+                    hidesSensitiveInfo: hidesSensitiveInfo,
+                    showsControls: true,
+                    onTogglePrivacy: {
+                        withAnimation(.snappy(duration: 0.18)) {
+                            hidesSensitiveInfo.toggle()
+                        }
+                    },
+                    onShare: onShare,
+                    onDismiss: onDismiss
+                )
+                .frame(width: min(proxy.size.width - 82, 330))
+                .shadow(color: .black.opacity(0.24), radius: 24, y: 16)
+                .position(x: proxy.size.width / 2, y: proxy.size.height * 0.51)
+            }
+        }
+    }
+}
+
+private struct WonangfeiShareCard: View {
+    var day: WageDay
+    var hidesSensitiveInfo: Bool
+    var showsControls: Bool
+    var onTogglePrivacy: () -> Void
+    var onShare: () -> Void
+    var onDismiss: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            bodyContent
+        }
+        .background(WNFTheme.bg, in: RoundedRectangle(cornerRadius: 29, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 29, style: .continuous).stroke(Color.white.opacity(0.72), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 29, style: .continuous))
+    }
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image("CowThreeQ")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 30, height: 30)
+                .padding(4)
+                .background(Color.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("窝囊费")
+                    .font(.system(size: 20, weight: .black, design: .rounded))
+                    .foregroundStyle(WNFTheme.ink)
+                Text("今日窝囊战报")
+                    .font(.system(size: 10, weight: .heavy))
+                    .tracking(1.2)
+                    .foregroundStyle(WNFTheme.inkSoft)
+            }
+
+            Spacer(minLength: 8)
+
+            if showsControls {
+                HStack(spacing: 8) {
+                    ShareCardIconButton(
+                        systemName: hidesSensitiveInfo ? "eye.slash" : "eye",
+                        accessibilityLabel: hidesSensitiveInfo ? "显示敏感信息" : "隐藏敏感信息",
+                        action: onTogglePrivacy
+                    )
+                    ShareCardIconButton(
+                        systemName: "square.and.arrow.up",
+                        accessibilityLabel: "唤起系统分享",
+                        action: onShare
+                    )
+                    ShareCardIconButton(
+                        systemName: "xmark",
+                        accessibilityLabel: "退出分享卡片",
+                        action: onDismiss
+                    )
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 13)
+        .background(WNFTheme.gold)
+    }
+
+    private var bodyContent: some View {
+        VStack(alignment: .leading, spacing: 13) {
+            Rectangle()
+                .fill(Color.clear)
+                .frame(height: 0)
+                .overlay(
+                    Rectangle()
+                        .stroke(WNFTheme.muted.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [8, 8]))
+                )
+                .padding(.horizontal, -18)
+                .padding(.top, -13)
+
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("今天没有赢，\n但到账了.")
+                        .font(.system(size: 27, weight: .black, design: .rounded))
+                        .foregroundStyle(WNFTheme.ink)
+                        .lineSpacing(-2)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text("工位把我按住，工资负责安慰。")
+                        .font(.system(size: 12, weight: .heavy))
+                        .foregroundStyle(WNFTheme.inkSoft)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 0)
+
+                Image(day.status.mascotAsset)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 66, height: 66)
+                    .padding(.top, 8)
+            }
+
+            statsPanel
+
+            HStack {
+                Text("丧萌有理 · 自嘲无罪")
+                    .font(.system(size: 12, weight: .heavy))
+                    .foregroundStyle(WNFTheme.inkSoft)
+
+                Spacer(minLength: 8)
+
+                HStack(spacing: 5) {
+                    YenBadge(size: 16)
+                    Text("来自窝囊费")
+                        .font(.system(size: 12, weight: .black))
+                        .foregroundStyle(WNFTheme.ink)
+                }
+            }
+        }
+        .padding(14)
+        .background(
+            LinearGradient(
+                colors: [WNFTheme.bg.opacity(0.98), WNFTheme.surfaceSoft.opacity(0.78)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+    }
+
+    private var statsPanel: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("今日窝囊费")
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundStyle(WNFTheme.inkSoft)
+                Spacer(minLength: 12)
+                Text(WNFFormat.moneyDecimal(day.earnedToday, privacy: hidesSensitiveInfo))
+                    .font(.system(size: 35, weight: .black, design: .rounded))
+                    .foregroundStyle(WNFTheme.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.62)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 15)
+            .padding(.bottom, 10)
+
+            Rectangle()
+                .fill(WNFTheme.hairline)
+                .frame(height: 0.5)
+                .padding(.horizontal, 14)
+
+            HStack(alignment: .firstTextBaseline) {
+                Text("上班上了多久")
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundStyle(WNFTheme.inkSoft)
+                Spacer(minLength: 12)
+                Text(hidesSensitiveInfo ? "••h••min" : WNFFormat.duration(day.elapsedPaidMinutes))
+                    .font(.system(size: 22, weight: .black, design: .rounded))
+                    .foregroundStyle(WNFTheme.coral)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .padding(.bottom, 14)
+        }
+        .background(WNFTheme.surfaceSoft.opacity(0.72), in: RoundedRectangle(cornerRadius: 19, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 19, style: .continuous)
+                .stroke(WNFTheme.muted.opacity(0.28), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                .padding(9)
+        )
+        .padding(8)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 25, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 25, style: .continuous).stroke(WNFTheme.hairline, lineWidth: 0.5))
+    }
+}
+
+private struct ShareCardIconButton: View {
+    var systemName: String
+    var accessibilityLabel: String
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 13, weight: .black))
+                .foregroundStyle(WNFTheme.ink)
+                .frame(width: 32, height: 32)
+                .background(Color.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .shadow(color: .black.opacity(0.07), radius: 5, y: 2)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+private struct ActivityView: UIViewControllerRepresentable {
+    var activityItems: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 private struct BigMoneyText: View {

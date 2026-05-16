@@ -1,0 +1,9 @@
+schemaVersion: 1
+sessionDefaults:
+  projectPath: /Users/shelingzhao/Code/窝囊费/WNF.xcodeproj
+  scheme: WNF
+  configuration: Debug
+  simulatorName: iPhone 17
+  simulatorId: 815F0981-978B-4A1B-896A-43F5D9360E51
+  simulatorPlatform: iOS Simulator
+  bundleId: com.wonangfei.app

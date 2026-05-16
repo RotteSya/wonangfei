@@ -34,7 +34,7 @@
 
 ## Current Product Surfaces
 
-- 首页：一个核心数字，不再提供上下分页或明细下页。
+- 首页：一个核心数字，不再提供上下分页或明细下页；右上角为分享入口，弹出今日窝囊战报卡片。
 - 记录页：周 / 月 / 年分段控件、可点柱状图、成就卡、徽章区。
 - 我的页：月薪编辑、工作日选择、上下班时间、午休开关、加班与隐私开关。
 
@@ -48,9 +48,12 @@
 xcodebuild -project WNF.xcodeproj -scheme WNF -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' build
 ```
 
+XcodeBuildMCP 已在 `.xcodebuildmcp/config.yaml` 持久化默认值：project `WNF.xcodeproj`、scheme `WNF`、configuration `Debug`、simulator `iPhone 17`、bundle id `com.wonangfei.app`。配置有效时可以直接使用 `build_sim`、`build_run_sim`、`screenshot` 和 `tap`。
+
 已实现：
 
 - 首页工资实时计算、隐私打码、进度条。
+- 首页分享卡片：背景虚化、今日窝囊费/上班时长、卡片内隐藏敏感信息、系统分享和退出。
 - 记录页周 / 月 / 年切换、柱状图选中态、成就和徽章模块。
 - 我的页月薪、工作日、时间、午休、加班、隐私状态编辑。
 - `assets/mascot` 中的主吉祥物和 Cow pose 已接入 `WNF/Assets.xcassets`。

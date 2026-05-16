@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TopBar: View {
     @EnvironmentObject private var state: WageState
+    var onShare: (() -> Void)?
 
     var body: some View {
         HStack {
@@ -17,19 +18,33 @@ struct TopBar: View {
 
             Spacer()
 
-            Button {
-                state.privacyMode.toggle()
-            } label: {
-                Image(systemName: state.privacyMode ? "eye.slash" : "eye")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(state.privacyMode ? WNFTheme.yellow : WNFTheme.ink)
-                    .frame(width: 40, height: 40)
-                    .background(state.privacyMode ? WNFTheme.ink : Color.white, in: RoundedRectangle(cornerRadius: 13))
-                    .overlay(RoundedRectangle(cornerRadius: 13).stroke(WNFTheme.hairline, lineWidth: 0.5))
-                    .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+            if let onShare {
+                Button(action: onShare) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(WNFTheme.ink)
+                        .frame(width: 40, height: 40)
+                        .background(Color.white, in: RoundedRectangle(cornerRadius: 13))
+                        .overlay(RoundedRectangle(cornerRadius: 13).stroke(WNFTheme.hairline, lineWidth: 0.5))
+                        .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("分享今日窝囊费")
+            } else {
+                Button {
+                    state.privacyMode.toggle()
+                } label: {
+                    Image(systemName: state.privacyMode ? "eye.slash" : "eye")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(state.privacyMode ? WNFTheme.yellow : WNFTheme.ink)
+                        .frame(width: 40, height: 40)
+                        .background(state.privacyMode ? WNFTheme.ink : Color.white, in: RoundedRectangle(cornerRadius: 13))
+                        .overlay(RoundedRectangle(cornerRadius: 13).stroke(WNFTheme.hairline, lineWidth: 0.5))
+                        .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("截图隐藏工资")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("截图隐藏工资")
         }
         .padding(.horizontal, 22)
         .padding(.top, 8)

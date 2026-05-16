@@ -28,6 +28,7 @@ struct RootView: View {
     @State private var selectedTab: AppTab = .home
     @State private var entryAnimating = false
     @State private var entryExpanded = false
+    @State private var homeSharePresented = false
     @AppStorage("wnf.onboarding.completed") private var onboardingCompleted = false
 
     var body: some View {
@@ -92,7 +93,7 @@ struct RootView: View {
             Group {
                 switch selectedTab {
                 case .home:
-                    HomeView()
+                    HomeView(isShareCardPresented: $homeSharePresented)
                 case .records:
                     RecordsView()
                 case .settings:
@@ -102,9 +103,11 @@ struct RootView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .zIndex(homeSharePresented ? 2 : 0)
 
             AppTabBar(selectedTab: $selectedTab)
                 .padding(.bottom, 10)
+                .allowsHitTesting(!homeSharePresented)
         }
     }
 }

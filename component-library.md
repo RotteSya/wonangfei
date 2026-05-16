@@ -24,7 +24,8 @@
 ### TopBar
 
 - Structure: `Wordmark` left, one right-side action.
-- Current right action: `PrivacyToggle`.
+- Home right action: share button, labeled `分享今日窝囊费`.
+- Record/settings right action: `PrivacyToggle`.
 - Padding: `14px 20px 8px`.
 - Use on: all three primary app screens.
 
@@ -96,6 +97,18 @@
 - Thumbnail: `hero-mascot.png`, `56 x 56`, radius `18px`.
 - Use for celebratory/emotional state summaries, not routine metrics.
 
+### Share Card
+
+- Use on: home page share overlay.
+- Container: rounded cream card, max width close to `330px` on iPhone 17 portrait.
+- Header: yellow band with compact mascot, `窝囊费`, `今日窝囊战报`, and three icon controls.
+- Controls:
+  - eye / eye slash masks only the card amount and duration;
+  - share exports a control-free card image through iOS system share;
+  - x closes the overlay.
+- Body: headline copy, small cow pose, dashed-inner stats panel with `今日窝囊费` and `上班上了多久`, and branded footer.
+- Overlay: home content remains underneath but blurred and dimmed; tapping outside closes the card.
+
 ## Controls
 
 ### SegTabs
@@ -109,7 +122,7 @@
 ### BarChart
 
 - Current use: record page weekly/monthly/yearly data.
-- Bars: yellow for past, ink for today/selected, pale cream for future.
+- Bars: yellow for completed periods, ink for current/selected, pale cream for future.
 - Interaction:
   - tap available bar to select;
   - selected bar jumps by `-2px`;

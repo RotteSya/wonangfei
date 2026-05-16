@@ -131,7 +131,7 @@ struct RootView: View {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .ignoresSafeArea(.container, edges: .all)
-                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .center)))
+                .transition(.opacity)
                 .zIndex(3)
             }
         }

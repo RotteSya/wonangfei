@@ -99,7 +99,7 @@ struct ShareCardOverlay: View {
     var onDismiss: () -> Void
 
     var body: some View {
-        GeometryReader { proxy in
+        ZStack {
             WonangfeiShareCard(
                 day: day,
                 hidesSensitiveInfo: hidesSensitiveInfo,
@@ -112,10 +112,12 @@ struct ShareCardOverlay: View {
                 onShare: onShare,
                 onDismiss: onDismiss
             )
-            .frame(width: min(proxy.size.width - 82, 330))
+            .frame(maxWidth: 330)
+            .padding(.horizontal, 41)
             .shadow(color: .black.opacity(0.24), radius: 24, y: 16)
-            .position(x: proxy.size.width / 2, y: proxy.size.height * 0.51)
+            .offset(y: 8)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .ignoresSafeArea(.container, edges: .all)
     }
 }

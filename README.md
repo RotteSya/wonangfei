@@ -58,7 +58,7 @@ swiftc WNF/WageCore.swift WNF/WageDisplayModel.swift WNFTests/WageCalculatorChec
 
 已实现：
 
-- 首页工资实时计算、隐私打码、进度条和 `HomeSprite.mov` 首页吉祥物动画；缺少 MOV 资源时才回落到状态静态图。
+- 首页工资实时计算、隐私打码、进度条和 `HomeSprite.mov` 动画 fallback。
 - 首页下班后会切换为今日结算；开启计入加班时显示“加班多挣”和今日总计，并支持“结束今日”。
 - 记录页周 / 月 / 年切换、柱状图选中态、成就和徽章模块。
 - 我的页月薪、工作日、时间、午休、加班、隐私状态编辑，并持久化到本机设置。

@@ -67,7 +67,7 @@ struct WageDisplayModel {
             detailText = "今天窝囊了 \(workedDuration) · 今日通关"
             quote = "今天的窝囊费已到账，钱到位，人下线。"
             mascotAsset = "CowThreeQ"
-            usesAnimatedSprite = true
+            usesAnimatedSprite = false
         case .overtime:
             statusLabel = "加班回血中"
             headline = "加 班 多 挣"
@@ -76,7 +76,7 @@ struct WageDisplayModel {
             detailText = "今日总计 \(WNFFormat.moneyDecimal(day.totalEarnedToday, privacy: privacy)) · 已加班 \(WNFFormat.duration(day.overtimeMinutes))"
             quote = "下班后的每一分钟，都是额外回血。"
             mascotAsset = "CowThreeQ"
-            usesAnimatedSprite = true
+            usesAnimatedSprite = false
         case .lateNight:
             statusLabel = "夜深收工"
             headline = "今 日 结 算"
@@ -85,7 +85,7 @@ struct WageDisplayModel {
             detailText = "今天窝囊了 \(workedDuration) · \(nextStartHint)"
             quote = "今天终于熬完了，先下线。"
             mascotAsset = "CowThreeQ"
-            usesAnimatedSprite = true
+            usesAnimatedSprite = false
         case .dayOff:
             statusLabel = "今天不窝囊"
             headline = "今 日 休 息"
@@ -94,7 +94,7 @@ struct WageDisplayModel {
             detailText = "非工作日 · \(nextStartHint)"
             quote = "今天不算窝囊费，认真休息。"
             mascotAsset = "HeroMascot"
-            usesAnimatedSprite = true
+            usesAnimatedSprite = false
         }
 
         summaryRows = [

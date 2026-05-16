@@ -37,10 +37,6 @@ struct WageCalculatorChecks {
 
         let display = WageDisplayModel(day: overtimeDay, settings: overtime, now: friday, calendar: calendar)
         check(display.headline == "加 班 多 挣", "overtime headline is display-layer derived")
-        check(display.usesAnimatedSprite, "homepage sprite remains active for overtime display")
-
-        let dayOffDisplay = WageDisplayModel(day: dayOff, settings: weekend, now: saturday, calendar: calendar)
-        check(dayOffDisplay.usesAnimatedSprite, "homepage sprite replaces day-off static image")
         print("WageCalculatorChecks passed")
     }
 

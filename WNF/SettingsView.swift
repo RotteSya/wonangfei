@@ -74,11 +74,8 @@ struct SettingsView: View {
                 }
 
                 SectionCard(title: "其它") {
-                    SettingsRow(title: "计入加班") {
+                    SettingsRow(title: "计入加班", isLast: true) {
                         WNFToggle(isOn: $state.includeOvertime)
-                    }
-                    SettingsRow(title: "截图隐藏工资", isLast: true) {
-                        WNFToggle(isOn: $state.privacyMode)
                     }
                 }
 

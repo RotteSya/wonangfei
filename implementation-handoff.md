@@ -112,7 +112,7 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 - Weekday pills toggle active state.
 - Time controls use native time input.
 - 午休 switch hides/reveals lunch rows and recomputes hourly rate.
-- 计入加班 and 截图隐藏工资 are interactive switches.
+- 计入加班 is the only interactive switch in the 其它 section.
 
 ## Visual Implementation Rules
 

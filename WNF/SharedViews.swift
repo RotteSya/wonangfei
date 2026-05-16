@@ -43,7 +43,7 @@ struct TopBar: View {
                         .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("截图隐藏工资")
+                .accessibilityLabel(state.privacyMode ? "显示工资" : "隐藏工资")
             }
         }
         .padding(.horizontal, 22)

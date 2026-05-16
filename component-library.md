@@ -169,7 +169,6 @@
 - Current toggles:
   - 午休: on = has lunch break, off = no lunch.
   - 计入加班.
-  - 截图隐藏工资.
 
 ### FoldAway
 

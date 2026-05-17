@@ -66,12 +66,25 @@ private struct HeroHomePage: View {
 
             Spacer(minLength: 16)
 
-            ZStack(alignment: .topLeading) {
-                HomeMascotVideoSequence()
-                    .frame(width: 285, height: 285)
-                    .frame(maxWidth: .infinity)
+            HomeMascotStage(quote: day.status.quote)
+                .padding(.bottom, 145)
+        }
+    }
+}
 
-                Text(day.status.quote)
+private struct HomeMascotStage: View {
+    var quote: String
+
+    private let stageHeight: CGFloat = 285
+    private let trailingCoinSize: CGFloat = 25
+    private let leadingCoinSize: CGFloat = 22
+
+    var body: some View {
+        HomeMascotVideoSequence()
+            .frame(width: stageHeight, height: stageHeight)
+            .frame(maxWidth: .infinity)
+            .overlay(alignment: .topLeading) {
+                Text(quote)
                     .font(.system(size: 14, weight: .heavy))
                     .foregroundStyle(WNFTheme.ink)
                     .padding(.horizontal, 15)
@@ -79,15 +92,32 @@ private struct HeroHomePage: View {
                     .background(Color.white, in: RoundedRectangle(cornerRadius: 17))
                     .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
                     .offset(x: 42, y: 18)
-
-                YenCoin(size: 25)
-                    .offset(x: UIScreen.main.bounds.width - 84, y: 72)
-                YenCoin(size: 22)
-                    .offset(x: 48, y: 220)
+            }
+            .overlay(alignment: .topLeading) {
+                GeometryReader { proxy in
+                    ZStack(alignment: .topLeading) {
+                        YenCoin(size: trailingCoinSize)
+                            .offset(x: trailingCoinOffsetX(in: proxy.size.width), y: 72)
+                        YenCoin(size: leadingCoinSize)
+                            .offset(x: leadingCoinOffsetX(in: proxy.size.width), y: 220)
+                    }
+                    .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
+                }
+                .allowsHitTesting(false)
             }
             .frame(maxWidth: .infinity)
-            .padding(.bottom, 145)
-        }
+            .frame(height: stageHeight)
+    }
+
+    private func trailingCoinOffsetX(in width: CGFloat) -> CGFloat {
+        let requestedOffset = width - 84
+        let maximumVisibleOffset = max(16, width - trailingCoinSize - 16)
+        return min(max(16, requestedOffset), maximumVisibleOffset)
+    }
+
+    private func leadingCoinOffsetX(in width: CGFloat) -> CGFloat {
+        let maximumVisibleOffset = max(16, width - leadingCoinSize - 16)
+        return min(48, maximumVisibleOffset)
     }
 }
 

@@ -124,6 +124,7 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 - Top-right action opens the share card; it no longer toggles privacy on the home page.
 - The home live amount is driven by a view-local one-second `TimelineView`, not by a global `WageState` publication.
 - The home mascot slot now renders transparent `WNF/home-typing.mov` and `WNF/home-bored.mov` clips through an `AVPlayerLayer` SwiftUI wrapper. `RootView` owns one stable `HomeMascotVideoController` and injects it into Home, so tab transitions can recreate `HomeView` without rebuilding the `AVQueuePlayer` pipeline. The controller keeps upcoming local clips prequeued, shuffles the clip order for each full cycle, avoids repeating the last clip at the cycle boundary, mutes playback, and the Home video view only starts or pauses it on appear/disappear and scene phase changes.
+- The mascot speech bubble and decorative yen coins are owned by the local `HomeMascotStage`. Coin offsets are calculated from that stage's actual layout width through `GeometryReader`, not from `UIScreen.main.bounds`, so iPad split view, Stage Manager, and rotation can reflow the home decoration.
 - Opening the share card blurs the existing home content and adds a full-bleed dimmed overlay that covers the status bar and bottom home-indicator areas.
 - `RootView` owns the stable full-screen backdrop, share card presentation, and export sheet so the dimmed safe-area coverage does not depend on the card transition or tab-content transition; `HomeView` only requests presentation and blurs its own home content while the card is open.
 - Share card presentation uses opacity-only insertion/removal so the card bounds stay fixed throughout the transition.
@@ -178,6 +179,7 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 - Current simulator validation used `iPhone 17` on iOS `26.5`; `build_sim` and `build_run_sim` both succeeded with no diagnostics.
 - XcodeBuildMCP defaults are committed under `.xcodebuildmcp/config.yaml`, so agents can call `build_sim`, `build_run_sim`, `snapshot_ui`, `tap`, and `screenshot` without re-entering project defaults.
 - 2026-05-17 onboarding hero replacement validation: five source PNGs from `/Users/shelingzhao/Documents/窝囊费素材/引导/` matched their target asset-catalog SHA-256 hashes, all target files reported `1536 x 1024` and `hasAlpha: yes`, and `build_sim` succeeded.
+- 2026-05-17 home responsive-layout fix: `WNF/HomeView.swift` no longer reads `UIScreen.main.bounds.width` for the mascot-stage coin layout; use simulator rotation or iPad split-view checks when visually validating this area.
 - Home share card verification covered opening the card, masking sensitive values, presenting the iOS share sheet, closing with the x button, and closing by tapping outside the card.
 - The source prototype still includes Open Design canvas and tweak controls. For production, move only the screen components and shared tokens into the app shell.
 - `assets/reference-screens/` contains visual inputs and may include duplicate imported versions. Treat it as reference material, not production bundle.

@@ -66,10 +66,11 @@ Daily record history is also owned by `WageState`:
 
 - `wnf.records.daily` stores a JSON-encoded `[dateKey: DailyWageRecord]` dictionary, keyed as `yyyy-MM-dd` in the current calendar.
 - `DailyWageRecord` captures `earnedToday`, `targetToday`, `elapsedPaidSeconds`, `workdayMinutes`, `hourlyRate`, salary/workday settings, `capturedAt`, and a `source` marker. Existing records without `source` decode as `observed`; auto-created gap records encode as `backfilled`.
-- `WageState` closes the previous calendar day when its one-second `currentDate` clock crosses into a new day.
+- `WageState` publishes `currentDateKey` only when the calendar date changes. A one-shot day-boundary timer, foreground refresh, and scene-phase snapshot path keep cross-midnight closure working without a global one-second `ObservableObject` tick.
 - If the app was not opened for multiple calendar days, `WageState` first closes the last observed day, then backfills every date from `lastObservedDate + 1 day` through yesterday. Dates whose Monday-through-Sunday index is in `selectedWeekdays` receive a complete standard workday snapshot; other dates receive a zero-yuan, zero-elapsed `backfilled` record.
 - `WNFApp` asks `WageState` to persist the current-day snapshot when the scene leaves `.active`, so a day can still appear in records even if the app is not open at midnight.
-- `RecordsView` reads daily records through `WageState.dailyRecord(for:includingLiveToday:)`; today is supplied from the live calculator, while historical dates only use landed snapshots.
+- `HomeView` owns the one-second `TimelineView` used by the large live money number and passes the derived `WageDay` into the home hero. Other tabs do not subscribe to that tick.
+- `RecordsView` builds a memoized aggregation snapshot from `(currentDateKey, dailyRecords, live-day settings)`. Week/month/year bars reuse that snapshot across body updates and only rebuild when the date key, stored records, or wage settings change.
 
 Default app state lives in `窝囊费.html` under `TWEAK_DEFAULTS`:
 
@@ -120,6 +121,7 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 ### 首页
 
 - Top-right action opens the share card; it no longer toggles privacy on the home page.
+- The home live amount is driven by a view-local one-second `TimelineView`, not by a global `WageState` publication.
 - The home mascot slot now renders transparent `WNF/home-typing.mov` and `WNF/home-bored.mov` clips through an `AVPlayerLayer` SwiftUI wrapper. `HomeMascotVideoController` uses an `AVQueuePlayer`, keeps upcoming local clips prequeued, shuffles the clip order for each full cycle, avoids repeating the last clip at the cycle boundary, mutes playback, and pauses when the view disappears or the scene becomes inactive.
 - Opening the share card blurs the existing home content and adds a full-bleed dimmed overlay that covers the status bar and bottom home-indicator areas.
 - `RootView` owns the stable full-screen backdrop, share card presentation, and export sheet so the dimmed safe-area coverage does not depend on the card transition or tab-content transition; `HomeView` only requests presentation and blurs its own home content while the card is open.

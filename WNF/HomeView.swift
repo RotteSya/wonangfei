@@ -7,8 +7,6 @@ struct HomeView: View {
     @Binding private var isShareCardPresented: Bool
     private var onShare: () -> Void
 
-    private var day: WageDay { state.calculation }
-
     init(isShareCardPresented: Binding<Bool> = .constant(false), onShare: @escaping () -> Void = {}) {
         self._isShareCardPresented = isShareCardPresented
         self.onShare = onShare
@@ -18,12 +16,14 @@ struct HomeView: View {
         ZStack {
             WNFTheme.bg.ignoresSafeArea()
 
-            HeroHomePage(day: day, onShare: onShare)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .blur(radius: isShareCardPresented ? 18 : 0)
-                .scaleEffect(isShareCardPresented ? 0.985 : 1)
-                .allowsHitTesting(!isShareCardPresented)
-                .animation(.easeInOut(duration: 0.2), value: isShareCardPresented)
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                HeroHomePage(day: state.calculation(at: context.date), onShare: onShare)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .blur(radius: isShareCardPresented ? 18 : 0)
+            .scaleEffect(isShareCardPresented ? 0.985 : 1)
+            .allowsHitTesting(!isShareCardPresented)
+            .animation(.easeInOut(duration: 0.2), value: isShareCardPresented)
 
         }
     }

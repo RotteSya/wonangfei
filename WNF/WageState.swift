@@ -61,11 +61,11 @@ final class WageState: ObservableObject {
         }
     }
 
-    @Published private(set) var currentDate: Date
+    @Published private(set) var currentDateKey: String
     @Published private(set) var dailyRecords: [String: DailyWageRecord]
 
     private let userDefaults: UserDefaults
-    private var clockTimer: Timer?
+    private var dayBoundaryTimer: Timer?
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
@@ -80,26 +80,26 @@ final class WageState: ObservableObject {
         includeOvertime = userDefaults.boolValue(forKey: StorageKey.includeOvertime) ?? Default.includeOvertime
         privacyMode = userDefaults.boolValue(forKey: StorageKey.privacyMode) ?? Default.privacyMode
         selectedWeekdays = userDefaults.weekdaySet(forKey: StorageKey.selectedWeekdays) ?? Default.selectedWeekdays
-        currentDate = Date()
+        let now = Date()
+        currentDateKey = Self.dateKey(for: now)
         dailyRecords = Self.loadDailyRecords(from: userDefaults)
         persistEditableSettings()
 
-        closeLastObservedDayIfNeeded(now: currentDate)
-        rememberObservedDate(currentDate)
-
-        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
-            self?.advanceClock(to: Date())
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        clockTimer = timer
+        closeLastObservedDayIfNeeded(now: now)
+        rememberObservedDate(now)
+        scheduleDayBoundaryTimer(from: now)
     }
 
     deinit {
-        clockTimer?.invalidate()
+        dayBoundaryTimer?.invalidate()
+    }
+
+    var currentDayStart: Date {
+        Self.date(fromDateKey: currentDateKey) ?? DateComponents.calendar.startOfDay(for: Date())
     }
 
     var calculation: WageDay {
-        calculation(at: currentDate)
+        calculation(at: Date())
     }
 
     func calculation(at date: Date) -> WageDay {
@@ -117,16 +117,25 @@ final class WageState: ObservableObject {
     }
 
     func dailyRecord(for date: Date, includingLiveToday: Bool = false) -> DailyWageRecord? {
-        if includingLiveToday, DateComponents.calendar.isDate(date, inSameDayAs: currentDate) {
-            return makeDailyRecord(for: currentDate, capturedAt: currentDate, source: .observed)
+        let dateKey = Self.dateKey(for: date)
+        if includingLiveToday, dateKey == currentDateKey {
+            let now = Date()
+            return makeDailyRecord(for: now, capturedAt: now, source: .observed)
         }
 
-        return dailyRecords[Self.dateKey(for: date)]
+        return dailyRecords[dateKey]
     }
 
     func persistCurrentDaySnapshot() {
-        persistDailySnapshot(for: currentDate, capturedAt: Date())
-        rememberObservedDate(currentDate)
+        let now = Date()
+        refreshCalendarDayIfNeeded(now: now)
+        persistDailySnapshot(for: now, capturedAt: now)
+        rememberObservedDate(now)
+    }
+
+    func refreshCalendarDayIfNeeded(now: Date = Date()) {
+        advanceCalendarDay(to: now)
+        scheduleDayBoundaryTimer(from: now)
     }
 
     func bindingForTime(_ keyPath: ReferenceWritableKeyPath<WageState, DateComponents>) -> Date {
@@ -182,13 +191,27 @@ final class WageState: ObservableObject {
         min(max(value, 1), 31)
     }
 
-    private func advanceClock(to newDate: Date) {
-        if !DateComponents.calendar.isDate(currentDate, inSameDayAs: newDate) {
-            closeObservedDateRange(from: currentDate, to: newDate, capturedAt: newDate)
-        }
+    private func advanceCalendarDay(to newDate: Date) {
+        let newDateKey = Self.dateKey(for: newDate)
+        guard newDateKey != currentDateKey else { return }
 
-        currentDate = newDate
+        closeObservedDateRange(from: currentDayStart, to: newDate, capturedAt: newDate)
+        currentDateKey = newDateKey
         rememberObservedDate(newDate)
+    }
+
+    private func scheduleDayBoundaryTimer(from date: Date) {
+        dayBoundaryTimer?.invalidate()
+
+        let calendar = DateComponents.calendar
+        let startOfDay = calendar.startOfDay(for: date)
+        let nextBoundary = calendar.date(byAdding: DateComponents(day: 1, second: 1), to: startOfDay)
+            ?? date.addingTimeInterval(86_401)
+        let timer = Timer(fire: nextBoundary, interval: 0, repeats: false) { [weak self] _ in
+            self?.refreshCalendarDayIfNeeded(now: Date())
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        dayBoundaryTimer = timer
     }
 
     private func closeLastObservedDayIfNeeded(now: Date) {
@@ -317,7 +340,7 @@ final class WageState: ObservableObject {
         )
     }
 
-    private static func date(fromDateKey key: String) -> Date? {
+    static func date(fromDateKey key: String) -> Date? {
         let parts = key.split(separator: "-").compactMap { Int($0) }
         guard parts.count == 3 else { return nil }
         return DateComponents.calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))

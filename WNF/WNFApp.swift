@@ -10,7 +10,9 @@ struct WNFApp: App {
             RootView()
                 .environmentObject(state)
                 .onChange(of: scenePhase) { _, newPhase in
-                    if newPhase != .active {
+                    if newPhase == .active {
+                        state.refreshCalendarDayIfNeeded()
+                    } else {
                         state.persistCurrentDaySnapshot()
                     }
                 }

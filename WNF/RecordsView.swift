@@ -41,21 +41,231 @@ private struct RecordSummary {
     var elapsedPaidSeconds: Int = 0
 }
 
+private struct RecordAggregationInput: Equatable {
+    var currentDateKey: String
+    var dailyRecords: [String: DailyWageRecord]
+    var monthlySalary: Double
+    var workdaysPerMonth: Int
+    var workStartMinute: Int
+    var workEndMinute: Int
+    var lunchStartMinute: Int
+    var lunchEndMinute: Int
+    var hasLunchBreak: Bool
+
+    init(state: WageState) {
+        currentDateKey = state.currentDateKey
+        dailyRecords = state.dailyRecords
+        monthlySalary = state.monthlySalary
+        workdaysPerMonth = state.workdaysPerMonth
+        workStartMinute = state.workStart.minutesInDay
+        workEndMinute = state.workEnd.minutesInDay
+        lunchStartMinute = state.lunchStart.minutesInDay
+        lunchEndMinute = state.lunchEnd.minutesInDay
+        hasLunchBreak = state.hasLunchBreak
+    }
+}
+
+private struct RecordAggregationSnapshot {
+    static let empty = RecordAggregationSnapshot(
+        weekBars: [],
+        monthBars: [],
+        yearBars: [],
+        currentMonthSummary: RecordSummary(),
+        daysInCurrentMonth: 31,
+        todayEarned: 0
+    )
+
+    var weekBars: [RecordBar]
+    var monthBars: [RecordBar]
+    var yearBars: [RecordBar]
+    var currentMonthSummary: RecordSummary
+    var daysInCurrentMonth: Int
+    var todayEarned: Double
+
+    func bars(for period: RecordPeriod) -> [RecordBar] {
+        switch period {
+        case .week:
+            weekBars
+        case .month:
+            monthBars
+        case .year:
+            yearBars
+        }
+    }
+
+    static func make(input: RecordAggregationInput) -> RecordAggregationSnapshot {
+        let calendar = DateComponents.calendar
+        let currentDayStart = WageState.date(fromDateKey: input.currentDateKey) ?? calendar.startOfDay(for: Date())
+        let liveToday = liveTodayRecord(input: input, now: Date())
+        let daysInCurrentMonth = calendar.range(of: .day, in: .month, for: currentDayStart)?.count ?? 31
+
+        func record(for date: Date) -> DailyWageRecord? {
+            let dateKey = WageState.dateKey(for: date)
+            if dateKey == input.currentDateKey {
+                return liveToday
+            }
+            return input.dailyRecords[dateKey]
+        }
+
+        func summarizeRecords(from startDate: Date, through endDate: Date) -> RecordSummary {
+            let startDate = calendar.startOfDay(for: startDate)
+            let endDate = min(calendar.startOfDay(for: endDate), currentDayStart)
+            guard startDate <= endDate else { return RecordSummary() }
+
+            var summary = RecordSummary()
+            var date = startDate
+            while date <= endDate {
+                if let record = record(for: date) {
+                    summary.amount += record.earnedToday
+                    summary.recordedDays += 1
+                    summary.elapsedPaidSeconds += record.elapsedPaidSeconds
+                }
+                guard let nextDate = calendar.date(byAdding: .day, value: 1, to: date) else { break }
+                date = nextDate
+            }
+            return summary
+        }
+
+        let labels = ["一", "二", "三", "四", "五", "六", "日"]
+        let titles = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+        let startOfWeek = weekStart(containing: currentDayStart, calendar: calendar)
+        let weekBars = labels.indices.map { index in
+            let date = calendar.date(byAdding: .day, value: index, to: startOfWeek) ?? startOfWeek
+            let summary = summarizeRecords(from: date, through: date)
+            let isToday = calendar.isDate(date, inSameDayAs: currentDayStart)
+            return RecordBar(
+                key: labels[index],
+                title: isToday ? "今日" : titles[index],
+                amount: summary.amount,
+                recordedDays: summary.recordedDays,
+                elapsedPaidSeconds: summary.elapsedPaidSeconds,
+                isFuture: calendar.startOfDay(for: date) > currentDayStart,
+                isToday: isToday
+            )
+        }
+
+        let startOfMonth = monthStart(for: currentDayStart, calendar: calendar)
+        let bucketCount = Int(ceil(Double(daysInCurrentMonth) / 7.0))
+        let monthBars = (0..<bucketCount).map { index in
+            let startDay = index * 7 + 1
+            let endDay = min(startDay + 6, daysInCurrentMonth)
+            let startDate = calendar.date(byAdding: .day, value: startDay - 1, to: startOfMonth) ?? startOfMonth
+            let endDate = calendar.date(byAdding: .day, value: endDay - 1, to: startOfMonth) ?? startDate
+            let summary = summarizeRecords(from: startDate, through: endDate)
+            let isToday = startDate <= currentDayStart && currentDayStart <= endDate
+
+            return RecordBar(
+                key: "W\(index + 1)",
+                title: isToday ? "本周" : "第 \(index + 1) 周",
+                amount: summary.amount,
+                recordedDays: summary.recordedDays,
+                elapsedPaidSeconds: summary.elapsedPaidSeconds,
+                isFuture: startDate > currentDayStart,
+                isToday: isToday
+            )
+        }
+
+        let year = calendar.component(.year, from: currentDayStart)
+        let yearBars = (1...12).map { month in
+            let startDate = calendar.date(from: DateComponents(year: year, month: month, day: 1)) ?? currentDayStart
+            let endDate = monthEnd(for: startDate, calendar: calendar)
+            let summary = summarizeRecords(from: startDate, through: endDate)
+            let isToday = calendar.isDate(startDate, equalTo: currentDayStart, toGranularity: .month)
+
+            return RecordBar(
+                key: "\(month)",
+                title: isToday ? "本月" : "\(month) 月",
+                amount: summary.amount,
+                recordedDays: summary.recordedDays,
+                elapsedPaidSeconds: summary.elapsedPaidSeconds,
+                isFuture: startDate > currentDayStart,
+                isToday: isToday
+            )
+        }
+
+        return RecordAggregationSnapshot(
+            weekBars: weekBars,
+            monthBars: monthBars,
+            yearBars: yearBars,
+            currentMonthSummary: summarizeRecords(from: startOfMonth, through: monthEnd(for: currentDayStart, calendar: calendar)),
+            daysInCurrentMonth: daysInCurrentMonth,
+            todayEarned: liveToday.earnedToday
+        )
+    }
+
+    private static func liveTodayRecord(input: RecordAggregationInput, now: Date) -> DailyWageRecord {
+        let currentTime = DateComponents.calendar.dateComponents([.hour, .minute, .second], from: now)
+        let day = WageCalculator.compute(
+            monthlySalary: input.monthlySalary,
+            workdaysPerMonth: input.workdaysPerMonth,
+            workStart: .minuteInDay(input.workStartMinute),
+            workEnd: .minuteInDay(input.workEndMinute),
+            lunchStart: .minuteInDay(input.lunchStartMinute),
+            lunchEnd: .minuteInDay(input.lunchEndMinute),
+            hasLunchBreak: input.hasLunchBreak,
+            now: currentTime
+        )
+        return DailyWageRecord(
+            dateKey: input.currentDateKey,
+            earnedToday: day.earnedToday,
+            targetToday: day.targetToday,
+            elapsedPaidSeconds: day.elapsedPaidSeconds,
+            workdayMinutes: day.workdayMinutes,
+            hourlyRate: day.hourlyRate,
+            monthlySalary: input.monthlySalary,
+            workdaysPerMonth: input.workdaysPerMonth,
+            capturedAt: now,
+            source: .observed
+        )
+    }
+
+    private static func weekStart(containing date: Date, calendar: Calendar) -> Date {
+        let startOfDay = calendar.startOfDay(for: date)
+        let weekday = calendar.component(.weekday, from: startOfDay)
+        let mondayOffset = (weekday + 5) % 7
+        return calendar.date(byAdding: .day, value: -mondayOffset, to: startOfDay) ?? startOfDay
+    }
+
+    private static func monthStart(for date: Date, calendar: Calendar) -> Date {
+        let components = calendar.dateComponents([.year, .month], from: date)
+        return calendar.date(from: components) ?? calendar.startOfDay(for: date)
+    }
+
+    private static func monthEnd(for date: Date, calendar: Calendar) -> Date {
+        let startOfMonth = monthStart(for: date, calendar: calendar)
+        return calendar.date(byAdding: DateComponents(month: 1, day: -1), to: startOfMonth) ?? startOfMonth
+    }
+}
+
+private final class RecordAggregationStore: ObservableObject {
+    private var cachedInput: RecordAggregationInput?
+    private var cachedSnapshot = RecordAggregationSnapshot.empty
+
+    func snapshot(for input: RecordAggregationInput) -> RecordAggregationSnapshot {
+        if cachedInput == input {
+            return cachedSnapshot
+        }
+
+        let snapshot = RecordAggregationSnapshot.make(input: input)
+        cachedInput = input
+        cachedSnapshot = snapshot
+        return snapshot
+    }
+}
+
 struct RecordsView: View {
     @EnvironmentObject private var state: WageState
+    @StateObject private var aggregationStore = RecordAggregationStore()
     @State private var period: RecordPeriod = .month
     @State private var selectedBarID: RecordBar.ID?
 
     private var day: WageDay { state.calculation }
+    private var aggregation: RecordAggregationSnapshot {
+        aggregationStore.snapshot(for: RecordAggregationInput(state: state))
+    }
+
     private var bars: [RecordBar] {
-        switch period {
-        case .week:
-            weekBars()
-        case .month:
-            monthBars()
-        case .year:
-            yearBars()
-        }
+        aggregation.bars(for: period)
     }
 
     private var total: Double {
@@ -86,12 +296,16 @@ struct RecordsView: View {
     }
 
     private var currentMonthSummary: RecordSummary {
-        summarizeRecords(from: monthStart(for: state.currentDate), through: monthEnd(for: state.currentDate))
+        aggregation.currentMonthSummary
+    }
+
+    private var todayEarned: Double {
+        aggregation.todayEarned
     }
 
     private var unlockedBadgeCount: Int {
         [
-            state.dailyRecord(for: state.currentDate, includingLiveToday: true)?.earnedToday ?? 0 > 0,
+            todayEarned > 0,
             state.hasLunchBreak,
             state.includeOvertime,
             currentMonthSummary.elapsedPaidSeconds >= 100 * 60 * 60
@@ -114,7 +328,7 @@ struct RecordsView: View {
 
                     HStack(spacing: 10) {
                         MetricTile(label: "时薪", value: state.privacyMode ? "¥••/h" : "¥\(Int(day.hourlyRate))/h", subtitle: "基于税后月薪", accent: WNFTheme.cyan)
-                        MetricTile(label: "已记录", value: "\(recordedDayCount) 天", subtitle: "含今日实时")
+                        MetricTile(label: "已记录", value: "\(recordedDayCount) 天", subtitle: "含今日")
                     }
 
                     achievementCard
@@ -163,7 +377,7 @@ struct RecordsView: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                     .background(WNFTheme.ink, in: Capsule())
-                Text("今日金额实时计入")
+                Text("今日金额计入本期")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(WNFTheme.ink.opacity(0.6))
             }
@@ -237,7 +451,7 @@ struct RecordsView: View {
             }
 
             HStack(spacing: 10) {
-                Badge(symbol: "sun.max", label: "今日开张", unlocked: (state.dailyRecord(for: state.currentDate, includingLiveToday: true)?.earnedToday ?? 0) > 0)
+                Badge(symbol: "sun.max", label: "今日开张", unlocked: todayEarned > 0)
                 Badge(symbol: "fork.knife", label: "午休大师", unlocked: state.hasLunchBreak)
                 Badge(symbol: "clock", label: "加班 +1", unlocked: state.includeOvertime)
                 Badge(symbol: "yensign.circle", label: "忍 100h", unlocked: currentMonthSummary.elapsedPaidSeconds >= 100 * 60 * 60)
@@ -248,125 +462,8 @@ struct RecordsView: View {
         .overlay(RoundedRectangle(cornerRadius: 22).stroke(WNFTheme.hairline, lineWidth: 0.5))
     }
 
-    private var calendar: Calendar {
-        DateComponents.calendar
-    }
-
-    private var todayStart: Date {
-        calendar.startOfDay(for: state.currentDate)
-    }
-
     private var daysInCurrentMonth: Int {
-        calendar.range(of: .day, in: .month, for: state.currentDate)?.count ?? 31
-    }
-
-    private func weekBars() -> [RecordBar] {
-        let labels = ["一", "二", "三", "四", "五", "六", "日"]
-        let titles = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
-        let startOfWeek = weekStart(containing: state.currentDate)
-
-        return labels.indices.map { index in
-            let date = calendar.date(byAdding: .day, value: index, to: startOfWeek) ?? startOfWeek
-            let summary = summarizeRecords(from: date, through: date)
-            let isToday = calendar.isDate(date, inSameDayAs: state.currentDate)
-            return RecordBar(
-                key: labels[index],
-                title: isToday ? "今日" : titles[index],
-                amount: summary.amount,
-                recordedDays: summary.recordedDays,
-                elapsedPaidSeconds: summary.elapsedPaidSeconds,
-                isFuture: calendar.startOfDay(for: date) > todayStart,
-                isToday: isToday
-            )
-        }
-    }
-
-    private func monthBars() -> [RecordBar] {
-        let startOfMonth = monthStart(for: state.currentDate)
-        let bucketCount = Int(ceil(Double(daysInCurrentMonth) / 7.0))
-
-        return (0..<bucketCount).map { index in
-            let startDay = index * 7 + 1
-            let endDay = min(startDay + 6, daysInCurrentMonth)
-            let startDate = calendar.date(byAdding: .day, value: startDay - 1, to: startOfMonth) ?? startOfMonth
-            let endDate = calendar.date(byAdding: .day, value: endDay - 1, to: startOfMonth) ?? startDate
-            let summary = summarizeRecords(from: startDate, through: endDate)
-            let isToday = startDate <= todayStart && todayStart <= endDate
-
-            return RecordBar(
-                key: "W\(index + 1)",
-                title: isToday ? "本周" : "第 \(index + 1) 周",
-                amount: summary.amount,
-                recordedDays: summary.recordedDays,
-                elapsedPaidSeconds: summary.elapsedPaidSeconds,
-                isFuture: startDate > todayStart,
-                isToday: isToday
-            )
-        }
-    }
-
-    private func yearBars() -> [RecordBar] {
-        let year = calendar.component(.year, from: state.currentDate)
-
-        return (1...12).map { month in
-            let startDate = calendar.date(from: DateComponents(year: year, month: month, day: 1)) ?? state.currentDate
-            let endDate = monthEnd(for: startDate)
-            let summary = summarizeRecords(from: startDate, through: endDate)
-            let isToday = calendar.isDate(startDate, equalTo: state.currentDate, toGranularity: .month)
-
-            return RecordBar(
-                key: "\(month)",
-                title: isToday ? "本月" : "\(month) 月",
-                amount: summary.amount,
-                recordedDays: summary.recordedDays,
-                elapsedPaidSeconds: summary.elapsedPaidSeconds,
-                isFuture: startDate > todayStart,
-                isToday: isToday
-            )
-        }
-    }
-
-    private func summarizeRecords(from startDate: Date, through endDate: Date) -> RecordSummary {
-        let startDate = calendar.startOfDay(for: startDate)
-        let endDate = min(calendar.startOfDay(for: endDate), todayStart)
-        guard startDate <= endDate else { return RecordSummary() }
-
-        return days(from: startDate, through: endDate).reduce(into: RecordSummary()) { summary, date in
-            guard let record = state.dailyRecord(for: date, includingLiveToday: true) else { return }
-            summary.amount += record.earnedToday
-            summary.recordedDays += 1
-            summary.elapsedPaidSeconds += record.elapsedPaidSeconds
-        }
-    }
-
-    private func days(from startDate: Date, through endDate: Date) -> [Date] {
-        guard startDate <= endDate else { return [] }
-
-        var dates: [Date] = []
-        var date = startDate
-        while date <= endDate {
-            dates.append(date)
-            guard let nextDate = calendar.date(byAdding: .day, value: 1, to: date) else { break }
-            date = nextDate
-        }
-        return dates
-    }
-
-    private func weekStart(containing date: Date) -> Date {
-        let startOfDay = calendar.startOfDay(for: date)
-        let weekday = calendar.component(.weekday, from: startOfDay)
-        let mondayOffset = (weekday + 5) % 7
-        return calendar.date(byAdding: .day, value: -mondayOffset, to: startOfDay) ?? startOfDay
-    }
-
-    private func monthStart(for date: Date) -> Date {
-        let components = calendar.dateComponents([.year, .month], from: date)
-        return calendar.date(from: components) ?? calendar.startOfDay(for: date)
-    }
-
-    private func monthEnd(for date: Date) -> Date {
-        let startOfMonth = monthStart(for: date)
-        return calendar.date(byAdding: DateComponents(month: 1, day: -1), to: startOfMonth) ?? startOfMonth
+        aggregation.daysInCurrentMonth
     }
 }
 

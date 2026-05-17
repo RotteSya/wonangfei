@@ -49,6 +49,9 @@ struct RootView: View {
     @State private var isPreparingShareActivity = false
     @AppStorage("wnf.onboarding.completed") private var onboardingCompleted = false
 
+    private static let shareExportWidth: CGFloat = 360
+    private static let shareLoadingRefreshDelayNanoseconds: UInt64 = 16_000_000
+
     private var day: WageDay { state.calculation }
     private var isHomeMascotSessionVisible: Bool { onboardingCompleted || entryAnimating }
 
@@ -235,7 +238,8 @@ struct RootView: View {
         let exportHidesSensitiveInfo = shareCardHidesSensitiveInfo
 
         Task { @MainActor in
-            await Task.yield()
+            // ImageRenderer is MainActor-bound; give the loading state one frame before rasterizing.
+            try? await Task.sleep(nanoseconds: Self.shareLoadingRefreshDelayNanoseconds)
             guard homeSharePresented else {
                 isPreparingShareActivity = false
                 return
@@ -260,19 +264,37 @@ struct RootView: View {
             onShare: {},
             onDismiss: {}
         )
-        .frame(width: 360)
+        .frame(width: Self.shareExportWidth)
 
-        let renderer = ImageRenderer(content: exportCard)
-        renderer.scale = UIScreen.main.scale
-        renderer.proposedSize = ProposedViewSize(width: 360, height: nil)
-
-        if let image = renderer.uiImage {
+        if let image = renderedShareImage(exportCard, scale: UIScreen.main.scale) {
             activityItems = [image]
         } else {
             activityItems = [shareFallbackText(day: day, hidesSensitiveInfo: hidesSensitiveInfo)]
         }
         isPreparingShareActivity = false
         isActivityPresented = true
+    }
+
+    @MainActor
+    private func renderedShareImage<Content: View>(_ content: Content, scale: CGFloat) -> UIImage? {
+        let renderer = ImageRenderer(content: content)
+        renderer.scale = scale
+        renderer.proposedSize = ProposedViewSize(width: Self.shareExportWidth, height: nil)
+        renderer.isOpaque = false
+
+        var renderedImage: UIImage?
+        renderer.render(rasterizationScale: scale) { size, draw in
+            guard size.width > 0, size.height > 0 else { return }
+
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = scale
+            format.opaque = false
+
+            renderedImage = UIGraphicsImageRenderer(size: size, format: format).image { context in
+                draw(context.cgContext)
+            }
+        }
+        return renderedImage
     }
 
     private func shareFallbackText(day: WageDay, hidesSensitiveInfo: Bool) -> String {

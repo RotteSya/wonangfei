@@ -125,6 +125,10 @@ struct DailyWageRecord: Codable, Equatable, Identifiable {
 }
 
 extension WageState {
+    private static let dailyRecordEncoder = JSONEncoder()
+    private static let dailyRecordDecoder = JSONDecoder()
+    private static let dailyRecordCoderLock = NSLock()
+
     func saveDailyRecords() {
         let storageKey: String
         switch dailyRecordStorageMode {
@@ -141,7 +145,7 @@ extension WageState {
 
         do {
             let store = DailyRecordStorageEnvelope(records: dailyRecords)
-            let data = try JSONEncoder().encode(store)
+            let data = try Self.encodeDailyRecords(store)
             userDefaults.set(data, forKey: storageKey)
         } catch {
             let message = String(describing: error)
@@ -162,7 +166,7 @@ extension WageState {
         }
 
         do {
-            let store = try JSONDecoder().decode(DailyRecordStorageEnvelope.self, from: data)
+            let store = try decodeDailyRecordsEnvelope(from: data)
             if store.schemaVersion > DailyRecordStorageEnvelope.currentSchemaVersion {
                 preserveRawDailyRecords(
                     data,
@@ -192,7 +196,7 @@ extension WageState {
             return DailyRecordLoadResult(records: store.records, storageMode: .primaryWritable)
         } catch let envelopeError {
             do {
-                let records = try JSONDecoder().decode([String: DailyWageRecord].self, from: data)
+                let records = try decodeLegacyDailyRecords(from: data)
                 migrateLegacyDailyRecords(records, originalData: data, userDefaults: userDefaults)
                 userDefaults.removeObject(forKey: StorageKey.dailyRecordsActiveRecoveryKey)
                 return DailyRecordLoadResult(records: records, storageMode: .primaryWritable)
@@ -234,7 +238,7 @@ extension WageState {
             guard let data = userDefaults.data(forKey: recoveryKey) else { continue }
 
             do {
-                let store = try JSONDecoder().decode(DailyRecordStorageEnvelope.self, from: data)
+                let store = try decodeDailyRecordsEnvelope(from: data)
                 guard store.schemaVersion <= DailyRecordStorageEnvelope.currentSchemaVersion else {
                     wageStateLogger.warning(
                         "Skipped daily records recovery key \(recoveryKey, privacy: .public) with unsupported schema version \(store.schemaVersion, privacy: .public)"
@@ -290,7 +294,7 @@ extension WageState {
 
         do {
             let store = DailyRecordStorageEnvelope(records: records)
-            let data = try JSONEncoder().encode(store)
+            let data = try encodeDailyRecords(store)
             userDefaults.set(data, forKey: StorageKey.dailyRecords)
             wageStateLogger.info(
                 "Migrated \(records.count, privacy: .public) daily records to schema version \(DailyRecordStorageEnvelope.currentSchemaVersion, privacy: .public)"
@@ -311,5 +315,23 @@ extension WageState {
         userDefaults.set(Date(), forKey: "\(backupKey).createdAt")
         userDefaults.set(reason, forKey: "\(backupKey).reason")
         wageStateLogger.info("Preserved raw daily records for \(reason, privacy: .public) at \(backupKey, privacy: .public)")
+    }
+
+    private static func encodeDailyRecords(_ store: DailyRecordStorageEnvelope) throws -> Data {
+        dailyRecordCoderLock.lock()
+        defer { dailyRecordCoderLock.unlock() }
+        return try dailyRecordEncoder.encode(store)
+    }
+
+    private static func decodeDailyRecordsEnvelope(from data: Data) throws -> DailyRecordStorageEnvelope {
+        dailyRecordCoderLock.lock()
+        defer { dailyRecordCoderLock.unlock() }
+        return try dailyRecordDecoder.decode(DailyRecordStorageEnvelope.self, from: data)
+    }
+
+    private static func decodeLegacyDailyRecords(from data: Data) throws -> [String: DailyWageRecord] {
+        dailyRecordCoderLock.lock()
+        defer { dailyRecordCoderLock.unlock() }
+        return try dailyRecordDecoder.decode([String: DailyWageRecord].self, from: data)
     }
 }

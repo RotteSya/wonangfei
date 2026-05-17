@@ -47,7 +47,7 @@ All five target PNGs are expected to remain `1536 x 1024` with `hasAlpha: yes`. 
 
 Native source: `WNF/WageState.swift`
 
-The native app owns editable settings in one shared `WageState` instance injected through `EnvironmentObject`. It now initializes from `UserDefaults` and writes every editable setting back on change:
+The native app owns editable settings in one shared `WageState` instance injected through `EnvironmentObject`. It initializes from `UserDefaults`, normalizes loaded values into the supported ranges, writes the normalized settings back during initialization, and writes every editable setting back on change:
 
 - `wnf.settings.monthlySalary`
 - `wnf.settings.workdaysPerMonth`
@@ -60,13 +60,14 @@ The native app owns editable settings in one shared `WageState` instance injecte
 - `wnf.settings.privacyMode`
 - `wnf.settings.selectedWeekdays`
 
-Times are stored as minutes since midnight. Selected weekdays are stored as a sorted `[Int]` using the same `0...6` Monday-through-Sunday index contract as the UI. Salary still clamps to `0...100000`; monthly workdays still clamp to `1...31`. First-launch completion remains separate at `wnf.onboarding.completed` via `RootView`.
+Times are stored as minutes since midnight and normalize to `0...1439` on load. Selected weekdays are stored as a sorted `[Int]` using the same `0...6` Monday-through-Sunday index contract as the UI. Salary still clamps to `0...100000`; monthly workdays still clamp to `1...31`. First-launch completion remains separate at `wnf.onboarding.completed` via `RootView`.
 
 Daily record history is also owned by `WageState`:
 
 - `wnf.records.daily` stores a JSON-encoded `[dateKey: DailyWageRecord]` dictionary, keyed as `yyyy-MM-dd` in the current calendar.
-- `DailyWageRecord` captures `earnedToday`, `targetToday`, `elapsedPaidSeconds`, `workdayMinutes`, `hourlyRate`, salary/workday settings, and `capturedAt`.
+- `DailyWageRecord` captures `earnedToday`, `targetToday`, `elapsedPaidSeconds`, `workdayMinutes`, `hourlyRate`, salary/workday settings, `capturedAt`, and a `source` marker. Existing records without `source` decode as `observed`; auto-created gap records encode as `backfilled`.
 - `WageState` closes the previous calendar day when its one-second `currentDate` clock crosses into a new day.
+- If the app was not opened for multiple calendar days, `WageState` first closes the last observed day, then backfills every date from `lastObservedDate + 1 day` through yesterday. Dates whose Monday-through-Sunday index is in `selectedWeekdays` receive a complete standard workday snapshot; other dates receive a zero-yuan, zero-elapsed `backfilled` record.
 - `WNFApp` asks `WageState` to persist the current-day snapshot when the scene leaves `.active`, so a day can still appear in records even if the app is not open at midnight.
 - `RecordsView` reads daily records through `WageState.dailyRecord(for:includingLiveToday:)`; today is supplied from the live calculator, while historical dates only use landed snapshots.
 

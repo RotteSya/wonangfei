@@ -82,6 +82,7 @@ final class WageState: ObservableObject {
         selectedWeekdays = userDefaults.weekdaySet(forKey: StorageKey.selectedWeekdays) ?? Default.selectedWeekdays
         currentDate = Date()
         dailyRecords = Self.loadDailyRecords(from: userDefaults)
+        persistEditableSettings()
 
         closeLastObservedDayIfNeeded(now: currentDate)
         rememberObservedDate(currentDate)
@@ -117,7 +118,7 @@ final class WageState: ObservableObject {
 
     func dailyRecord(for date: Date, includingLiveToday: Bool = false) -> DailyWageRecord? {
         if includingLiveToday, DateComponents.calendar.isDate(date, inSameDayAs: currentDate) {
-            return makeDailyRecord(for: currentDate, capturedAt: currentDate)
+            return makeDailyRecord(for: currentDate, capturedAt: currentDate, source: .observed)
         }
 
         return dailyRecords[Self.dateKey(for: date)]
@@ -183,7 +184,7 @@ final class WageState: ObservableObject {
 
     private func advanceClock(to newDate: Date) {
         if !DateComponents.calendar.isDate(currentDate, inSameDayAs: newDate) {
-            persistDailySnapshot(for: Self.endOfDay(for: currentDate), capturedAt: newDate)
+            closeObservedDateRange(from: currentDate, to: newDate, capturedAt: newDate)
         }
 
         currentDate = newDate
@@ -198,18 +199,68 @@ final class WageState: ObservableObject {
             return
         }
 
-        persistDailySnapshot(for: Self.endOfDay(for: lastObservedDate), capturedAt: now)
+        closeObservedDateRange(from: lastObservedDate, to: now, capturedAt: now)
+    }
+
+    private func closeObservedDateRange(from lastObservedDate: Date, to now: Date, capturedAt: Date) {
+        let calendar = DateComponents.calendar
+        let lastObservedStart = calendar.startOfDay(for: lastObservedDate)
+        let todayStart = calendar.startOfDay(for: now)
+        guard lastObservedStart < todayStart else { return }
+
+        var nextRecords = dailyRecords
+
+        let closedLastObservedRecord = makeDailyRecord(
+            for: Self.endOfDay(for: lastObservedStart),
+            capturedAt: capturedAt,
+            source: .observed
+        )
+        nextRecords[closedLastObservedRecord.dateKey] = closedLastObservedRecord
+
+        var cursor = calendar.date(byAdding: .day, value: 1, to: lastObservedStart)
+        while let date = cursor, date < todayStart {
+            let dateKey = Self.dateKey(for: date)
+            if nextRecords[dateKey] == nil {
+                let record = makeBackfilledDailyRecord(for: date, capturedAt: capturedAt)
+                nextRecords[record.dateKey] = record
+            }
+            cursor = calendar.date(byAdding: .day, value: 1, to: date)
+        }
+
+        dailyRecords = nextRecords
+        saveDailyRecords()
     }
 
     private func persistDailySnapshot(for date: Date, capturedAt: Date) {
-        let record = makeDailyRecord(for: date, capturedAt: capturedAt)
+        let record = makeDailyRecord(for: date, capturedAt: capturedAt, source: .observed)
         var nextRecords = dailyRecords
         nextRecords[record.dateKey] = record
         dailyRecords = nextRecords
         saveDailyRecords()
     }
 
-    private func makeDailyRecord(for date: Date, capturedAt: Date) -> DailyWageRecord {
+    private func makeBackfilledDailyRecord(for date: Date, capturedAt: Date) -> DailyWageRecord {
+        let snapshotDate = Self.endOfDay(for: date)
+        let day = calculation(at: snapshotDate)
+        guard selectedWeekdays.contains(Self.weekdayIndex(for: date)) else {
+            return DailyWageRecord(
+                dateKey: Self.dateKey(for: date),
+                earnedToday: 0,
+                targetToday: 0,
+                elapsedPaidSeconds: 0,
+                workdayMinutes: day.workdayMinutes,
+                hourlyRate: day.hourlyRate,
+                monthlySalary: monthlySalary,
+                workdaysPerMonth: workdaysPerMonth,
+                capturedAt: capturedAt,
+                source: .backfilled
+            )
+        }
+
+        return makeDailyRecord(for: snapshotDate, capturedAt: capturedAt, source: .backfilled)
+    }
+
+    private func makeDailyRecord(for date: Date, capturedAt: Date, source: DailyRecordSource) -> DailyWageRecord {
         let day = calculation(at: date)
         return DailyWageRecord(
             dateKey: Self.dateKey(for: date),
@@ -220,13 +271,27 @@ final class WageState: ObservableObject {
             hourlyRate: day.hourlyRate,
             monthlySalary: monthlySalary,
             workdaysPerMonth: workdaysPerMonth,
-            capturedAt: capturedAt
+            capturedAt: capturedAt,
+            source: source
         )
     }
 
     private func saveDailyRecords() {
         guard let data = try? JSONEncoder().encode(dailyRecords) else { return }
         userDefaults.set(data, forKey: StorageKey.dailyRecords)
+    }
+
+    private func persistEditableSettings() {
+        userDefaults.set(monthlySalary, forKey: StorageKey.monthlySalary)
+        userDefaults.set(workdaysPerMonth, forKey: StorageKey.workdaysPerMonth)
+        userDefaults.set(workStart.minutesInDay, forKey: StorageKey.workStartMinute)
+        userDefaults.set(workEnd.minutesInDay, forKey: StorageKey.workEndMinute)
+        userDefaults.set(lunchStart.minutesInDay, forKey: StorageKey.lunchStartMinute)
+        userDefaults.set(lunchEnd.minutesInDay, forKey: StorageKey.lunchEndMinute)
+        userDefaults.set(hasLunchBreak, forKey: StorageKey.hasLunchBreak)
+        userDefaults.set(includeOvertime, forKey: StorageKey.includeOvertime)
+        userDefaults.set(privacyMode, forKey: StorageKey.privacyMode)
+        userDefaults.set(selectedWeekdays.sorted(), forKey: StorageKey.selectedWeekdays)
     }
 
     private func rememberObservedDate(_ date: Date) {
@@ -261,6 +326,11 @@ final class WageState: ObservableObject {
     private static func endOfDay(for date: Date) -> Date {
         let startOfDay = DateComponents.calendar.startOfDay(for: date)
         return DateComponents.calendar.date(byAdding: DateComponents(day: 1, second: -1), to: startOfDay) ?? date
+    }
+
+    private static func weekdayIndex(for date: Date) -> Int {
+        let weekday = DateComponents.calendar.component(.weekday, from: date)
+        return (weekday + 5) % 7
     }
 }
 
@@ -318,6 +388,11 @@ private extension String {
     }
 }
 
+enum DailyRecordSource: String, Codable, Equatable {
+    case observed
+    case backfilled
+}
+
 struct DailyWageRecord: Codable, Equatable, Identifiable {
     var id: String { dateKey }
 
@@ -330,9 +405,61 @@ struct DailyWageRecord: Codable, Equatable, Identifiable {
     var monthlySalary: Double
     var workdaysPerMonth: Int
     var capturedAt: Date
+    var source: DailyRecordSource
 
     var elapsedPaidMinutes: Int {
         elapsedPaidSeconds / 60
+    }
+
+    init(
+        dateKey: String,
+        earnedToday: Double,
+        targetToday: Double,
+        elapsedPaidSeconds: Int,
+        workdayMinutes: Int,
+        hourlyRate: Double,
+        monthlySalary: Double,
+        workdaysPerMonth: Int,
+        capturedAt: Date,
+        source: DailyRecordSource = .observed
+    ) {
+        self.dateKey = dateKey
+        self.earnedToday = earnedToday
+        self.targetToday = targetToday
+        self.elapsedPaidSeconds = elapsedPaidSeconds
+        self.workdayMinutes = workdayMinutes
+        self.hourlyRate = hourlyRate
+        self.monthlySalary = monthlySalary
+        self.workdaysPerMonth = workdaysPerMonth
+        self.capturedAt = capturedAt
+        self.source = source
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case dateKey
+        case earnedToday
+        case targetToday
+        case elapsedPaidSeconds
+        case workdayMinutes
+        case hourlyRate
+        case monthlySalary
+        case workdaysPerMonth
+        case capturedAt
+        case source
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        dateKey = try container.decode(String.self, forKey: .dateKey)
+        earnedToday = try container.decode(Double.self, forKey: .earnedToday)
+        targetToday = try container.decode(Double.self, forKey: .targetToday)
+        elapsedPaidSeconds = try container.decode(Int.self, forKey: .elapsedPaidSeconds)
+        workdayMinutes = try container.decode(Int.self, forKey: .workdayMinutes)
+        hourlyRate = try container.decode(Double.self, forKey: .hourlyRate)
+        monthlySalary = try container.decode(Double.self, forKey: .monthlySalary)
+        workdaysPerMonth = try container.decode(Int.self, forKey: .workdaysPerMonth)
+        capturedAt = try container.decode(Date.self, forKey: .capturedAt)
+        source = (try? container.decode(DailyRecordSource.self, forKey: .source)) ?? .observed
     }
 }
 

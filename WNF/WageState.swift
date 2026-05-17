@@ -319,8 +319,10 @@ final class WageState: ObservableObject {
         switch dailyRecordStorageMode {
         case .primaryWritable:
             storageKey = StorageKey.dailyRecords
+            userDefaults.removeObject(forKey: StorageKey.dailyRecordsActiveRecoveryKey)
         case .recoveryWritesOnly(let recoveryKey):
             storageKey = recoveryKey
+            userDefaults.set(recoveryKey, forKey: StorageKey.dailyRecordsActiveRecoveryKey)
             wageStateLogger.error(
                 "Primary daily record storage is write-protected after a decode or schema failure; saving current records to \(recoveryKey, privacy: .public)"
             )
@@ -355,6 +357,13 @@ final class WageState: ObservableObject {
 
     private static func loadDailyRecords(from userDefaults: UserDefaults) -> DailyRecordLoadResult {
         guard let data = userDefaults.data(forKey: StorageKey.dailyRecords) else {
+            if let recoveryResult = loadRecoveryDailyRecords(
+                from: userDefaults,
+                preferredKey: StorageKey.dailyRecordsDecodeFailedRecovery
+            ) {
+                return recoveryResult
+            }
+            userDefaults.removeObject(forKey: StorageKey.dailyRecordsActiveRecoveryKey)
             return DailyRecordLoadResult(records: [:], storageMode: .primaryWritable)
         }
 
@@ -370,16 +379,28 @@ final class WageState: ObservableObject {
                 wageStateLogger.warning(
                     "Loaded daily records from unsupported schema version \(store.schemaVersion, privacy: .public); current schema version is \(DailyRecordStorageEnvelope.currentSchemaVersion, privacy: .public)"
                 )
+                if let recoveryResult = loadRecoveryDailyRecords(
+                    from: userDefaults,
+                    preferredKey: StorageKey.dailyRecordsUnsupportedRecovery
+                ) {
+                    return recoveryResult
+                }
+                userDefaults.set(
+                    StorageKey.dailyRecordsUnsupportedRecovery,
+                    forKey: StorageKey.dailyRecordsActiveRecoveryKey
+                )
                 return DailyRecordLoadResult(
                     records: store.records,
                     storageMode: .recoveryWritesOnly(StorageKey.dailyRecordsUnsupportedRecovery)
                 )
             }
+            userDefaults.removeObject(forKey: StorageKey.dailyRecordsActiveRecoveryKey)
             return DailyRecordLoadResult(records: store.records, storageMode: .primaryWritable)
         } catch let envelopeError {
             do {
                 let records = try JSONDecoder().decode([String: DailyWageRecord].self, from: data)
                 migrateLegacyDailyRecords(records, originalData: data, userDefaults: userDefaults)
+                userDefaults.removeObject(forKey: StorageKey.dailyRecordsActiveRecoveryKey)
                 return DailyRecordLoadResult(records: records, storageMode: .primaryWritable)
             } catch let legacyError {
                 preserveRawDailyRecords(
@@ -393,12 +414,72 @@ final class WageState: ObservableObject {
                 wageStateLogger.error(
                     "Failed to decode daily records. envelope: \(envelopeMessage, privacy: .public); legacy: \(legacyMessage, privacy: .public)"
                 )
+                if let recoveryResult = loadRecoveryDailyRecords(
+                    from: userDefaults,
+                    preferredKey: StorageKey.dailyRecordsDecodeFailedRecovery
+                ) {
+                    return recoveryResult
+                }
+                userDefaults.set(
+                    StorageKey.dailyRecordsDecodeFailedRecovery,
+                    forKey: StorageKey.dailyRecordsActiveRecoveryKey
+                )
                 return DailyRecordLoadResult(
                     records: [:],
                     storageMode: .recoveryWritesOnly(StorageKey.dailyRecordsDecodeFailedRecovery)
                 )
             }
         }
+    }
+
+    private static func loadRecoveryDailyRecords(
+        from userDefaults: UserDefaults,
+        preferredKey: String
+    ) -> DailyRecordLoadResult? {
+        for recoveryKey in recoveryKeys(preferredKey: preferredKey, userDefaults: userDefaults) {
+            guard let data = userDefaults.data(forKey: recoveryKey) else { continue }
+
+            do {
+                let store = try JSONDecoder().decode(DailyRecordStorageEnvelope.self, from: data)
+                guard store.schemaVersion <= DailyRecordStorageEnvelope.currentSchemaVersion else {
+                    wageStateLogger.warning(
+                        "Skipped daily records recovery key \(recoveryKey, privacy: .public) with unsupported schema version \(store.schemaVersion, privacy: .public)"
+                    )
+                    continue
+                }
+
+                userDefaults.set(recoveryKey, forKey: StorageKey.dailyRecordsActiveRecoveryKey)
+                wageStateLogger.warning("Loaded daily records from recovery key \(recoveryKey, privacy: .public)")
+                return DailyRecordLoadResult(
+                    records: store.records,
+                    storageMode: .recoveryWritesOnly(recoveryKey)
+                )
+            } catch {
+                let message = String(describing: error)
+                wageStateLogger.error(
+                    "Failed to decode daily records recovery key \(recoveryKey, privacy: .public): \(message, privacy: .public)"
+                )
+            }
+        }
+
+        return nil
+    }
+
+    private static func recoveryKeys(preferredKey: String, userDefaults: UserDefaults) -> [String] {
+        let knownKeys = [
+            StorageKey.dailyRecordsDecodeFailedRecovery,
+            StorageKey.dailyRecordsUnsupportedRecovery
+        ]
+        var keys: [String] = []
+        if let activeKey = userDefaults.string(forKey: StorageKey.dailyRecordsActiveRecoveryKey),
+           knownKeys.contains(activeKey) {
+            keys.append(activeKey)
+        }
+        keys.append(preferredKey)
+        keys.append(contentsOf: knownKeys)
+
+        var seen = Set<String>()
+        return keys.filter { seen.insert($0).inserted }
     }
 
     private static func migrateLegacyDailyRecords(
@@ -482,6 +563,7 @@ private enum StorageKey {
     static let dailyRecordsDecodeFailedRawBackup = "wnf.records.daily.rawBackup.decodeFailed"
     static let dailyRecordsUnsupportedRecovery = "wnf.records.daily.recovery.unsupported"
     static let dailyRecordsDecodeFailedRecovery = "wnf.records.daily.recovery.decodeFailed"
+    static let dailyRecordsActiveRecoveryKey = "wnf.records.daily.recovery.activeKey"
     static let lastObservedDateKey = "wnf.records.lastObservedDateKey"
 }
 

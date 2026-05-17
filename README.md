@@ -59,7 +59,7 @@ XcodeBuildMCP 已在 `.xcodebuildmcp/config.yaml` 持久化默认值：project `
 - 首次启动引导：4 屏 SwiftUI onboarding、第一页参考大图优先的 intro 布局、跳过/返回/分页控制、月薪/作息/午休设置和最终确认。
 - 记录页周 / 月 / 年切换、柱状图选中态、成就和徽章模块；金额来自 `WNF/WageState.swift` 的 `wnf.records.daily` 每日快照，今日金额按记录页聚合快照计入，跨日或 App 离开活跃前台时写回本机，并暂停跨日计时器；回到活跃前台会刷新日期并重建计时器，多天未打开时会补齐中间日期。
 - 我的页月薪和每月工作日支持 `- / +` 微调，也支持点中间数字弹出快速输入框；时间、午休和加班状态可编辑。
-- `WNF/WageState.swift` 从 `UserDefaults` 读取并写回月薪、每月工作日、上下班时间、午休时间、午休开关、加班开关、隐私模式和工作日选择；每日记录以带 `schemaVersion` 的 JSON envelope 存入 `wnf.records.daily`，内部仍按日期键保存 `DailyWageRecord`，并用 `source` 区分 observed / backfilled；旧版裸字典会在读取时迁移并保留 raw backup，解码/编码失败会写系统日志，且失败后的同轮写入会转到 recovery key，避免覆盖主 raw payload；秒级金额刷新限制在首页本地 `TimelineView`，共享状态只在日期键跨日、记录或设置变化时发布；首次引导完成状态继续使用 `wnf.onboarding.completed`。
+- `WNF/WageState.swift` 从 `UserDefaults` 读取并写回月薪、每月工作日、上下班时间、午休时间、午休开关、加班开关、隐私模式和工作日选择；每日记录以带 `schemaVersion` 的 JSON envelope 存入 `wnf.records.daily`，内部仍按日期键保存 `DailyWageRecord`，并用 `source` 区分 observed / backfilled；旧版裸字典会在读取时迁移并保留 raw backup，解码/编码失败会写系统日志，且失败后的写入会转到持久化的 recovery key，后续启动会优先读回该 recovery key，避免覆盖主 raw payload 或丢失恢复期新增记录；秒级金额刷新限制在首页本地 `TimelineView`，共享状态只在日期键跨日、记录或设置变化时发布；首次引导完成状态继续使用 `wnf.onboarding.completed`。
 - `assets/mascot` 中的主吉祥物和 Cow pose 已接入 `WNF/Assets.xcassets`。
 - 首页视频源来自 `/Users/shelingzhao/Documents/窝囊费素材/精灵图/打电脑透明.mov` 和 `/Users/shelingzhao/Documents/窝囊费素材/精灵图/无聊透明.mov`，当前以 `WNF/home-typing.mov`、`WNF/home-bored.mov` 打包进 app resources。
 

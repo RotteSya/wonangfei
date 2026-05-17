@@ -128,7 +128,7 @@ final class WageState: ObservableObject {
 
     func persistCurrentDaySnapshot() {
         let now = Date()
-        refreshCalendarDayIfNeeded(now: now)
+        advanceCalendarDay(to: now)
         persistDailySnapshot(for: now, capturedAt: now)
         rememberObservedDate(now)
     }
@@ -136,6 +136,15 @@ final class WageState: ObservableObject {
     func refreshCalendarDayIfNeeded(now: Date = Date()) {
         advanceCalendarDay(to: now)
         scheduleDayBoundaryTimer(from: now)
+    }
+
+    func pauseCalendarDayTimer() {
+        dayBoundaryTimer?.invalidate()
+        dayBoundaryTimer = nil
+    }
+
+    func resumeCalendarDayTimer(now: Date = Date()) {
+        refreshCalendarDayIfNeeded(now: now)
     }
 
     func bindingForTime(_ keyPath: ReferenceWritableKeyPath<WageState, DateComponents>) -> Date {

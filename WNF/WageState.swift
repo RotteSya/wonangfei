@@ -63,6 +63,7 @@ final class WageState: ObservableObject {
 
     @Published private(set) var currentDateKey: String
     @Published private(set) var dailyRecords: [String: DailyWageRecord]
+    private(set) var recordsRevision = 0
 
     let userDefaults: UserDefaults
     var dailyRecordStorageMode: DailyRecordStorageMode
@@ -262,7 +263,7 @@ final class WageState: ObservableObject {
             cursor = calendar.date(byAdding: .day, value: 1, to: date)
         }
 
-        dailyRecords = nextRecords
+        replaceDailyRecords(nextRecords)
         saveDailyRecords()
     }
 
@@ -270,8 +271,13 @@ final class WageState: ObservableObject {
         let record = makeDailyRecord(for: date, capturedAt: capturedAt, source: .observed)
         var nextRecords = dailyRecords
         nextRecords[record.dateKey] = record
-        dailyRecords = nextRecords
+        replaceDailyRecords(nextRecords)
         saveDailyRecords()
+    }
+
+    private func replaceDailyRecords(_ records: [String: DailyWageRecord]) {
+        dailyRecords = records
+        recordsRevision += 1
     }
 
     private func makeBackfilledDailyRecord(for date: Date, capturedAt: Date) -> DailyWageRecord {

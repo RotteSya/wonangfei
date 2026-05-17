@@ -80,7 +80,7 @@ Daily record history lifecycle is owned by `WageState`; storage encoding, migrat
 - If the app was not opened for multiple calendar days, `WageState` first closes the last observed day, then backfills every date from `lastObservedDate + 1 day` through yesterday. Observed closures and backfilled records both use the same `selectedWeekdays` check: selected days receive a complete standard workday snapshot, while unselected days receive zero-yuan, zero-elapsed records with their original `source`.
 - `WNFApp` asks `WageState` to persist the current-day snapshot when the scene leaves `.active`, so a day can still appear in records even if the app is not open at midnight.
 - `HomeView` owns the one-second `TimelineView` used by the large live money number and passes the derived `WageDay` into the home hero. Other tabs do not subscribe to that tick.
-- `RecordsView` builds a memoized aggregation snapshot from `(currentDateKey, dailyRecords, live-day settings)`. Week/month/year bars reuse that snapshot across body updates and only rebuild when the date key, stored records, or wage settings change.
+- `RecordsView` builds a memoized aggregation snapshot from `(currentDateKey, recordsRevision, dailyRecords payload, live-day settings)`. Cache equality compares the scalar `recordsRevision` instead of the full `[dateKey: DailyWageRecord]` dictionary, so week/month/year bars reuse the snapshot across body updates and only rebuild when the date key, stored-record revision, or wage settings change.
 
 Default app state lives in `窝囊费.html` under `TWEAK_DEFAULTS`:
 

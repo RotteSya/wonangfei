@@ -43,6 +43,7 @@ private struct RecordSummary {
 
 private struct RecordAggregationInput: Equatable {
     var currentDateKey: String
+    var recordsRevision: Int
     var dailyRecords: [String: DailyWageRecord]
     var monthlySalary: Double
     var workdaysPerMonth: Int
@@ -54,6 +55,7 @@ private struct RecordAggregationInput: Equatable {
 
     init(state: WageState) {
         currentDateKey = state.currentDateKey
+        recordsRevision = state.recordsRevision
         dailyRecords = state.dailyRecords
         monthlySalary = state.monthlySalary
         workdaysPerMonth = state.workdaysPerMonth
@@ -62,6 +64,18 @@ private struct RecordAggregationInput: Equatable {
         lunchStartMinute = state.lunchStart.minutesInDay
         lunchEndMinute = state.lunchEnd.minutesInDay
         hasLunchBreak = state.hasLunchBreak
+    }
+
+    static func == (lhs: RecordAggregationInput, rhs: RecordAggregationInput) -> Bool {
+        lhs.currentDateKey == rhs.currentDateKey
+            && lhs.recordsRevision == rhs.recordsRevision
+            && lhs.monthlySalary == rhs.monthlySalary
+            && lhs.workdaysPerMonth == rhs.workdaysPerMonth
+            && lhs.workStartMinute == rhs.workStartMinute
+            && lhs.workEndMinute == rhs.workEndMinute
+            && lhs.lunchStartMinute == rhs.lunchStartMinute
+            && lhs.lunchEndMinute == rhs.lunchEndMinute
+            && lhs.hasLunchBreak == rhs.hasLunchBreak
     }
 }
 

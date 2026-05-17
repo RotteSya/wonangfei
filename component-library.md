@@ -146,13 +146,15 @@
 
 ### BarChart
 
-- Current use: record page weekly/monthly/yearly data.
+- Current use: record page weekly/monthly/yearly data derived from `WageState.dailyRecord(for:includingLiveToday:)`.
+- Data contract: `RecordBar.amount` is an already-aggregated currency value; do not use visual-only multipliers for production records.
 - Bars: yellow for completed/current periods until selected, ink only for selected, pale cream for future.
 - Interaction:
   - tap available bar to select;
   - selected bar jumps by `-2px`;
   - callout appears above selected bar;
   - tap the selected bar again to clear state.
+- Week view groups Monday through Sunday, month view groups current-month 7-day buckets, and year view groups calendar months.
 - Year view: compact bar gaps and smaller labels.
 
 ### SalaryEditor

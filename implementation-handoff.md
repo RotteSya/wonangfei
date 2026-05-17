@@ -62,6 +62,14 @@ The native app owns editable settings in one shared `WageState` instance injecte
 
 Times are stored as minutes since midnight. Selected weekdays are stored as a sorted `[Int]` using the same `0...6` Monday-through-Sunday index contract as the UI. Salary still clamps to `0...100000`; monthly workdays still clamp to `1...31`. First-launch completion remains separate at `wnf.onboarding.completed` via `RootView`.
 
+Daily record history is also owned by `WageState`:
+
+- `wnf.records.daily` stores a JSON-encoded `[dateKey: DailyWageRecord]` dictionary, keyed as `yyyy-MM-dd` in the current calendar.
+- `DailyWageRecord` captures `earnedToday`, `targetToday`, `elapsedPaidSeconds`, `workdayMinutes`, `hourlyRate`, salary/workday settings, and `capturedAt`.
+- `WageState` closes the previous calendar day when its one-second `currentDate` clock crosses into a new day.
+- `WNFApp` asks `WageState` to persist the current-day snapshot when the scene leaves `.active`, so a day can still appear in records even if the app is not open at midnight.
+- `RecordsView` reads daily records through `WageState.dailyRecord(for:includingLiveToday:)`; today is supplied from the live calculator, while historical dates only use landed snapshots.
+
 Default app state lives in `窝囊费.html` under `TWEAK_DEFAULTS`:
 
 - `monthlySalary`: 18000
@@ -126,10 +134,13 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 ### 记录页
 
 - 周 / 月 / 年 tabs must switch datasets.
+- Datasets must be derived from `wnf.records.daily`; do not reintroduce hard-coded chart multipliers.
+- Week view groups Monday through Sunday, month view groups 7-day buckets in the current month, and year view groups calendar months.
+- Today must be included from the live `WageState.calculation` so the current bar updates before the daily snapshot is closed.
 - Chart bars must be tappable except future bars.
 - Selected chart bar must show a callout and can be cleared.
 - Privacy toggle must mask all money strings with dot placeholders.
-- Hero total must recompute from salary/workday/lunch settings.
+- Hero total, averages, peak value, monthly achievement copy, and badge count must recompute from the same record-backed bar data.
 
 ### 我的页
 

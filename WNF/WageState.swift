@@ -61,7 +61,8 @@ final class WageState: ObservableObject {
         }
     }
 
-    @Published private(set) var currentDate = Date()
+    @Published private(set) var currentDate: Date
+    @Published private(set) var dailyRecords: [String: DailyWageRecord]
 
     private let userDefaults: UserDefaults
     private var clockTimer: Timer?
@@ -79,9 +80,14 @@ final class WageState: ObservableObject {
         includeOvertime = userDefaults.boolValue(forKey: StorageKey.includeOvertime) ?? Default.includeOvertime
         privacyMode = userDefaults.boolValue(forKey: StorageKey.privacyMode) ?? Default.privacyMode
         selectedWeekdays = userDefaults.weekdaySet(forKey: StorageKey.selectedWeekdays) ?? Default.selectedWeekdays
+        currentDate = Date()
+        dailyRecords = Self.loadDailyRecords(from: userDefaults)
+
+        closeLastObservedDayIfNeeded(now: currentDate)
+        rememberObservedDate(currentDate)
 
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
-            self?.currentDate = Date()
+            self?.advanceClock(to: Date())
         }
         RunLoop.main.add(timer, forMode: .common)
         clockTimer = timer
@@ -92,7 +98,11 @@ final class WageState: ObservableObject {
     }
 
     var calculation: WageDay {
-        let currentTime = DateComponents.calendar.dateComponents([.hour, .minute, .second], from: currentDate)
+        calculation(at: currentDate)
+    }
+
+    func calculation(at date: Date) -> WageDay {
+        let currentTime = DateComponents.calendar.dateComponents([.hour, .minute, .second], from: date)
         return WageCalculator.compute(
             monthlySalary: monthlySalary,
             workdaysPerMonth: workdaysPerMonth,
@@ -103,6 +113,19 @@ final class WageState: ObservableObject {
             hasLunchBreak: hasLunchBreak,
             now: currentTime
         )
+    }
+
+    func dailyRecord(for date: Date, includingLiveToday: Bool = false) -> DailyWageRecord? {
+        if includingLiveToday, DateComponents.calendar.isDate(date, inSameDayAs: currentDate) {
+            return makeDailyRecord(for: currentDate, capturedAt: currentDate)
+        }
+
+        return dailyRecords[Self.dateKey(for: date)]
+    }
+
+    func persistCurrentDaySnapshot() {
+        persistDailySnapshot(for: currentDate, capturedAt: Date())
+        rememberObservedDate(currentDate)
     }
 
     func bindingForTime(_ keyPath: ReferenceWritableKeyPath<WageState, DateComponents>) -> Date {
@@ -157,6 +180,88 @@ final class WageState: ObservableObject {
     private static func clampedWorkdaysPerMonth(_ value: Int) -> Int {
         min(max(value, 1), 31)
     }
+
+    private func advanceClock(to newDate: Date) {
+        if !DateComponents.calendar.isDate(currentDate, inSameDayAs: newDate) {
+            persistDailySnapshot(for: Self.endOfDay(for: currentDate), capturedAt: newDate)
+        }
+
+        currentDate = newDate
+        rememberObservedDate(newDate)
+    }
+
+    private func closeLastObservedDayIfNeeded(now: Date) {
+        guard let lastObservedDateKey = userDefaults.string(forKey: StorageKey.lastObservedDateKey),
+              lastObservedDateKey != Self.dateKey(for: now),
+              let lastObservedDate = Self.date(fromDateKey: lastObservedDateKey)
+        else {
+            return
+        }
+
+        persistDailySnapshot(for: Self.endOfDay(for: lastObservedDate), capturedAt: now)
+    }
+
+    private func persistDailySnapshot(for date: Date, capturedAt: Date) {
+        let record = makeDailyRecord(for: date, capturedAt: capturedAt)
+        var nextRecords = dailyRecords
+        nextRecords[record.dateKey] = record
+        dailyRecords = nextRecords
+        saveDailyRecords()
+    }
+
+    private func makeDailyRecord(for date: Date, capturedAt: Date) -> DailyWageRecord {
+        let day = calculation(at: date)
+        return DailyWageRecord(
+            dateKey: Self.dateKey(for: date),
+            earnedToday: day.earnedToday,
+            targetToday: day.targetToday,
+            elapsedPaidSeconds: day.elapsedPaidSeconds,
+            workdayMinutes: day.workdayMinutes,
+            hourlyRate: day.hourlyRate,
+            monthlySalary: monthlySalary,
+            workdaysPerMonth: workdaysPerMonth,
+            capturedAt: capturedAt
+        )
+    }
+
+    private func saveDailyRecords() {
+        guard let data = try? JSONEncoder().encode(dailyRecords) else { return }
+        userDefaults.set(data, forKey: StorageKey.dailyRecords)
+    }
+
+    private func rememberObservedDate(_ date: Date) {
+        userDefaults.set(Self.dateKey(for: date), forKey: StorageKey.lastObservedDateKey)
+    }
+
+    private static func loadDailyRecords(from userDefaults: UserDefaults) -> [String: DailyWageRecord] {
+        guard let data = userDefaults.data(forKey: StorageKey.dailyRecords),
+              let records = try? JSONDecoder().decode([String: DailyWageRecord].self, from: data)
+        else {
+            return [:]
+        }
+        return records
+    }
+
+    static func dateKey(for date: Date) -> String {
+        let components = DateComponents.calendar.dateComponents([.year, .month, .day], from: date)
+        return String(
+            format: "%04d-%02d-%02d",
+            components.year ?? 0,
+            components.month ?? 0,
+            components.day ?? 0
+        )
+    }
+
+    private static func date(fromDateKey key: String) -> Date? {
+        let parts = key.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else { return nil }
+        return DateComponents.calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
+    }
+
+    private static func endOfDay(for date: Date) -> Date {
+        let startOfDay = DateComponents.calendar.startOfDay(for: date)
+        return DateComponents.calendar.date(byAdding: DateComponents(day: 1, second: -1), to: startOfDay) ?? date
+    }
 }
 
 private enum StorageKey {
@@ -170,6 +275,8 @@ private enum StorageKey {
     static let includeOvertime = "wnf.settings.includeOvertime"
     static let privacyMode = "wnf.settings.privacyMode"
     static let selectedWeekdays = "wnf.settings.selectedWeekdays"
+    static let dailyRecords = "wnf.records.daily"
+    static let lastObservedDateKey = "wnf.records.lastObservedDateKey"
 }
 
 private enum Default {
@@ -208,6 +315,24 @@ private extension UserDefaults {
 private extension String {
     var numericCharactersOnly: String {
         filter(\.isNumber)
+    }
+}
+
+struct DailyWageRecord: Codable, Equatable, Identifiable {
+    var id: String { dateKey }
+
+    var dateKey: String
+    var earnedToday: Double
+    var targetToday: Double
+    var elapsedPaidSeconds: Int
+    var workdayMinutes: Int
+    var hourlyRate: Double
+    var monthlySalary: Double
+    var workdaysPerMonth: Int
+    var capturedAt: Date
+
+    var elapsedPaidMinutes: Int {
+        elapsedPaidSeconds / 60
     }
 }
 

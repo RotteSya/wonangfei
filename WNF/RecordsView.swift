@@ -28,9 +28,17 @@ struct RecordBar: Identifiable {
     var id: String { key }
     var key: String
     var title: String
-    var multiplier: Double
+    var amount: Double
+    var recordedDays: Int
+    var elapsedPaidSeconds: Int
     var isFuture = false
     var isToday = false
+}
+
+private struct RecordSummary {
+    var amount: Double = 0
+    var recordedDays: Int = 0
+    var elapsedPaidSeconds: Int = 0
 }
 
 struct RecordsView: View {
@@ -42,32 +50,52 @@ struct RecordsView: View {
     private var bars: [RecordBar] {
         switch period {
         case .week:
-            [
-                RecordBar(key: "一", title: "周一", multiplier: 1.00),
-                RecordBar(key: "二", title: "周二", multiplier: 1.08),
-                RecordBar(key: "三", title: "周三", multiplier: 0.93),
-                RecordBar(key: "四", title: "今日", multiplier: 0.62, isToday: true),
-                RecordBar(key: "五", title: "周五", multiplier: 0, isFuture: true),
-                RecordBar(key: "六", title: "周六", multiplier: 0, isFuture: true),
-                RecordBar(key: "日", title: "周日", multiplier: 0, isFuture: true)
-            ]
+            weekBars()
         case .month:
-            [
-                RecordBar(key: "W1", title: "第 1 周", multiplier: 4.8),
-                RecordBar(key: "W2", title: "第 2 周", multiplier: 5.0),
-                RecordBar(key: "W3", title: "第 3 周", multiplier: 4.2),
-                RecordBar(key: "W4", title: "本周", multiplier: 3.4, isToday: true),
-                RecordBar(key: "W5", title: "第 5 周", multiplier: 0, isFuture: true)
-            ]
+            monthBars()
         case .year:
-            (1...12).map { month in
-                RecordBar(key: "\(month)", title: month == 5 ? "本月" : "\(month) 月", multiplier: month <= 5 ? Double([22, 18, 23, 22, 21][month - 1]) : 0, isFuture: month > 5, isToday: month == 5)
-            }
+            yearBars()
         }
     }
 
     private var total: Double {
-        bars.reduce(0) { $0 + $1.multiplier * day.targetToday }
+        bars.reduce(0) { $0 + $1.amount }
+    }
+
+    private var recordedDayCount: Int {
+        bars.reduce(0) { $0 + $1.recordedDays }
+    }
+
+    private var periodAverage: Double {
+        total / Double(max(1, recordedDayCount))
+    }
+
+    private var periodPeak: Double {
+        bars.map(\.amount).max() ?? 0
+    }
+
+    private var chartRangeLabel: String {
+        switch period {
+        case .week:
+            "周一 - 周日"
+        case .month:
+            "1 日 - \(daysInCurrentMonth) 日"
+        case .year:
+            "1 月 - 12 月"
+        }
+    }
+
+    private var currentMonthSummary: RecordSummary {
+        summarizeRecords(from: monthStart(for: state.currentDate), through: monthEnd(for: state.currentDate))
+    }
+
+    private var unlockedBadgeCount: Int {
+        [
+            state.dailyRecord(for: state.currentDate, includingLiveToday: true)?.earnedToday ?? 0 > 0,
+            state.hasLunchBreak,
+            state.includeOvertime,
+            currentMonthSummary.elapsedPaidSeconds >= 100 * 60 * 60
+        ].filter(\.self).count
     }
 
     var body: some View {
@@ -80,13 +108,13 @@ struct RecordsView: View {
                     heroCard
 
                     HStack(spacing: 10) {
-                        MetricTile(label: period == .week ? "本周日均" : period == .month ? "月日均" : "年日均", value: WNFFormat.money(day.targetToday, privacy: state.privacyMode), subtitle: "每天的窝囊费", big: true)
-                        MetricTile(label: "加班挣到", value: WNFFormat.money(day.targetToday * 1.7, privacy: state.privacyMode), subtitle: "丧但还顶得住", accent: WNFTheme.coral, big: true)
+                        MetricTile(label: period == .week ? "本周日均" : period == .month ? "月日均" : "年日均", value: WNFFormat.money(periodAverage, privacy: state.privacyMode), subtitle: "来自已记录日期", big: true)
+                        MetricTile(label: "本期最高", value: WNFFormat.money(periodPeak, privacy: state.privacyMode), subtitle: "单柱最高金额", accent: WNFTheme.coral, big: true)
                     }
 
                     HStack(spacing: 10) {
                         MetricTile(label: "时薪", value: state.privacyMode ? "¥••/h" : "¥\(Int(day.hourlyRate))/h", subtitle: "基于税后月薪", accent: WNFTheme.cyan)
-                        MetricTile(label: "已窝囊", value: "\(Int(Double(day.workdayMinutes) / 60 * 9.4))h", subtitle: "9.4 个工作日")
+                        MetricTile(label: "已记录", value: "\(recordedDayCount) 天", subtitle: "含今日实时")
                     }
 
                     achievementCard
@@ -129,13 +157,13 @@ struct RecordsView: View {
             }
 
             HStack(spacing: 8) {
-                Label(period == .year ? "+14%" : period == .month ? "+9.2%" : "+4.1%", systemImage: "arrow.up")
+                Label("已记录 \(recordedDayCount) 天", systemImage: "calendar")
                     .font(.system(size: 11, weight: .heavy))
                     .foregroundStyle(WNFTheme.yellow)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                     .background(WNFTheme.ink, in: Capsule())
-                Text(period == .year ? "比去年" : period == .month ? "比上月" : "比上周")
+                Text("今日金额实时计入")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(WNFTheme.ink.opacity(0.6))
             }
@@ -166,10 +194,10 @@ struct RecordsView: View {
                     .font(.system(size: 11, weight: .heavy))
                     .tracking(1.5)
                     .foregroundStyle(WNFTheme.yellow)
-                Text("本月已窝囊 \(Int(Double(day.workdayMinutes) / 60 * 9.4)) 小时")
+                Text("本月已记录 \(currentMonthSummary.recordedDays) 天")
                     .font(.system(size: 22, weight: .black, design: .rounded))
                     .foregroundStyle(Color.white)
-                Text("相当于看完 \(Int(Double(day.workdayMinutes) / 60 * 9.4 / 2)) 集剧")
+                Text("累计到账 \(WNFFormat.money(currentMonthSummary.amount, privacy: state.privacyMode))")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Color.white.opacity(0.55))
             }
@@ -185,12 +213,12 @@ struct RecordsView: View {
                 Text(period == .week ? "本周每日窝囊费" : period == .month ? "本月每周窝囊费" : "本年每月窝囊费")
                     .font(.system(size: 19, weight: .black, design: .rounded))
                 Spacer()
-                Text(period == .year ? "1 月 - 12 月" : period == .month ? "第 1 - 第 5 周" : "周一 - 周日")
+                Text(chartRangeLabel)
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(WNFTheme.muted)
             }
 
-            BarChart(bars: bars, dailyAverage: day.targetToday, selectedBarID: $selectedBarID, privacy: state.privacyMode)
+            BarChart(bars: bars, selectedBarID: $selectedBarID, privacy: state.privacyMode)
         }
         .padding(16)
         .background(Color.white, in: RoundedRectangle(cornerRadius: 22))
@@ -203,32 +231,152 @@ struct RecordsView: View {
                 Text("窝囊徽章")
                     .font(.system(size: 19, weight: .black, design: .rounded))
                 Spacer()
-                Text("3 / 8 解锁")
+                Text("\(unlockedBadgeCount) / 4 解锁")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(WNFTheme.muted)
             }
 
             HStack(spacing: 10) {
-                Badge(symbol: "sun.max", label: "早八勇士", unlocked: true)
-                Badge(symbol: "fork.knife", label: "午休大师", unlocked: true)
-                Badge(symbol: "clock", label: "加班 +1", unlocked: true)
-                Badge(symbol: "yensign.circle", label: "忍 100h", unlocked: false)
+                Badge(symbol: "sun.max", label: "今日开张", unlocked: (state.dailyRecord(for: state.currentDate, includingLiveToday: true)?.earnedToday ?? 0) > 0)
+                Badge(symbol: "fork.knife", label: "午休大师", unlocked: state.hasLunchBreak)
+                Badge(symbol: "clock", label: "加班 +1", unlocked: state.includeOvertime)
+                Badge(symbol: "yensign.circle", label: "忍 100h", unlocked: currentMonthSummary.elapsedPaidSeconds >= 100 * 60 * 60)
             }
         }
         .padding(16)
         .background(Color.white, in: RoundedRectangle(cornerRadius: 22))
         .overlay(RoundedRectangle(cornerRadius: 22).stroke(WNFTheme.hairline, lineWidth: 0.5))
     }
+
+    private var calendar: Calendar {
+        DateComponents.calendar
+    }
+
+    private var todayStart: Date {
+        calendar.startOfDay(for: state.currentDate)
+    }
+
+    private var daysInCurrentMonth: Int {
+        calendar.range(of: .day, in: .month, for: state.currentDate)?.count ?? 31
+    }
+
+    private func weekBars() -> [RecordBar] {
+        let labels = ["一", "二", "三", "四", "五", "六", "日"]
+        let titles = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+        let startOfWeek = weekStart(containing: state.currentDate)
+
+        return labels.indices.map { index in
+            let date = calendar.date(byAdding: .day, value: index, to: startOfWeek) ?? startOfWeek
+            let summary = summarizeRecords(from: date, through: date)
+            let isToday = calendar.isDate(date, inSameDayAs: state.currentDate)
+            return RecordBar(
+                key: labels[index],
+                title: isToday ? "今日" : titles[index],
+                amount: summary.amount,
+                recordedDays: summary.recordedDays,
+                elapsedPaidSeconds: summary.elapsedPaidSeconds,
+                isFuture: calendar.startOfDay(for: date) > todayStart,
+                isToday: isToday
+            )
+        }
+    }
+
+    private func monthBars() -> [RecordBar] {
+        let startOfMonth = monthStart(for: state.currentDate)
+        let bucketCount = Int(ceil(Double(daysInCurrentMonth) / 7.0))
+
+        return (0..<bucketCount).map { index in
+            let startDay = index * 7 + 1
+            let endDay = min(startDay + 6, daysInCurrentMonth)
+            let startDate = calendar.date(byAdding: .day, value: startDay - 1, to: startOfMonth) ?? startOfMonth
+            let endDate = calendar.date(byAdding: .day, value: endDay - 1, to: startOfMonth) ?? startDate
+            let summary = summarizeRecords(from: startDate, through: endDate)
+            let isToday = startDate <= todayStart && todayStart <= endDate
+
+            return RecordBar(
+                key: "W\(index + 1)",
+                title: isToday ? "本周" : "第 \(index + 1) 周",
+                amount: summary.amount,
+                recordedDays: summary.recordedDays,
+                elapsedPaidSeconds: summary.elapsedPaidSeconds,
+                isFuture: startDate > todayStart,
+                isToday: isToday
+            )
+        }
+    }
+
+    private func yearBars() -> [RecordBar] {
+        let year = calendar.component(.year, from: state.currentDate)
+
+        return (1...12).map { month in
+            let startDate = calendar.date(from: DateComponents(year: year, month: month, day: 1)) ?? state.currentDate
+            let endDate = monthEnd(for: startDate)
+            let summary = summarizeRecords(from: startDate, through: endDate)
+            let isToday = calendar.isDate(startDate, equalTo: state.currentDate, toGranularity: .month)
+
+            return RecordBar(
+                key: "\(month)",
+                title: isToday ? "本月" : "\(month) 月",
+                amount: summary.amount,
+                recordedDays: summary.recordedDays,
+                elapsedPaidSeconds: summary.elapsedPaidSeconds,
+                isFuture: startDate > todayStart,
+                isToday: isToday
+            )
+        }
+    }
+
+    private func summarizeRecords(from startDate: Date, through endDate: Date) -> RecordSummary {
+        let startDate = calendar.startOfDay(for: startDate)
+        let endDate = min(calendar.startOfDay(for: endDate), todayStart)
+        guard startDate <= endDate else { return RecordSummary() }
+
+        return days(from: startDate, through: endDate).reduce(into: RecordSummary()) { summary, date in
+            guard let record = state.dailyRecord(for: date, includingLiveToday: true) else { return }
+            summary.amount += record.earnedToday
+            summary.recordedDays += 1
+            summary.elapsedPaidSeconds += record.elapsedPaidSeconds
+        }
+    }
+
+    private func days(from startDate: Date, through endDate: Date) -> [Date] {
+        guard startDate <= endDate else { return [] }
+
+        var dates: [Date] = []
+        var date = startDate
+        while date <= endDate {
+            dates.append(date)
+            guard let nextDate = calendar.date(byAdding: .day, value: 1, to: date) else { break }
+            date = nextDate
+        }
+        return dates
+    }
+
+    private func weekStart(containing date: Date) -> Date {
+        let startOfDay = calendar.startOfDay(for: date)
+        let weekday = calendar.component(.weekday, from: startOfDay)
+        let mondayOffset = (weekday + 5) % 7
+        return calendar.date(byAdding: .day, value: -mondayOffset, to: startOfDay) ?? startOfDay
+    }
+
+    private func monthStart(for date: Date) -> Date {
+        let components = calendar.dateComponents([.year, .month], from: date)
+        return calendar.date(from: components) ?? calendar.startOfDay(for: date)
+    }
+
+    private func monthEnd(for date: Date) -> Date {
+        let startOfMonth = monthStart(for: date)
+        return calendar.date(byAdding: DateComponents(month: 1, day: -1), to: startOfMonth) ?? startOfMonth
+    }
 }
 
 private struct BarChart: View {
     var bars: [RecordBar]
-    var dailyAverage: Double
     @Binding var selectedBarID: RecordBar.ID?
     var privacy: Bool
 
-    private var maxMultiplier: Double {
-        max(bars.map(\.multiplier).max() ?? 1, 1)
+    private var maxAmount: Double {
+        max(bars.map(\.amount).max() ?? 1, 1)
     }
 
     var body: some View {
@@ -247,7 +395,7 @@ private struct BarChart: View {
                             barColumn(bar: bar, selected: selected)
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("\(bar.title) \(WNFFormat.money(bar.multiplier * dailyAverage, privacy: privacy))")
+                        .accessibilityLabel("\(bar.title) \(WNFFormat.money(bar.amount, privacy: privacy))")
                         .accessibilityValue(selected ? "已选中" : "未选中")
                     }
                 }
@@ -260,7 +408,7 @@ private struct BarChart: View {
         VStack(spacing: 6) {
             ZStack(alignment: .bottom) {
                 if selected {
-                    Text("\(bar.title) \(WNFFormat.money(bar.multiplier * dailyAverage, privacy: privacy))")
+                    Text("\(bar.title) \(WNFFormat.money(bar.amount, privacy: privacy))")
                         .font(.system(size: 10, weight: .heavy))
                         .foregroundStyle(Color.white)
                         .padding(.horizontal, 8)
@@ -272,7 +420,7 @@ private struct BarChart: View {
 
                 RoundedRectangle(cornerRadius: bars.count > 8 ? 4 : 8)
                     .fill(barColor(bar: bar, selected: selected))
-                    .frame(width: bars.count > 8 ? 16 : 24, height: bar.isFuture ? 6 : max(8, 100 * bar.multiplier / maxMultiplier))
+                    .frame(width: bars.count > 8 ? 16 : 24, height: bar.isFuture ? 6 : max(8, 100 * bar.amount / maxAmount))
                     .offset(y: selected ? -2 : 0)
                     .shadow(color: selected ? .black.opacity(0.24) : .clear, radius: 9, y: 5)
             }

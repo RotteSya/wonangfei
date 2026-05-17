@@ -141,7 +141,7 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 - Share card title/subtitle copy is selected from `ShareCardCopy.pool` every time the home share action opens the card. The picker excludes the currently displayed pair when possible, so repeated opens visibly refresh the wording.
 - Share card controls:
   - eye button masks/unmasks card-sensitive values only;
-  - share button enters a loading/disabled state, waits one frame so the spinner can render, then exports the controls-free card image through SwiftUI `ImageRenderer.render(rasterizationScale:)` into an explicit `UIGraphicsImageRenderer` context before presenting iOS `UIActivityViewController` from an attached presenter view with `popoverPresentationController.sourceView` configured for iPad / Mac Catalyst;
+  - share button enters a loading/disabled state, waits one frame so the spinner can render, then exports the controls-free card image through SwiftUI `ImageRenderer.render(rasterizationScale:)` into an explicit `UIGraphicsImageRenderer` context using the current `UIWindowScene.screen.scale` before presenting iOS `UIActivityViewController` from an attached presenter view with `popoverPresentationController.sourceView` configured for iPad / Mac Catalyst;
   - x button closes the card.
 - Tapping outside the card closes the card. While the card is open, bottom tab bar interaction is disabled.
 

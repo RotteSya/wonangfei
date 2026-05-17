@@ -18,7 +18,7 @@ The runnable entry and live prototype files are:
 - `design-canvas.jsx`：Open Design preview canvas and artboards.
 - `tweaks-panel.jsx`：internal preview controls.
 
-Current `main` note: commits after `bdaa6ef` reverted the earlier widget/persistence split. The active native implementation is the single `WNF/` app target with settings state in `WNF/WageState.swift`; there is no current `WNFWidget/`, `WageCore.swift`, or `WageDisplayModel.swift` in this checkout.
+Current `main` note: commits after `bdaa6ef` reverted the earlier widget/core split. The active native implementation is the single `WNF/` app target with settings state and local persistence in `WNF/WageState.swift`; there is no current `WNFWidget/`, `WageCore.swift`, or `WageDisplayModel.swift` in this checkout.
 
 ## Native Onboarding
 
@@ -44,6 +44,23 @@ Hero asset mapping from the local material folder:
 All five target PNGs are expected to remain `1536 x 1024` with `hasAlpha: yes`. Before handing off a replacement, compare source/target hashes when possible and run `sips -g pixelWidth -g pixelHeight -g hasAlpha` on the target asset-catalog files.
 
 ## Core State
+
+Native source: `WNF/WageState.swift`
+
+The native app owns editable settings in one shared `WageState` instance injected through `EnvironmentObject`. It now initializes from `UserDefaults` and writes every editable setting back on change:
+
+- `wnf.settings.monthlySalary`
+- `wnf.settings.workdaysPerMonth`
+- `wnf.settings.workStartMinute`
+- `wnf.settings.workEndMinute`
+- `wnf.settings.lunchStartMinute`
+- `wnf.settings.lunchEndMinute`
+- `wnf.settings.hasLunchBreak`
+- `wnf.settings.includeOvertime`
+- `wnf.settings.privacyMode`
+- `wnf.settings.selectedWeekdays`
+
+Times are stored as minutes since midnight. Selected weekdays are stored as a sorted `[Int]` using the same `0...6` Monday-through-Sunday index contract as the UI. Salary still clamps to `0...100000`; monthly workdays still clamp to `1...31`. First-launch completion remains separate at `wnf.onboarding.completed` via `RootView`.
 
 Default app state lives in `窝囊费.html` under `TWEAK_DEFAULTS`:
 
@@ -87,8 +104,8 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 
 - First launch shows the four-screen onboarding flow before the main tab UI.
 - Header title changes per page and the skip button moves directly to the final page before completion.
-- Page 2 salary controls commit through `WageState`.
-- Page 3 work time and lunch controls update the same settings state used by the main app.
+- Page 2 salary controls commit through `WageState`, so slider and button edits persist like settings-page edits.
+- Page 3 work time and lunch controls update the same persisted settings state used by the main app.
 - Page 3 hero crossfades between the lunch sleep/wake assets when 午休 is toggled.
 
 ### 首页
@@ -123,6 +140,7 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 - Time controls use native time input.
 - 午休 switch hides/reveals lunch rows and recomputes hourly rate.
 - 计入加班 is the only interactive switch in the 其它 section.
+- All editable settings on this page persist through `WageState` and should survive app relaunch.
 
 ## Visual Implementation Rules
 

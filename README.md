@@ -36,7 +36,7 @@
 
 - 首页：一个核心数字，不再提供上下分页或明细下页；右上角为分享入口，弹出今日窝囊战报卡片。
 - 记录页：周 / 月 / 年分段控件、可点柱状图、成就卡、徽章区。
-- 我的页：月薪编辑、每月工作日编辑、周工作日选择、上下班时间、午休开关和加班开关。
+- 我的页：月薪编辑、每月工作日编辑、周工作日选择、上下班时间、午休开关和加班开关；这些设置和隐私模式会保存在本机。
 
 ## iOS App
 
@@ -59,6 +59,7 @@ XcodeBuildMCP 已在 `.xcodebuildmcp/config.yaml` 持久化默认值：project `
 - 首次启动引导：4 屏 SwiftUI onboarding、第一页参考大图优先的 intro 布局、跳过/返回/分页控制、月薪/作息/午休设置和最终确认。
 - 记录页周 / 月 / 年切换、柱状图选中态、成就和徽章模块。
 - 我的页月薪和每月工作日支持 `- / +` 微调，也支持点中间数字弹出快速输入框；时间、午休和加班状态可编辑。
+- `WNF/WageState.swift` 从 `UserDefaults` 读取并写回月薪、每月工作日、上下班时间、午休时间、午休开关、加班开关、隐私模式和工作日选择；首次引导完成状态继续使用 `wnf.onboarding.completed`。
 - `assets/mascot` 中的主吉祥物和 Cow pose 已接入 `WNF/Assets.xcassets`。
 - 首页视频源来自 `/Users/shelingzhao/Documents/窝囊费素材/精灵图/打电脑透明.mov` 和 `/Users/shelingzhao/Documents/窝囊费素材/精灵图/无聊透明.mov`，当前以 `WNF/home-typing.mov`、`WNF/home-bored.mov` 打包进 app resources。
 

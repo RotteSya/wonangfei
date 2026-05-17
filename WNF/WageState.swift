@@ -1,21 +1,85 @@
 import Foundation
 
 final class WageState: ObservableObject {
-    @Published var monthlySalary: Double = 18_000
-    @Published var workdaysPerMonth: Int = 26
-    @Published var workStart: DateComponents = DateComponents(hour: 9, minute: 30)
-    @Published var workEnd: DateComponents = DateComponents(hour: 18, minute: 30)
-    @Published var lunchStart: DateComponents = DateComponents(hour: 12, minute: 0)
-    @Published var lunchEnd: DateComponents = DateComponents(hour: 13, minute: 0)
-    @Published var hasLunchBreak = true
-    @Published var includeOvertime = true
-    @Published var privacyMode = false
-    @Published var selectedWeekdays: Set<Int> = [0, 1, 2, 3, 4]
+    @Published var monthlySalary: Double {
+        didSet {
+            userDefaults.set(monthlySalary, forKey: StorageKey.monthlySalary)
+        }
+    }
+
+    @Published var workdaysPerMonth: Int {
+        didSet {
+            userDefaults.set(workdaysPerMonth, forKey: StorageKey.workdaysPerMonth)
+        }
+    }
+
+    @Published var workStart: DateComponents {
+        didSet {
+            userDefaults.set(workStart.minutesInDay, forKey: StorageKey.workStartMinute)
+        }
+    }
+
+    @Published var workEnd: DateComponents {
+        didSet {
+            userDefaults.set(workEnd.minutesInDay, forKey: StorageKey.workEndMinute)
+        }
+    }
+
+    @Published var lunchStart: DateComponents {
+        didSet {
+            userDefaults.set(lunchStart.minutesInDay, forKey: StorageKey.lunchStartMinute)
+        }
+    }
+
+    @Published var lunchEnd: DateComponents {
+        didSet {
+            userDefaults.set(lunchEnd.minutesInDay, forKey: StorageKey.lunchEndMinute)
+        }
+    }
+
+    @Published var hasLunchBreak: Bool {
+        didSet {
+            userDefaults.set(hasLunchBreak, forKey: StorageKey.hasLunchBreak)
+        }
+    }
+
+    @Published var includeOvertime: Bool {
+        didSet {
+            userDefaults.set(includeOvertime, forKey: StorageKey.includeOvertime)
+        }
+    }
+
+    @Published var privacyMode: Bool {
+        didSet {
+            userDefaults.set(privacyMode, forKey: StorageKey.privacyMode)
+        }
+    }
+
+    @Published var selectedWeekdays: Set<Int> {
+        didSet {
+            userDefaults.set(selectedWeekdays.sorted(), forKey: StorageKey.selectedWeekdays)
+        }
+    }
+
     @Published private(set) var currentDate = Date()
 
+    private let userDefaults: UserDefaults
     private var clockTimer: Timer?
 
-    init() {
+    init(userDefaults: UserDefaults = .standard) {
+        self.userDefaults = userDefaults
+
+        monthlySalary = Self.clampedMonthlySalary(userDefaults.doubleValue(forKey: StorageKey.monthlySalary) ?? Default.monthlySalary)
+        workdaysPerMonth = Self.clampedWorkdaysPerMonth(userDefaults.integerValue(forKey: StorageKey.workdaysPerMonth) ?? Default.workdaysPerMonth)
+        workStart = DateComponents.minuteInDay(userDefaults.integerValue(forKey: StorageKey.workStartMinute) ?? Default.workStartMinute)
+        workEnd = DateComponents.minuteInDay(userDefaults.integerValue(forKey: StorageKey.workEndMinute) ?? Default.workEndMinute)
+        lunchStart = DateComponents.minuteInDay(userDefaults.integerValue(forKey: StorageKey.lunchStartMinute) ?? Default.lunchStartMinute)
+        lunchEnd = DateComponents.minuteInDay(userDefaults.integerValue(forKey: StorageKey.lunchEndMinute) ?? Default.lunchEndMinute)
+        hasLunchBreak = userDefaults.boolValue(forKey: StorageKey.hasLunchBreak) ?? Default.hasLunchBreak
+        includeOvertime = userDefaults.boolValue(forKey: StorageKey.includeOvertime) ?? Default.includeOvertime
+        privacyMode = userDefaults.boolValue(forKey: StorageKey.privacyMode) ?? Default.privacyMode
+        selectedWeekdays = userDefaults.weekdaySet(forKey: StorageKey.selectedWeekdays) ?? Default.selectedWeekdays
+
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             self?.currentDate = Date()
         }
@@ -54,7 +118,7 @@ final class WageState: ObservableObject {
     }
 
     func setMonthlySalary(_ value: Double) {
-        monthlySalary = min(max(value, 0), 100_000)
+        monthlySalary = Self.clampedMonthlySalary(value)
     }
 
     func setMonthlySalary(from text: String) {
@@ -67,7 +131,7 @@ final class WageState: ObservableObject {
     }
 
     func setWorkdaysPerMonth(_ value: Int) {
-        workdaysPerMonth = min(max(value, 1), 31)
+        workdaysPerMonth = Self.clampedWorkdaysPerMonth(value)
     }
 
     func setWorkdaysPerMonth(from text: String) {
@@ -76,6 +140,7 @@ final class WageState: ObservableObject {
     }
 
     func toggleWeekday(_ index: Int) {
+        guard (0...6).contains(index) else { return }
         var nextWeekdays = selectedWeekdays
         if nextWeekdays.contains(index) {
             nextWeekdays.remove(index)
@@ -83,6 +148,60 @@ final class WageState: ObservableObject {
             nextWeekdays.insert(index)
         }
         selectedWeekdays = nextWeekdays
+    }
+
+    private static func clampedMonthlySalary(_ value: Double) -> Double {
+        min(max(value, 0), 100_000)
+    }
+
+    private static func clampedWorkdaysPerMonth(_ value: Int) -> Int {
+        min(max(value, 1), 31)
+    }
+}
+
+private enum StorageKey {
+    static let monthlySalary = "wnf.settings.monthlySalary"
+    static let workdaysPerMonth = "wnf.settings.workdaysPerMonth"
+    static let workStartMinute = "wnf.settings.workStartMinute"
+    static let workEndMinute = "wnf.settings.workEndMinute"
+    static let lunchStartMinute = "wnf.settings.lunchStartMinute"
+    static let lunchEndMinute = "wnf.settings.lunchEndMinute"
+    static let hasLunchBreak = "wnf.settings.hasLunchBreak"
+    static let includeOvertime = "wnf.settings.includeOvertime"
+    static let privacyMode = "wnf.settings.privacyMode"
+    static let selectedWeekdays = "wnf.settings.selectedWeekdays"
+}
+
+private enum Default {
+    static let monthlySalary: Double = 18_000
+    static let workdaysPerMonth = 26
+    static let workStartMinute = 9 * 60 + 30
+    static let workEndMinute = 18 * 60 + 30
+    static let lunchStartMinute = 12 * 60
+    static let lunchEndMinute = 13 * 60
+    static let hasLunchBreak = true
+    static let includeOvertime = true
+    static let privacyMode = false
+    static let selectedWeekdays: Set<Int> = [0, 1, 2, 3, 4]
+}
+
+private extension UserDefaults {
+    func doubleValue(forKey key: String) -> Double? {
+        object(forKey: key) == nil ? nil : double(forKey: key)
+    }
+
+    func integerValue(forKey key: String) -> Int? {
+        object(forKey: key) == nil ? nil : integer(forKey: key)
+    }
+
+    func boolValue(forKey key: String) -> Bool? {
+        object(forKey: key) == nil ? nil : bool(forKey: key)
+    }
+
+    func weekdaySet(forKey key: String) -> Set<Int>? {
+        guard object(forKey: key) != nil else { return nil }
+        let weekdays = (array(forKey: key) as? [Int] ?? []).filter { (0...6).contains($0) }
+        return Set(weekdays)
     }
 }
 
@@ -223,6 +342,11 @@ extension DateComponents {
         calendar.timeZone = .current
         return calendar
     }()
+
+    static func minuteInDay(_ value: Int) -> DateComponents {
+        let minuteInDay = min(max(value, 0), 23 * 60 + 59)
+        return DateComponents(hour: minuteInDay / 60, minute: minuteInDay % 60)
+    }
 
     var minutesInDay: Int {
         (hour ?? 0) * 60 + (minute ?? 0)

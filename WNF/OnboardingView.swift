@@ -417,7 +417,7 @@ private struct SalarySetupCard: View {
                 }
             }
 
-            Slider(value: $state.monthlySalary, in: 3_000...80_000, step: 500)
+            Slider(value: salaryBinding, in: 3_000...80_000, step: 500)
                 .tint(WNFTheme.ink)
                 .accessibilityLabel("月薪")
         }
@@ -428,7 +428,15 @@ private struct SalarySetupCard: View {
 
     private func updateSalary(by delta: Double) {
         withAnimation(.snappy(duration: 0.18)) {
-            state.monthlySalary = min(max(state.monthlySalary + delta, 0), 100_000)
+            state.adjustMonthlySalary(by: delta)
+        }
+    }
+
+    private var salaryBinding: Binding<Double> {
+        Binding {
+            state.monthlySalary
+        } set: { value in
+            state.setMonthlySalary(value)
         }
     }
 }

@@ -18,7 +18,7 @@ The runnable entry and live prototype files are:
 - `design-canvas.jsx`：Open Design preview canvas and artboards.
 - `tweaks-panel.jsx`：internal preview controls.
 
-Current `main` note: commits after `bdaa6ef` reverted the earlier widget/core split. The active native implementation is the single `WNF/` app target with settings state and local persistence in `WNF/WageState.swift`; there is no current `WNFWidget/`, `WageCore.swift`, or `WageDisplayModel.swift` in this checkout.
+Current `main` note: commits after `bdaa6ef` reverted the earlier widget/core split. The active native implementation is the single `WNF/` app target; there is no current `WNFWidget/`, `WageCore.swift`, or `WageDisplayModel.swift` in this checkout. Settings and daily-record lifecycle stay in `WNF/WageState.swift`, while daily-record storage, wage calculation, and formatting are split into dedicated Swift files.
 
 ## Native Onboarding
 
@@ -45,7 +45,13 @@ All five target PNGs are expected to remain `1536 x 1024` with `hasAlpha: yes`. 
 
 ## Core State
 
-Native source: `WNF/WageState.swift`
+Native sources:
+
+- `WNF/WageState.swift`: shared `ObservableObject`, editable settings, date-boundary lifecycle, current-day snapshots, and backfill orchestration.
+- `WNF/DailyRecordStorage.swift`: `StorageKey`, `DailyWageRecord`, storage envelope, legacy migration, decode recovery, recovery-key writes, and storage logging.
+- `WNF/WageCalculator.swift`: `WageDay`, `WorkStatus`, pure wage calculation, and `DateComponents` minute/clock helpers.
+- `WNF/WageFormatting.swift`: amount and duration formatting helpers used by home, records, onboarding, and share surfaces.
+- `WNF/ShareCard.swift`: share-card copy pool, dim backdrop, overlay, card layout, icon controls, and the `UIActivityViewController` wrapper.
 
 The native app owns editable settings in one shared `WageState` instance injected through `EnvironmentObject`. It initializes from `UserDefaults`, normalizes loaded values into the supported ranges, writes the normalized settings back during initialization, and writes every editable setting back on change:
 
@@ -62,11 +68,11 @@ The native app owns editable settings in one shared `WageState` instance injecte
 
 Times are stored as minutes since midnight and normalize to `0...1439` on load. Selected weekdays are stored as a sorted `[Int]` using the same `0...6` Monday-through-Sunday index contract as the UI. Salary still clamps to `0...100000`; monthly workdays still clamp to `1...31`. First-launch completion remains separate at `wnf.onboarding.completed` via `RootView`.
 
-Daily record history is also owned by `WageState`:
+Daily record history lifecycle is owned by `WageState`; storage encoding, migration, and recovery helpers live in `DailyRecordStorage.swift`:
 
 - `wnf.records.daily` stores a JSON-encoded `DailyRecordStorageEnvelope` with `schemaVersion` and a `[dateKey: DailyWageRecord]` dictionary, keyed as `yyyy-MM-dd` in the current calendar. Current schema version is `1`.
-- Existing pre-envelope installs that stored a bare `[dateKey: DailyWageRecord]` dictionary are still readable. On first read, `WageState` preserves the original raw data at `wnf.records.daily.rawBackup.legacy`, migrates the main key to the versioned envelope, and logs the migration.
-- Decode failures no longer fail silently. `WageState` logs the envelope and legacy decode errors, preserves the raw payload at `wnf.records.daily.rawBackup.decodeFailed`, and returns an empty in-memory record set only after the raw data is saved for recovery/migration work. After a decode failure, writes are redirected to `wnf.records.daily.recovery.decodeFailed` so the primary raw payload is not overwritten. The active recovery key is persisted at `wnf.records.daily.recovery.activeKey`; later launches try that key, `wnf.records.daily.recovery.decodeFailed`, and `wnf.records.daily.recovery.unsupported` as fallbacks before starting empty. Future unsupported schema versions are backed up at `wnf.records.daily.rawBackup.unsupported` and redirect writes to `wnf.records.daily.recovery.unsupported`.
+- Existing pre-envelope installs that stored a bare `[dateKey: DailyWageRecord]` dictionary are still readable. On first read, `DailyRecordStorage.swift` preserves the original raw data at `wnf.records.daily.rawBackup.legacy`, migrates the main key to the versioned envelope, and logs the migration.
+- Decode failures no longer fail silently. `DailyRecordStorage.swift` logs the envelope and legacy decode errors, preserves the raw payload at `wnf.records.daily.rawBackup.decodeFailed`, and returns an empty in-memory record set only after the raw data is saved for recovery/migration work. After a decode failure, writes are redirected to `wnf.records.daily.recovery.decodeFailed` so the primary raw payload is not overwritten. The active recovery key is persisted at `wnf.records.daily.recovery.activeKey`; later launches try that key, `wnf.records.daily.recovery.decodeFailed`, and `wnf.records.daily.recovery.unsupported` as fallbacks before starting empty. Future unsupported schema versions are backed up at `wnf.records.daily.rawBackup.unsupported` and redirect writes to `wnf.records.daily.recovery.unsupported`.
 - `DailyWageRecord` captures `earnedToday`, `targetToday`, `elapsedPaidSeconds`, `workdayMinutes`, `hourlyRate`, salary/workday settings, `capturedAt`, and a `source` marker. Existing records without `source` decode as `observed`; corrupt `source` values still throw instead of being silently coerced. New optional/defaulted fields should continue to use explicit `decodeIfPresent` defaults in the custom decoder.
 - `WageState` publishes `currentDateKey` only when the calendar date changes. A one-shot day-boundary timer, foreground refresh, and scene-phase snapshot path keep cross-midnight closure working without a global one-second `ObservableObject` tick.
 - `WNFApp` pauses the day-boundary timer whenever the scene leaves `.active`; returning to `.active` refreshes the date immediately and recreates the timer.
@@ -128,7 +134,7 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 - The home mascot slot now renders transparent `WNF/home-typing.mov` and `WNF/home-bored.mov` clips through an `AVPlayerLayer` SwiftUI wrapper. `RootView` owns one stable `HomeMascotVideoController` and injects it into Home, so tab transitions can recreate `HomeView` without rebuilding the `AVQueuePlayer` pipeline. The controller keeps upcoming local clips prequeued, shuffles the clip order for each full cycle, avoids repeating the last clip at the cycle boundary, and mutes playback. Home appear/disappear only starts or pauses playback; Root scene-phase handling releases the queue with `removeAllItems()` when the app enters background and reloads it only when Home is active again. `HomeMascotVideoController` also clears the queue on `UIApplication.didReceiveMemoryWarningNotification`.
 - The mascot speech bubble and decorative yen coins are owned by the local `HomeMascotStage`. Coin offsets are calculated from that stage's actual layout width through `GeometryReader`, not from `UIScreen.main.bounds`, so iPad split view, Stage Manager, and rotation can reflow the home decoration.
 - Opening the share card blurs the existing home content and adds a full-bleed dimmed overlay that covers the status bar and bottom home-indicator areas.
-- `RootView` owns the stable full-screen backdrop, share card presentation, and export sheet so the dimmed safe-area coverage does not depend on the card transition or tab-content transition; `HomeView` only requests presentation and blurs its own home content while the card is open.
+- `RootView` owns share card presentation state and export sheet triggering so the dimmed safe-area coverage does not depend on the card transition or tab-content transition; `ShareCard.swift` owns the backdrop/overlay/card components, while `HomeView` only requests presentation and blurs its own home content while the card is open.
 - Share card presentation uses opacity-only insertion/removal so the card bounds stay fixed throughout the transition.
 - Share card content must include `今日窝囊费` and `上班上了多久`.
 - Share card title/subtitle copy is selected from `ShareCardCopy.pool` every time the home share action opens the card. The picker excludes the currently displayed pair when possible, so repeated opens visibly refresh the wording.

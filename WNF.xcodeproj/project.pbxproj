@@ -19,6 +19,10 @@
 		100000000000000000000110 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000210 /* OnboardingView.swift */; };
 		100000000000000000000111 /* home-typing.mov in Resources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000211 /* home-typing.mov */; };
 		100000000000000000000112 /* home-bored.mov in Resources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000212 /* home-bored.mov */; };
+		100000000000000000000113 /* DailyRecordStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000213 /* DailyRecordStorage.swift */; };
+		100000000000000000000114 /* WageCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000214 /* WageCalculator.swift */; };
+		100000000000000000000115 /* WageFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000215 /* WageFormatting.swift */; };
+		100000000000000000000116 /* ShareCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000216 /* ShareCard.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,6 +39,10 @@
 		100000000000000000000210 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		100000000000000000000211 /* home-typing.mov */ = {isa = PBXFileReference; lastKnownFileType = video.quicktime; path = "home-typing.mov"; sourceTree = "<group>"; };
 		100000000000000000000212 /* home-bored.mov */ = {isa = PBXFileReference; lastKnownFileType = video.quicktime; path = "home-bored.mov"; sourceTree = "<group>"; };
+		100000000000000000000213 /* DailyRecordStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyRecordStorage.swift; sourceTree = "<group>"; };
+		100000000000000000000214 /* WageCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WageCalculator.swift; sourceTree = "<group>"; };
+		100000000000000000000215 /* WageFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WageFormatting.swift; sourceTree = "<group>"; };
+		100000000000000000000216 /* ShareCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareCard.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -61,10 +69,14 @@
 			children = (
 				100000000000000000000201 /* WNFApp.swift */,
 				100000000000000000000202 /* WageState.swift */,
+				100000000000000000000213 /* DailyRecordStorage.swift */,
+				100000000000000000000214 /* WageCalculator.swift */,
+				100000000000000000000215 /* WageFormatting.swift */,
 				100000000000000000000203 /* Theme.swift */,
 				100000000000000000000204 /* RootView.swift */,
 				100000000000000000000205 /* SharedViews.swift */,
 				100000000000000000000206 /* HomeView.swift */,
+				100000000000000000000216 /* ShareCard.swift */,
 				100000000000000000000207 /* RecordsView.swift */,
 				100000000000000000000208 /* SettingsView.swift */,
 				100000000000000000000210 /* OnboardingView.swift */,
@@ -158,10 +170,14 @@
 			files = (
 				100000000000000000000101 /* WNFApp.swift in Sources */,
 				100000000000000000000102 /* WageState.swift in Sources */,
+				100000000000000000000113 /* DailyRecordStorage.swift in Sources */,
+				100000000000000000000114 /* WageCalculator.swift in Sources */,
+				100000000000000000000115 /* WageFormatting.swift in Sources */,
 				100000000000000000000103 /* Theme.swift in Sources */,
 				100000000000000000000104 /* RootView.swift in Sources */,
 				100000000000000000000105 /* SharedViews.swift in Sources */,
 				100000000000000000000106 /* HomeView.swift in Sources */,
+				100000000000000000000116 /* ShareCard.swift in Sources */,
 				100000000000000000000107 /* RecordsView.swift in Sources */,
 				100000000000000000000108 /* SettingsView.swift in Sources */,
 				100000000000000000000110 /* OnboardingView.swift in Sources */,

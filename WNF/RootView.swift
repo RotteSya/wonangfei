@@ -280,21 +280,6 @@ struct RootView: View {
     }
 }
 
-private struct ShareCardBackdrop: View {
-    var isPresented: Bool
-    var onDismiss: () -> Void
-
-    var body: some View {
-        Color(red: 0.27, green: 0.25, blue: 0.21)
-            .opacity(isPresented ? 0.46 : 0)
-            .ignoresSafeArea(.container, edges: .all)
-            .contentShape(Rectangle())
-            .allowsHitTesting(isPresented)
-            .onTapGesture(perform: onDismiss)
-            .animation(.easeInOut(duration: 0.18), value: isPresented)
-    }
-}
-
 struct AppTabBar: View {
     @Binding var selectedTab: AppTab
 

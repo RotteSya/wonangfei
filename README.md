@@ -54,12 +54,12 @@ XcodeBuildMCP 已在 `.xcodebuildmcp/config.yaml` 持久化默认值：project `
 
 - 首页工资实时计算、隐私打码、进度条。
 - 首页吉祥物位使用透明循环视频序列：`home-typing.mov` 和 `home-bored.mov` 每轮随机排序后连续播放；视频控制器由 `RootView` 稳定持有，切换 tab 时只暂停/恢复，不重建 AVQueuePlayer 队列；进入后台或收到内存警告时会清空队列，回到首页活跃态再重新装载。
-- 首页分享卡片：背景虚化、今日窝囊费/上班时长、卡片内隐藏敏感信息、系统分享和退出；系统分享渲图期间分享按钮会显示 loading 并防重复点击。
+- 首页分享卡片：背景虚化、今日窝囊费/上班时长、卡片内隐藏敏感信息、系统分享和退出；系统分享渲图期间分享按钮会显示 loading 并防重复点击，分享卡组件集中在 `WNF/ShareCard.swift`。
 - 底部 tab 切换：页面内容按 tab 顺序横向滑入/滑出，并与胶囊选中态同步过渡。
 - 首次启动引导：4 屏 SwiftUI onboarding、第一页参考大图优先的 intro 布局、跳过/返回/分页控制、月薪/作息/午休设置和最终确认。
-- 记录页周 / 月 / 年切换、柱状图选中态、成就和徽章模块；金额来自 `WNF/WageState.swift` 的 `wnf.records.daily` 每日快照，今日金额按记录页聚合快照计入，跨日或 App 离开活跃前台时写回本机，并暂停跨日计时器；回到活跃前台会刷新日期并重建计时器，多天未打开时会补齐中间日期。
+- 记录页周 / 月 / 年切换、柱状图选中态、成就和徽章模块；金额来自 `WageState` 暴露的 `wnf.records.daily` 每日快照，今日金额按记录页聚合快照计入，跨日或 App 离开活跃前台时写回本机，并暂停跨日计时器；回到活跃前台会刷新日期并重建计时器，多天未打开时会补齐中间日期。
 - 我的页月薪和每月工作日支持 `- / +` 微调，也支持点中间数字弹出快速输入框；时间、午休和加班状态可编辑。
-- `WNF/WageState.swift` 从 `UserDefaults` 读取并写回月薪、每月工作日、上下班时间、午休时间、午休开关、加班开关、隐私模式和工作日选择；每日记录以带 `schemaVersion` 的 JSON envelope 存入 `wnf.records.daily`，内部仍按日期键保存 `DailyWageRecord`，并用 `source` 区分 observed / backfilled；旧版裸字典会在读取时迁移并保留 raw backup，解码/编码失败会写系统日志，且失败后的写入会转到持久化的 recovery key，后续启动会优先读回该 recovery key，避免覆盖主 raw payload 或丢失恢复期新增记录；秒级金额刷新限制在首页本地 `TimelineView`，共享状态只在日期键跨日、记录或设置变化时发布；首次引导完成状态继续使用 `wnf.onboarding.completed`。
+- `WNF/WageState.swift` 保留共享 `ObservableObject`、设置读写、跨日快照和补记生命周期；`WNF/DailyRecordStorage.swift` 承载 `StorageKey`、`DailyWageRecord`、schema envelope、旧格式迁移和 recovery-key 写入保护；`WNF/WageCalculator.swift` 承载 `WageDay` / `WorkStatus` / 纯工资计算和时间组件工具；`WNF/WageFormatting.swift` 承载金额与时长格式化。每日记录以带 `schemaVersion` 的 JSON envelope 存入 `wnf.records.daily`，内部仍按日期键保存 `DailyWageRecord`，并用 `source` 区分 observed / backfilled；旧版裸字典会在读取时迁移并保留 raw backup，解码/编码失败会写系统日志，且失败后的写入会转到持久化的 recovery key，后续启动会优先读回该 recovery key，避免覆盖主 raw payload 或丢失恢复期新增记录；秒级金额刷新限制在首页本地 `TimelineView`，共享状态只在日期键跨日、记录或设置变化时发布；首次引导完成状态继续使用 `wnf.onboarding.completed`。
 - `assets/mascot` 中的主吉祥物和 Cow pose 已接入 `WNF/Assets.xcassets`。
 - 首页视频源来自 `/Users/shelingzhao/Documents/窝囊费素材/精灵图/打电脑透明.mov` 和 `/Users/shelingzhao/Documents/窝囊费素材/精灵图/无聊透明.mov`，当前以 `WNF/home-typing.mov`、`WNF/home-bored.mov` 打包进 app resources。
 

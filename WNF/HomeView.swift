@@ -122,7 +122,6 @@ private struct HomeMascotStage: View {
 }
 
 private struct HomeMascotVideoSequence: View {
-    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var controller: HomeMascotVideoController
 
     var body: some View {
@@ -133,13 +132,6 @@ private struct HomeMascotVideoSequence: View {
             }
             .onDisappear {
                 controller.pause()
-            }
-            .onChange(of: scenePhase) { _, newPhase in
-                if newPhase == .active {
-                    controller.start()
-                } else {
-                    controller.pause()
-                }
             }
     }
 }
@@ -185,18 +177,22 @@ final class HomeMascotVideoController: ObservableObject {
     private var pendingClips: [HomeMascotVideoClip] = []
     private var lastPlayedClip: HomeMascotVideoClip?
     private var endObserver: NSObjectProtocol?
+    private var memoryWarningObserver: NSObjectProtocol?
+    private var isPlaybackRequested = false
     private let minimumQueuedItemCount = 3
 
     init() {
         self.clips = HomeMascotVideoClip.all
         configurePlayer()
         installEndObserver()
+        installMemoryWarningObserver()
     }
 
     fileprivate init(clips: [HomeMascotVideoClip]) {
         self.clips = clips
         configurePlayer()
         installEndObserver()
+        installMemoryWarningObserver()
     }
 
     private func configurePlayer() {
@@ -209,15 +205,27 @@ final class HomeMascotVideoController: ObservableObject {
         if let endObserver {
             NotificationCenter.default.removeObserver(endObserver)
         }
+        if let memoryWarningObserver {
+            NotificationCenter.default.removeObserver(memoryWarningObserver)
+        }
     }
 
     func start() {
+        isPlaybackRequested = true
         fillQueue()
         player.play()
     }
 
     func pause() {
+        isPlaybackRequested = false
         player.pause()
+    }
+
+    func releaseQueue() {
+        isPlaybackRequested = false
+        player.pause()
+        player.removeAllItems()
+        pendingClips.removeAll(keepingCapacity: true)
     }
 
     private func fillQueue() {
@@ -269,7 +277,18 @@ final class HomeMascotVideoController: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
+            guard self?.isPlaybackRequested == true else { return }
             self?.fillQueue()
+        }
+    }
+
+    private func installMemoryWarningObserver() {
+        memoryWarningObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.releaseQueue()
         }
     }
 }

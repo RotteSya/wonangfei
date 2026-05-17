@@ -34,6 +34,7 @@ enum AppTab: String, CaseIterable, Identifiable {
 }
 
 struct RootView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var state: WageState
     @StateObject private var homeMascotVideoController = HomeMascotVideoController()
     @State private var selectedTab: AppTab = .home
@@ -79,6 +80,9 @@ struct RootView: View {
             }
         }
         .preferredColorScheme(.light)
+        .onChange(of: scenePhase) { _, newPhase in
+            handleScenePhase(newPhase)
+        }
     }
 
     private func startHomeEntrance() {
@@ -183,6 +187,21 @@ struct RootView: View {
 
         withAnimation(.snappy(duration: 0.32, extraBounce: 0.02)) {
             selectedTab = tab
+        }
+    }
+
+    private func handleScenePhase(_ phase: ScenePhase) {
+        switch phase {
+        case .active:
+            if selectedTab == .home && (onboardingCompleted || entryAnimating) {
+                homeMascotVideoController.start()
+            }
+        case .inactive:
+            homeMascotVideoController.pause()
+        case .background:
+            homeMascotVideoController.releaseQueue()
+        @unknown default:
+            homeMascotVideoController.pause()
         }
     }
 

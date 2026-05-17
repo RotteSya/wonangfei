@@ -53,7 +53,7 @@ XcodeBuildMCP 已在 `.xcodebuildmcp/config.yaml` 持久化默认值：project `
 已实现：
 
 - 首页工资实时计算、隐私打码、进度条。
-- 首页吉祥物位使用透明循环视频序列：`home-typing.mov` 和 `home-bored.mov` 每轮随机排序后连续播放。
+- 首页吉祥物位使用透明循环视频序列：`home-typing.mov` 和 `home-bored.mov` 每轮随机排序后连续播放；视频控制器由 `RootView` 稳定持有，切换 tab 时只暂停/恢复，不重建 AVQueuePlayer 队列。
 - 首页分享卡片：背景虚化、今日窝囊费/上班时长、卡片内隐藏敏感信息、系统分享和退出。
 - 底部 tab 切换：页面内容按 tab 顺序横向滑入/滑出，并与胶囊选中态同步过渡。
 - 首次启动引导：4 屏 SwiftUI onboarding、第一页参考大图优先的 intro 布局、跳过/返回/分页控制、月薪/作息/午休设置和最终确认。

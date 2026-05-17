@@ -93,7 +93,7 @@ private struct HeroHomePage: View {
 
 private struct HomeMascotVideoSequence: View {
     @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var controller = HomeMascotVideoController()
+    @EnvironmentObject private var controller: HomeMascotVideoController
 
     var body: some View {
         HomeMascotPlayerView(player: controller.player)
@@ -149,7 +149,7 @@ private final class PlayerLayerView: UIView {
     }
 }
 
-private final class HomeMascotVideoController: ObservableObject {
+final class HomeMascotVideoController: ObservableObject {
     let player = AVQueuePlayer()
     private let clips: [HomeMascotVideoClip]
     private var pendingClips: [HomeMascotVideoClip] = []
@@ -157,12 +157,22 @@ private final class HomeMascotVideoController: ObservableObject {
     private var endObserver: NSObjectProtocol?
     private let minimumQueuedItemCount = 3
 
-    init(clips: [HomeMascotVideoClip] = HomeMascotVideoClip.all) {
+    init() {
+        self.clips = HomeMascotVideoClip.all
+        configurePlayer()
+        installEndObserver()
+    }
+
+    fileprivate init(clips: [HomeMascotVideoClip]) {
         self.clips = clips
+        configurePlayer()
+        installEndObserver()
+    }
+
+    private func configurePlayer() {
         player.isMuted = true
         player.allowsExternalPlayback = false
         player.actionAtItemEnd = .advance
-        installEndObserver()
     }
 
     deinit {
@@ -614,4 +624,5 @@ private struct YenCoin: View {
 #Preview {
     HomeView()
         .environmentObject(WageState())
+        .environmentObject(HomeMascotVideoController())
 }

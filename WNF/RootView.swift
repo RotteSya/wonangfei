@@ -35,6 +35,7 @@ enum AppTab: String, CaseIterable, Identifiable {
 
 struct RootView: View {
     @EnvironmentObject private var state: WageState
+    @StateObject private var homeMascotVideoController = HomeMascotVideoController()
     @State private var selectedTab: AppTab = .home
     @State private var tabTransitionDirection = 1
     @State private var entryAnimating = false
@@ -154,6 +155,7 @@ struct RootView: View {
         switch selectedTab {
         case .home:
             HomeView(isShareCardPresented: $homeSharePresented, onShare: presentShareCard)
+                .environmentObject(homeMascotVideoController)
         case .records:
             RecordsView()
         case .settings:

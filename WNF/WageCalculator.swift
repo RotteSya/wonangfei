@@ -27,36 +27,6 @@ enum WorkStatus {
     case lunch
     case afternoon
     case done
-
-    var label: String {
-        switch self {
-        case .before: "尚未开工"
-        case .morning: "上午搬砖中"
-        case .lunch: "午休回血"
-        case .afternoon: "下午挺挺"
-        case .done: "今日通关"
-        }
-    }
-
-    var quote: String {
-        switch self {
-        case .before: "别急，钱还没开始挣。"
-        case .morning: "早上的两小时最值钱。"
-        case .lunch: "吃饭的时候不发工资。"
-        case .afternoon: "再忍忍，钱在涨。"
-        case .done: "今天又把房租挣回来了。"
-        }
-    }
-
-    var mascotAsset: String {
-        switch self {
-        case .before: "CowFrontSad"
-        case .morning: "CowThreeQ"
-        case .lunch: "CowFrontSad"
-        case .afternoon: "CowFrontSad"
-        case .done: "CowThreeQ"
-        }
-    }
 }
 
 enum WageCalculator {

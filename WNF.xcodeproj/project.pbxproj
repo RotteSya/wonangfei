@@ -24,6 +24,7 @@
 		100000000000000000000115 /* WageFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000215 /* WageFormatting.swift */; };
 		100000000000000000000116 /* ShareCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000216 /* ShareCard.swift */; };
 		100000000000000000000117 /* HomeMascotVideoSessionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000217 /* HomeMascotVideoSessionCoordinator.swift */; };
+		100000000000000000000118 /* WorkStatusPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000218 /* WorkStatusPresentation.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -45,6 +46,7 @@
 		100000000000000000000215 /* WageFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WageFormatting.swift; sourceTree = "<group>"; };
 		100000000000000000000216 /* ShareCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareCard.swift; sourceTree = "<group>"; };
 		100000000000000000000217 /* HomeMascotVideoSessionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeMascotVideoSessionCoordinator.swift; sourceTree = "<group>"; };
+		100000000000000000000218 /* WorkStatusPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkStatusPresentation.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -73,6 +75,7 @@
 				100000000000000000000202 /* WageState.swift */,
 				100000000000000000000213 /* DailyRecordStorage.swift */,
 				100000000000000000000214 /* WageCalculator.swift */,
+				100000000000000000000218 /* WorkStatusPresentation.swift */,
 				100000000000000000000215 /* WageFormatting.swift */,
 				100000000000000000000203 /* Theme.swift */,
 				100000000000000000000204 /* RootView.swift */,
@@ -175,6 +178,7 @@
 				100000000000000000000102 /* WageState.swift in Sources */,
 				100000000000000000000113 /* DailyRecordStorage.swift in Sources */,
 				100000000000000000000114 /* WageCalculator.swift in Sources */,
+				100000000000000000000118 /* WorkStatusPresentation.swift in Sources */,
 				100000000000000000000115 /* WageFormatting.swift in Sources */,
 				100000000000000000000103 /* Theme.swift in Sources */,
 				100000000000000000000104 /* RootView.swift in Sources */,

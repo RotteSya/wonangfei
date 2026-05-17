@@ -103,6 +103,10 @@ struct WonangfeiShareCard: View {
     var onShare: () -> Void
     var onDismiss: () -> Void
 
+    private var statusPresentation: WorkStatusPresentation {
+        WorkStatusPresentation(status: day.status)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -192,7 +196,7 @@ struct WonangfeiShareCard: View {
 
                 Spacer(minLength: 0)
 
-                Image(day.status.mascotAsset)
+                Image(statusPresentation.mascotAssetName)
                     .resizable()
                     .scaledToFit()
                     .frame(width: 66, height: 66)
@@ -310,10 +314,139 @@ private struct ShareCardIconButton: View {
 
 struct ActivityView: UIViewControllerRepresentable {
     var activityItems: [Any]
+    @Binding var isPresented: Bool
 
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    func makeCoordinator() -> Coordinator {
+        Coordinator(isPresented: $isPresented)
     }
 
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+    func makeUIViewController(context: Context) -> ActivityPresenterViewController {
+        let controller = ActivityPresenterViewController()
+        controller.onDismiss = { context.coordinator.dismiss() }
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: ActivityPresenterViewController, context: Context) {
+        uiViewController.activityItems = activityItems
+        uiViewController.onDismiss = { context.coordinator.dismiss() }
+
+        if isPresented {
+            uiViewController.presentActivityIfNeeded()
+        } else {
+            uiViewController.dismissActivityIfNeeded()
+        }
+    }
+
+    final class Coordinator {
+        private var isPresented: Binding<Bool>
+
+        init(isPresented: Binding<Bool>) {
+            self.isPresented = isPresented
+        }
+
+        func dismiss() {
+            DispatchQueue.main.async {
+                self.isPresented.wrappedValue = false
+            }
+        }
+    }
+}
+
+final class ActivityPresenterViewController: UIViewController, UIAdaptivePresentationControllerDelegate {
+    var activityItems: [Any] = []
+    var onDismiss: (() -> Void)?
+
+    private weak var activityController: UIActivityViewController?
+    private var shouldPresentWhenVisible = false
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .clear
+        view.isUserInteractionEnabled = false
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+
+        if shouldPresentWhenVisible {
+            presentActivityIfNeeded()
+        }
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+
+        if let activityController {
+            configurePopover(for: activityController)
+        }
+    }
+
+    @MainActor
+    func presentActivityIfNeeded() {
+        guard activityController == nil else {
+            if let activityController {
+                configurePopover(for: activityController)
+            }
+            return
+        }
+
+        guard view.window != nil else {
+            shouldPresentWhenVisible = true
+            return
+        }
+
+        guard !activityItems.isEmpty else {
+            finishActivity()
+            return
+        }
+
+        shouldPresentWhenVisible = false
+
+        let controller = UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+        controller.presentationController?.delegate = self
+        controller.completionWithItemsHandler = { [weak self] _, _, _, _ in
+            self?.finishActivity()
+        }
+        configurePopover(for: controller)
+
+        activityController = controller
+        present(controller, animated: true)
+    }
+
+    @MainActor
+    func dismissActivityIfNeeded() {
+        shouldPresentWhenVisible = false
+
+        guard let activityController else { return }
+        self.activityController = nil
+        activityController.dismiss(animated: true)
+    }
+
+    func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+        guard presentationController.presentedViewController === activityController else { return }
+        finishActivity()
+    }
+
+    private func configurePopover(for controller: UIActivityViewController) {
+        guard let popover = controller.popoverPresentationController else { return }
+
+        popover.sourceView = view
+        popover.sourceRect = popoverSourceRect
+        popover.permittedArrowDirections = []
+    }
+
+    private var popoverSourceRect: CGRect {
+        let bounds = view.bounds
+        guard bounds.width > 0, bounds.height > 0 else {
+            return CGRect(x: 0, y: 0, width: 1, height: 1)
+        }
+
+        return CGRect(x: bounds.midX, y: bounds.midY, width: 1, height: 1)
+    }
+
+    private func finishActivity() {
+        shouldPresentWhenVisible = false
+        activityController = nil
+        onDismiss?()
+    }
 }

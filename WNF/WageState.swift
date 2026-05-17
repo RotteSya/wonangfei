@@ -275,9 +275,12 @@ final class WageState: ObservableObject {
     }
 
     private func makeBackfilledDailyRecord(for date: Date, capturedAt: Date) -> DailyWageRecord {
-        let snapshotDate = Self.endOfDay(for: date)
-        let day = calculation(at: snapshotDate)
-        guard selectedWeekdays.contains(Self.weekdayIndex(for: date)) else {
+        makeDailyRecord(for: Self.endOfDay(for: date), capturedAt: capturedAt, source: .backfilled)
+    }
+
+    private func makeDailyRecord(for date: Date, capturedAt: Date, source: DailyRecordSource) -> DailyWageRecord {
+        let day = calculation(at: date)
+        guard isPaidWorkday(date) else {
             return DailyWageRecord(
                 dateKey: Self.dateKey(for: date),
                 earnedToday: 0,
@@ -288,15 +291,10 @@ final class WageState: ObservableObject {
                 monthlySalary: monthlySalary,
                 workdaysPerMonth: workdaysPerMonth,
                 capturedAt: capturedAt,
-                source: .backfilled
+                source: source
             )
         }
 
-        return makeDailyRecord(for: snapshotDate, capturedAt: capturedAt, source: .backfilled)
-    }
-
-    private func makeDailyRecord(for date: Date, capturedAt: Date, source: DailyRecordSource) -> DailyWageRecord {
-        let day = calculation(at: date)
         return DailyWageRecord(
             dateKey: Self.dateKey(for: date),
             earnedToday: day.earnedToday,
@@ -309,6 +307,10 @@ final class WageState: ObservableObject {
             capturedAt: capturedAt,
             source: source
         )
+    }
+
+    private func isPaidWorkday(_ date: Date) -> Bool {
+        selectedWeekdays.contains(Self.weekdayIndex(for: date))
     }
 
     private func persistEditableSettings() {

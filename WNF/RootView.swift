@@ -52,6 +52,33 @@ struct RootView: View {
     private static let shareExportWidth: CGFloat = 360
     private static let shareLoadingRefreshDelayNanoseconds: UInt64 = 16_000_000
 
+    private enum EntranceTiming {
+        static let shellResponse: TimeInterval = 0.82
+        static let shellDampingFraction: Double = 0.82
+        static let onboardingExitDuration: TimeInterval = 0.46
+        static let burstDelay: TimeInterval = 0.04
+        static let burstResponse: TimeInterval = 0.9
+        static let burstDampingFraction: Double = 0.74
+        static let completionBufferAfterExit: TimeInterval = 0.22
+        static let cleanupDuration: TimeInterval = 0.22
+        static let holdAfterBurstResponse: TimeInterval = 0.34
+
+        static let shellAnimation = Animation.spring(response: shellResponse, dampingFraction: shellDampingFraction)
+        static let onboardingExitAnimation = Animation.easeInOut(duration: onboardingExitDuration)
+        static let burstAnimation = Animation.spring(response: burstResponse, dampingFraction: burstDampingFraction)
+        static let cleanupAnimation = Animation.easeOut(duration: cleanupDuration)
+
+        private static let onboardingCommitOffset = onboardingExitDuration + completionBufferAfterExit
+        private static let cleanupOffset = burstDelay + burstResponse + holdAfterBurstResponse
+        static let onboardingCommitDelayAfterBurst = max(0, onboardingCommitOffset - burstDelay)
+        static let cleanupDelayAfterCommit = max(0, cleanupOffset - onboardingCommitOffset)
+
+        static func sleep(_ seconds: TimeInterval) async throws {
+            let nanoseconds = UInt64((max(0, seconds) * 1_000_000_000).rounded())
+            try await Task.sleep(nanoseconds: nanoseconds)
+        }
+    }
+
     private var day: WageDay { state.calculation }
     private var isHomeMascotSessionVisible: Bool { onboardingCompleted || entryAnimating }
 
@@ -63,7 +90,7 @@ struct RootView: View {
                     .opacity(entryAnimating && !entryExpanded ? 0.18 : 1)
                     .blur(radius: entryAnimating && !entryExpanded ? 12 : 0)
                     .allowsHitTesting(onboardingCompleted && !entryAnimating)
-                    .animation(.spring(response: 0.82, dampingFraction: 0.82), value: entryExpanded)
+                    .animation(EntranceTiming.shellAnimation, value: entryExpanded)
             }
 
             if !onboardingCompleted {
@@ -74,7 +101,7 @@ struct RootView: View {
                 .opacity(entryAnimating ? 0 : 1)
                 .blur(radius: entryAnimating ? 16 : 0)
                 .transition(.opacity)
-                .animation(.easeInOut(duration: 0.46), value: entryAnimating)
+                .animation(EntranceTiming.onboardingExitAnimation, value: entryAnimating)
             }
 
             if entryAnimating {
@@ -103,22 +130,26 @@ struct RootView: View {
         entryExpanded = false
         syncHomeMascotVideoSession()
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.04) {
-            withAnimation(.spring(response: 0.9, dampingFraction: 0.74)) {
-                entryExpanded = true
-            }
-        }
+        Task { @MainActor in
+            do {
+                try await EntranceTiming.sleep(EntranceTiming.burstDelay)
+                withAnimation(EntranceTiming.burstAnimation) {
+                    entryExpanded = true
+                }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.68) {
-            onboardingCompleted = true
-            syncHomeMascotVideoSession()
-        }
+                try await EntranceTiming.sleep(EntranceTiming.onboardingCommitDelayAfterBurst)
+                onboardingCompleted = true
+                syncHomeMascotVideoSession()
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.28) {
-            withAnimation(.easeOut(duration: 0.22)) {
+                try await EntranceTiming.sleep(EntranceTiming.cleanupDelayAfterCommit)
+                withAnimation(EntranceTiming.cleanupAnimation) {
+                    entryAnimating = false
+                }
+                entryExpanded = false
+            } catch {
                 entryAnimating = false
+                entryExpanded = false
             }
-            entryExpanded = false
         }
     }
 
@@ -157,8 +188,10 @@ struct RootView: View {
                 .zIndex(3)
             }
         }
-        .sheet(isPresented: $isActivityPresented) {
-            ActivityView(activityItems: activityItems)
+        .background {
+            ActivityView(activityItems: activityItems, isPresented: $isActivityPresented)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .allowsHitTesting(false)
         }
     }
 

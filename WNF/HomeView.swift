@@ -34,13 +34,17 @@ private struct HeroHomePage: View {
     var day: WageDay
     var onShare: () -> Void
 
+    private var statusPresentation: WorkStatusPresentation {
+        WorkStatusPresentation(status: day.status)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             TopBar(onShare: onShare)
                 .padding(.top, 2)
 
             VStack(alignment: .leading, spacing: 14) {
-                StatusChip(label: day.status.label)
+                StatusChip(label: statusPresentation.label)
                     .padding(.top, 12)
 
                 VStack(alignment: .leading, spacing: 5) {
@@ -66,7 +70,7 @@ private struct HeroHomePage: View {
 
             Spacer(minLength: 16)
 
-            HomeMascotStage(quote: day.status.quote)
+            HomeMascotStage(quote: statusPresentation.quote)
                 .padding(.bottom, 145)
         }
     }

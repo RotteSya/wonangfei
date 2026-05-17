@@ -23,9 +23,9 @@ When XcodeBuildMCP is available, call `session_show_defaults` first, then `build
 - The active native checkout is a single app target. There is no current `WNFWidget/`, `WageCore.swift`, or `WageDisplayModel.swift` in this tree.
 - `WNF/WageState.swift` owns editable salary, workday, weekday, time, lunch, overtime, and privacy state.
 - `WNF/WageState.swift` persists those editable settings with `UserDefaults` keys under `wnf.settings.*`; first-launch completion remains separate at `wnf.onboarding.completed`.
-- `WNF/WageState.swift` also owns daily record history under `wnf.records.daily`, encoded as a `[yyyy-MM-dd: DailyWageRecord]` JSON dictionary. `WNFApp.swift` persists the current-day snapshot when the app leaves the active scene phase, and `WageState` closes the previous date when `currentDate` crosses into a new calendar day.
+- `WNF/WageState.swift` owns in-memory daily record history and the monotonic `recordsRevision`; `WNF/DailyRecordStorage.swift` owns the `wnf.records.daily` JSON envelope, legacy migration, recovery keys, and shared JSON coders. `WNFApp.swift` persists the current-day snapshot when the app leaves the active scene phase, and `WageState` closes the previous date when `currentDate` crosses into a new calendar day.
 - `WNF/HomeView.swift`, `WNF/RecordsView.swift`, and `WNF/SettingsView.swift` consume shared state directly.
-- `WNF/RecordsView.swift` must aggregate week/month/year chart data from `WageState.dailyRecord(for:includingLiveToday:)`; do not reintroduce hard-coded chart multipliers for production records.
+- `WNF/RecordsView.swift` must aggregate week/month/year chart data from the record-backed snapshot (`dailyRecords` payload, `recordsRevision` cache key, and current-day calculation); do not reintroduce hard-coded chart multipliers or full-dictionary cache equality for production records.
 - `WNF/OnboardingView.swift` owns the first-launch onboarding flow and writes through the same `WageState` settings path.
 
 ## Onboarding Asset Rules

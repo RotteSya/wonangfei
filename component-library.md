@@ -146,7 +146,7 @@
 
 ### BarChart
 
-- Current use: record page weekly/monthly/yearly data derived from a memoized `RecordsView` aggregation snapshot keyed by `WageState.currentDateKey`, stored daily records, and live-day wage settings.
+- Current use: record page weekly/monthly/yearly data derived from a memoized `RecordsView` aggregation snapshot. The snapshot reads stored daily records when rebuilt, but cache equality is keyed by `WageState.currentDateKey`, `WageState.recordsRevision`, and live-day wage settings rather than comparing the full records dictionary.
 - Data contract: `RecordBar.amount` is an already-aggregated currency value; do not use visual-only multipliers for production records.
 - Bars: yellow for completed/current periods until selected, ink only for selected, pale cream for future.
 - Interaction:

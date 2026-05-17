@@ -320,6 +320,7 @@ struct RootView: View {
         isActivityPresented = true
     }
 
+    // Main-thread bound: the loading pre-flight gives perceptual feedback, not actual concurrency.
     @MainActor
     private func renderedShareImage<Content: View>(_ content: Content, scale: CGFloat) -> UIImage? {
         let renderer = ImageRenderer(content: content)

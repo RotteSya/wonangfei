@@ -45,6 +45,7 @@ struct RootView: View {
     @State private var shareCardHidesSensitiveInfo = false
     @State private var activityItems: [Any] = []
     @State private var isActivityPresented = false
+    @State private var isPreparingShareActivity = false
     @AppStorage("wnf.onboarding.completed") private var onboardingCompleted = false
 
     private var day: WageDay { state.calculation }
@@ -129,6 +130,7 @@ struct RootView: View {
                     day: day,
                     copy: shareCardCopy,
                     hidesSensitiveInfo: $shareCardHidesSensitiveInfo,
+                    isPreparingShare: isPreparingShareActivity,
                     onShare: presentSystemShare,
                     onDismiss: dismissShareCard
                 )
@@ -194,6 +196,7 @@ struct RootView: View {
     }
 
     private func dismissShareCard() {
+        isPreparingShareActivity = false
         withAnimation(.easeOut(duration: 0.2)) {
             homeSharePresented = false
         }
@@ -201,10 +204,34 @@ struct RootView: View {
 
     @MainActor
     private func presentSystemShare() {
+        guard !isPreparingShareActivity else { return }
+
+        isPreparingShareActivity = true
+        let exportDay = day
+        let exportCopy = shareCardCopy
+        let exportHidesSensitiveInfo = shareCardHidesSensitiveInfo
+
+        Task { @MainActor in
+            await Task.yield()
+            guard homeSharePresented else {
+                isPreparingShareActivity = false
+                return
+            }
+
+            renderAndPresentSystemShare(
+                day: exportDay,
+                copy: exportCopy,
+                hidesSensitiveInfo: exportHidesSensitiveInfo
+            )
+        }
+    }
+
+    @MainActor
+    private func renderAndPresentSystemShare(day: WageDay, copy: ShareCardCopy, hidesSensitiveInfo: Bool) {
         let exportCard = WonangfeiShareCard(
             day: day,
-            copy: shareCardCopy,
-            hidesSensitiveInfo: shareCardHidesSensitiveInfo,
+            copy: copy,
+            hidesSensitiveInfo: hidesSensitiveInfo,
             showsControls: false,
             onTogglePrivacy: {},
             onShare: {},
@@ -219,17 +246,18 @@ struct RootView: View {
         if let image = renderer.uiImage {
             activityItems = [image]
         } else {
-            activityItems = [shareFallbackText]
+            activityItems = [shareFallbackText(day: day, hidesSensitiveInfo: hidesSensitiveInfo)]
         }
+        isPreparingShareActivity = false
         isActivityPresented = true
     }
 
-    private var shareFallbackText: String {
-        "今天挣了 \(WNFFormat.moneyDecimal(day.earnedToday, privacy: shareCardHidesSensitiveInfo))，上班上了 \(shareDurationText)。"
+    private func shareFallbackText(day: WageDay, hidesSensitiveInfo: Bool) -> String {
+        "今天挣了 \(WNFFormat.moneyDecimal(day.earnedToday, privacy: hidesSensitiveInfo))，上班上了 \(shareDurationText(day: day, hidesSensitiveInfo: hidesSensitiveInfo))。"
     }
 
-    private var shareDurationText: String {
-        shareCardHidesSensitiveInfo ? "••h••min" : WNFFormat.duration(day.elapsedPaidMinutes)
+    private func shareDurationText(day: WageDay, hidesSensitiveInfo: Bool) -> String {
+        hidesSensitiveInfo ? "••h••min" : WNFFormat.duration(day.elapsedPaidMinutes)
     }
 }
 

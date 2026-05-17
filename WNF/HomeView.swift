@@ -300,6 +300,7 @@ struct ShareCardOverlay: View {
     var day: WageDay
     var copy: ShareCardCopy
     @Binding var hidesSensitiveInfo: Bool
+    var isPreparingShare: Bool
     var onShare: () -> Void
     var onDismiss: () -> Void
 
@@ -310,6 +311,7 @@ struct ShareCardOverlay: View {
                 copy: copy,
                 hidesSensitiveInfo: hidesSensitiveInfo,
                 showsControls: true,
+                isPreparingShare: isPreparingShare,
                 onTogglePrivacy: {
                     withAnimation(.snappy(duration: 0.18)) {
                         hidesSensitiveInfo.toggle()
@@ -333,6 +335,7 @@ struct WonangfeiShareCard: View {
     var copy: ShareCardCopy = .default
     var hidesSensitiveInfo: Bool
     var showsControls: Bool
+    var isPreparingShare: Bool = false
     var onTogglePrivacy: () -> Void
     var onShare: () -> Void
     var onDismiss: () -> Void
@@ -378,7 +381,9 @@ struct WonangfeiShareCard: View {
                     )
                     ShareCardIconButton(
                         systemName: "square.and.arrow.up",
-                        accessibilityLabel: "唤起系统分享",
+                        accessibilityLabel: isPreparingShare ? "正在生成分享图" : "唤起系统分享",
+                        isLoading: isPreparingShare,
+                        isDisabled: isPreparingShare,
                         action: onShare
                     )
                     ShareCardIconButton(
@@ -510,18 +515,32 @@ struct WonangfeiShareCard: View {
 private struct ShareCardIconButton: View {
     var systemName: String
     var accessibilityLabel: String
+    var isLoading = false
+    var isDisabled = false
     var action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 13, weight: .black))
-                .foregroundStyle(WNFTheme.ink)
-                .frame(width: 32, height: 32)
-                .background(Color.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .shadow(color: .black.opacity(0.07), radius: 5, y: 2)
+            Group {
+                if isLoading {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .tint(WNFTheme.ink)
+                        .scaleEffect(0.68)
+                } else {
+                    Image(systemName: systemName)
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(WNFTheme.ink)
+                }
+            }
+            .frame(width: 32, height: 32)
+            .background(Color.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .shadow(color: .black.opacity(0.07), radius: 5, y: 2)
         }
         .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.72 : 1)
+        .animation(.easeInOut(duration: 0.14), value: isLoading)
         .accessibilityLabel(accessibilityLabel)
     }
 }

@@ -131,7 +131,7 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 - Share card title/subtitle copy is selected from `ShareCardCopy.pool` every time the home share action opens the card. The picker excludes the currently displayed pair when possible, so repeated opens visibly refresh the wording.
 - Share card controls:
   - eye button masks/unmasks card-sensitive values only;
-  - share button renders the card without controls and presents iOS `UIActivityViewController`;
+  - share button enters a loading/disabled state, yields one main-actor turn so the spinner can render, then exports the controls-free card image through SwiftUI `ImageRenderer` and presents iOS `UIActivityViewController`;
   - x button closes the card.
 - Tapping outside the card closes the card. While the card is open, bottom tab bar interaction is disabled.
 

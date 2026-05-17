@@ -107,7 +107,7 @@
 - Copy behavior: `RootView` refreshes the active `ShareCardCopy` from `ShareCardCopy.pool` whenever the home share action opens the card. The current pair is excluded when possible, so consecutive opens do not repeat the same wording.
 - Controls:
   - eye / eye slash masks only the card amount and duration;
-  - share shows an inline loading spinner, disables repeat taps while rendering, and exports a control-free card image through iOS system share; the activity presenter must provide a UIKit popover source view for iPad / Mac Catalyst;
+  - share shows an inline loading spinner, disables repeat taps while rendering, and exports a control-free card image through iOS system share using the current `UIWindowScene.screen.scale`; the activity presenter must provide a UIKit popover source view for iPad / Mac Catalyst;
   - x closes the overlay.
 - Body: active headline pair, small cow pose, dashed-inner stats panel with `今日窝囊费` and `上班上了多久`, and branded footer.
 - Active copy:

@@ -54,7 +54,7 @@ XcodeBuildMCP 已在 `.xcodebuildmcp/config.yaml` 持久化默认值：project `
 
 - 首页工资实时计算、隐私打码、进度条。
 - 首页吉祥物位使用透明循环视频序列：`home-typing.mov` 和 `home-bored.mov` 每轮随机排序后连续播放；视频控制器由 `HomeMascotVideoSessionCoordinator` 稳定持有，`RootView` 只转发 scene phase 和 tab 切换事件；切换 tab 或进入短暂 inactive 时只暂停/恢复，不重建 AVQueuePlayer 队列；进入后台或收到内存警告时才会清空队列，回到首页活跃态再重新装载。
-- 首页分享卡片：背景虚化、今日窝囊费/上班时长、卡片内隐藏敏感信息、系统分享和退出；系统分享渲图期间分享按钮会显示 loading 并防重复点击，渲图前会先让出一帧刷新 UI，再用 SwiftUI `ImageRenderer.render(rasterizationScale:)` 输出系统分享图；`UIActivityViewController` 由根视图背景中的 presenter 呈现，并配置 popover source view，避免 iPad / Mac Catalyst 分享弹窗崩溃；分享卡组件集中在 `WNF/ShareCard.swift`。
+- 首页分享卡片：背景虚化、今日窝囊费/上班时长、卡片内隐藏敏感信息、系统分享和退出；系统分享渲图期间分享按钮会显示 loading 并防重复点击，渲图前会先让出一帧刷新 UI，再用当前 `UIWindowScene.screen.scale` 驱动 SwiftUI `ImageRenderer.render(rasterizationScale:)` 输出系统分享图；`UIActivityViewController` 由根视图背景中的 presenter 呈现，并配置 popover source view，避免 iPad / Mac Catalyst 分享弹窗崩溃；分享卡组件集中在 `WNF/ShareCard.swift`。
 - 底部 tab 切换：页面内容按 tab 顺序横向滑入/滑出，并与胶囊选中态同步过渡。
 - 首次启动引导：4 屏 SwiftUI onboarding、第一页参考大图优先的 intro 布局、跳过/返回/分页控制、月薪/作息/午休设置和最终确认。
 - 记录页周 / 月 / 年切换、柱状图选中态、成就和徽章模块；金额来自 `WageState` 暴露的 `wnf.records.daily` 每日快照，今日金额按记录页聚合快照计入，跨日或 App 离开活跃前台时写回本机，并暂停跨日计时器；回到活跃前台会刷新日期并重建计时器，多天未打开时会补齐中间日期。

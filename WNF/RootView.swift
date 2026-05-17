@@ -34,6 +34,7 @@ enum AppTab: String, CaseIterable, Identifiable {
 }
 
 struct RootView: View {
+    @Environment(\.displayScale) private var displayScale
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var state: WageState
     @StateObject private var homeMascotVideoSession = HomeMascotVideoSessionCoordinator()
@@ -47,6 +48,7 @@ struct RootView: View {
     @State private var activityItems: [Any] = []
     @State private var isActivityPresented = false
     @State private var isPreparingShareActivity = false
+    @State private var windowSceneScale: CGFloat?
     @AppStorage("wnf.onboarding.completed") private var onboardingCompleted = false
 
     private static let shareExportWidth: CGFloat = 360
@@ -81,6 +83,10 @@ struct RootView: View {
 
     private var day: WageDay { state.calculation }
     private var isHomeMascotSessionVisible: Bool { onboardingCompleted || entryAnimating }
+    private var shareRenderScale: CGFloat {
+        let scale = windowSceneScale ?? displayScale
+        return scale > 0 ? scale : 1
+    }
 
     var body: some View {
         ZStack {
@@ -111,6 +117,12 @@ struct RootView: View {
             }
         }
         .preferredColorScheme(.light)
+        .background {
+            WindowSceneScaleReader { scale in
+                windowSceneScale = scale
+            }
+            .allowsHitTesting(false)
+        }
         .onAppear {
             syncHomeMascotVideoSession()
         }
@@ -299,7 +311,7 @@ struct RootView: View {
         )
         .frame(width: Self.shareExportWidth)
 
-        if let image = renderedShareImage(exportCard, scale: UIScreen.main.scale) {
+        if let image = renderedShareImage(exportCard, scale: shareRenderScale) {
             activityItems = [image]
         } else {
             activityItems = [shareFallbackText(day: day, hidesSensitiveInfo: hidesSensitiveInfo)]
@@ -336,6 +348,43 @@ struct RootView: View {
 
     private func shareDurationText(day: WageDay, hidesSensitiveInfo: Bool) -> String {
         hidesSensitiveInfo ? "••h••min" : WNFFormat.duration(day.elapsedPaidMinutes)
+    }
+}
+
+private struct WindowSceneScaleReader: UIViewRepresentable {
+    var onChange: (CGFloat) -> Void
+
+    func makeUIView(context: Context) -> SceneScaleProbeView {
+        let view = SceneScaleProbeView()
+        view.onScaleChange = onChange
+        return view
+    }
+
+    func updateUIView(_ uiView: SceneScaleProbeView, context: Context) {
+        uiView.onScaleChange = onChange
+    }
+
+    final class SceneScaleProbeView: UIView {
+        var onScaleChange: ((CGFloat) -> Void)?
+        private var lastReportedScale: CGFloat?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            reportWindowSceneScale()
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            reportWindowSceneScale()
+        }
+
+        private func reportWindowSceneScale() {
+            guard let scale = window?.windowScene?.screen.scale, scale > 0 else { return }
+            guard lastReportedScale != scale else { return }
+
+            lastReportedScale = scale
+            onScaleChange?(scale)
+        }
     }
 }
 

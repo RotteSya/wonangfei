@@ -1,4 +1,7 @@
 import Foundation
+import OSLog
+
+private let wageStateLogger = Logger(subsystem: "com.wonangfei.app", category: "WageState")
 
 final class WageState: ObservableObject {
     @Published var monthlySalary: Double {
@@ -65,6 +68,7 @@ final class WageState: ObservableObject {
     @Published private(set) var dailyRecords: [String: DailyWageRecord]
 
     private let userDefaults: UserDefaults
+    private var dailyRecordStorageMode: DailyRecordStorageMode
     private var dayBoundaryTimer: Timer?
 
     init(userDefaults: UserDefaults = .standard) {
@@ -82,7 +86,9 @@ final class WageState: ObservableObject {
         selectedWeekdays = userDefaults.weekdaySet(forKey: StorageKey.selectedWeekdays) ?? Default.selectedWeekdays
         let now = Date()
         currentDateKey = Self.dateKey(for: now)
-        dailyRecords = Self.loadDailyRecords(from: userDefaults)
+        let dailyRecordLoadResult = Self.loadDailyRecords(from: userDefaults)
+        dailyRecords = dailyRecordLoadResult.records
+        dailyRecordStorageMode = dailyRecordLoadResult.storageMode
         persistEditableSettings()
 
         closeLastObservedDayIfNeeded(now: now)
@@ -309,8 +315,25 @@ final class WageState: ObservableObject {
     }
 
     private func saveDailyRecords() {
-        guard let data = try? JSONEncoder().encode(dailyRecords) else { return }
-        userDefaults.set(data, forKey: StorageKey.dailyRecords)
+        let storageKey: String
+        switch dailyRecordStorageMode {
+        case .primaryWritable:
+            storageKey = StorageKey.dailyRecords
+        case .recoveryWritesOnly(let recoveryKey):
+            storageKey = recoveryKey
+            wageStateLogger.error(
+                "Primary daily record storage is write-protected after a decode or schema failure; saving current records to \(recoveryKey, privacy: .public)"
+            )
+        }
+
+        do {
+            let store = DailyRecordStorageEnvelope(records: dailyRecords)
+            let data = try JSONEncoder().encode(store)
+            userDefaults.set(data, forKey: storageKey)
+        } catch {
+            let message = String(describing: error)
+            wageStateLogger.error("Failed to encode daily records: \(message, privacy: .public)")
+        }
     }
 
     private func persistEditableSettings() {
@@ -330,13 +353,89 @@ final class WageState: ObservableObject {
         userDefaults.set(Self.dateKey(for: date), forKey: StorageKey.lastObservedDateKey)
     }
 
-    private static func loadDailyRecords(from userDefaults: UserDefaults) -> [String: DailyWageRecord] {
-        guard let data = userDefaults.data(forKey: StorageKey.dailyRecords),
-              let records = try? JSONDecoder().decode([String: DailyWageRecord].self, from: data)
-        else {
-            return [:]
+    private static func loadDailyRecords(from userDefaults: UserDefaults) -> DailyRecordLoadResult {
+        guard let data = userDefaults.data(forKey: StorageKey.dailyRecords) else {
+            return DailyRecordLoadResult(records: [:], storageMode: .primaryWritable)
         }
-        return records
+
+        do {
+            let store = try JSONDecoder().decode(DailyRecordStorageEnvelope.self, from: data)
+            if store.schemaVersion > DailyRecordStorageEnvelope.currentSchemaVersion {
+                preserveRawDailyRecords(
+                    data,
+                    to: StorageKey.dailyRecordsUnsupportedRawBackup,
+                    reason: "unsupported schema version \(store.schemaVersion)",
+                    userDefaults: userDefaults
+                )
+                wageStateLogger.warning(
+                    "Loaded daily records from unsupported schema version \(store.schemaVersion, privacy: .public); current schema version is \(DailyRecordStorageEnvelope.currentSchemaVersion, privacy: .public)"
+                )
+                return DailyRecordLoadResult(
+                    records: store.records,
+                    storageMode: .recoveryWritesOnly(StorageKey.dailyRecordsUnsupportedRecovery)
+                )
+            }
+            return DailyRecordLoadResult(records: store.records, storageMode: .primaryWritable)
+        } catch let envelopeError {
+            do {
+                let records = try JSONDecoder().decode([String: DailyWageRecord].self, from: data)
+                migrateLegacyDailyRecords(records, originalData: data, userDefaults: userDefaults)
+                return DailyRecordLoadResult(records: records, storageMode: .primaryWritable)
+            } catch let legacyError {
+                preserveRawDailyRecords(
+                    data,
+                    to: StorageKey.dailyRecordsDecodeFailedRawBackup,
+                    reason: "decode failed",
+                    userDefaults: userDefaults
+                )
+                let envelopeMessage = String(describing: envelopeError)
+                let legacyMessage = String(describing: legacyError)
+                wageStateLogger.error(
+                    "Failed to decode daily records. envelope: \(envelopeMessage, privacy: .public); legacy: \(legacyMessage, privacy: .public)"
+                )
+                return DailyRecordLoadResult(
+                    records: [:],
+                    storageMode: .recoveryWritesOnly(StorageKey.dailyRecordsDecodeFailedRecovery)
+                )
+            }
+        }
+    }
+
+    private static func migrateLegacyDailyRecords(
+        _ records: [String: DailyWageRecord],
+        originalData: Data,
+        userDefaults: UserDefaults
+    ) {
+        preserveRawDailyRecords(
+            originalData,
+            to: StorageKey.dailyRecordsLegacyRawBackup,
+            reason: "legacy schema migration",
+            userDefaults: userDefaults
+        )
+
+        do {
+            let store = DailyRecordStorageEnvelope(records: records)
+            let data = try JSONEncoder().encode(store)
+            userDefaults.set(data, forKey: StorageKey.dailyRecords)
+            wageStateLogger.info(
+                "Migrated \(records.count, privacy: .public) daily records to schema version \(DailyRecordStorageEnvelope.currentSchemaVersion, privacy: .public)"
+            )
+        } catch {
+            let message = String(describing: error)
+            wageStateLogger.error("Failed to migrate legacy daily records: \(message, privacy: .public)")
+        }
+    }
+
+    private static func preserveRawDailyRecords(
+        _ data: Data,
+        to backupKey: String,
+        reason: String,
+        userDefaults: UserDefaults
+    ) {
+        userDefaults.set(data, forKey: backupKey)
+        userDefaults.set(Date(), forKey: "\(backupKey).createdAt")
+        userDefaults.set(reason, forKey: "\(backupKey).reason")
+        wageStateLogger.info("Preserved raw daily records for \(reason, privacy: .public) at \(backupKey, privacy: .public)")
     }
 
     static func dateKey(for date: Date) -> String {
@@ -378,7 +477,37 @@ private enum StorageKey {
     static let privacyMode = "wnf.settings.privacyMode"
     static let selectedWeekdays = "wnf.settings.selectedWeekdays"
     static let dailyRecords = "wnf.records.daily"
+    static let dailyRecordsLegacyRawBackup = "wnf.records.daily.rawBackup.legacy"
+    static let dailyRecordsUnsupportedRawBackup = "wnf.records.daily.rawBackup.unsupported"
+    static let dailyRecordsDecodeFailedRawBackup = "wnf.records.daily.rawBackup.decodeFailed"
+    static let dailyRecordsUnsupportedRecovery = "wnf.records.daily.recovery.unsupported"
+    static let dailyRecordsDecodeFailedRecovery = "wnf.records.daily.recovery.decodeFailed"
     static let lastObservedDateKey = "wnf.records.lastObservedDateKey"
+}
+
+private struct DailyRecordLoadResult {
+    var records: [String: DailyWageRecord]
+    var storageMode: DailyRecordStorageMode
+}
+
+private enum DailyRecordStorageMode {
+    case primaryWritable
+    case recoveryWritesOnly(String)
+}
+
+private struct DailyRecordStorageEnvelope: Codable {
+    static let currentSchemaVersion = 1
+
+    var schemaVersion: Int
+    var records: [String: DailyWageRecord]
+
+    init(
+        schemaVersion: Int = Self.currentSchemaVersion,
+        records: [String: DailyWageRecord]
+    ) {
+        self.schemaVersion = schemaVersion
+        self.records = records
+    }
 }
 
 private enum Default {
@@ -491,7 +620,7 @@ struct DailyWageRecord: Codable, Equatable, Identifiable {
         monthlySalary = try container.decode(Double.self, forKey: .monthlySalary)
         workdaysPerMonth = try container.decode(Int.self, forKey: .workdaysPerMonth)
         capturedAt = try container.decode(Date.self, forKey: .capturedAt)
-        source = (try? container.decode(DailyRecordSource.self, forKey: .source)) ?? .observed
+        source = try container.decodeIfPresent(DailyRecordSource.self, forKey: .source) ?? .observed
     }
 }
 

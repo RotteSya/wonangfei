@@ -36,7 +36,7 @@ enum AppTab: String, CaseIterable, Identifiable {
 struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var state: WageState
-    @StateObject private var homeMascotVideoController = HomeMascotVideoController()
+    @StateObject private var homeMascotVideoSession = HomeMascotVideoSessionCoordinator()
     @State private var selectedTab: AppTab = .home
     @State private var tabTransitionDirection = 1
     @State private var entryAnimating = false
@@ -50,6 +50,7 @@ struct RootView: View {
     @AppStorage("wnf.onboarding.completed") private var onboardingCompleted = false
 
     private var day: WageDay { state.calculation }
+    private var isHomeMascotSessionVisible: Bool { onboardingCompleted || entryAnimating }
 
     var body: some View {
         ZStack {
@@ -80,8 +81,15 @@ struct RootView: View {
             }
         }
         .preferredColorScheme(.light)
+        .onAppear {
+            syncHomeMascotVideoSession()
+        }
         .onChange(of: scenePhase) { _, newPhase in
-            handleScenePhase(newPhase)
+            homeMascotVideoSession.handleScenePhase(
+                newPhase,
+                selectedTab: selectedTab,
+                isHomeSessionVisible: isHomeMascotSessionVisible
+            )
         }
     }
 
@@ -90,6 +98,7 @@ struct RootView: View {
         selectedTab = .home
         entryAnimating = true
         entryExpanded = false
+        syncHomeMascotVideoSession()
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.04) {
             withAnimation(.spring(response: 0.9, dampingFraction: 0.74)) {
@@ -99,6 +108,7 @@ struct RootView: View {
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.68) {
             onboardingCompleted = true
+            syncHomeMascotVideoSession()
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.28) {
@@ -161,12 +171,13 @@ struct RootView: View {
         switch selectedTab {
         case .home:
             HomeView(isShareCardPresented: $homeSharePresented, onShare: presentShareCard)
-                .environmentObject(homeMascotVideoController)
+                .environmentObject(homeMascotVideoSession.controller)
         case .records:
             RecordsView()
         case .settings:
             SettingsView {
                 onboardingCompleted = false
+                syncHomeMascotVideoSession()
             }
         }
     }
@@ -188,21 +199,14 @@ struct RootView: View {
         withAnimation(.snappy(duration: 0.32, extraBounce: 0.02)) {
             selectedTab = tab
         }
+        homeMascotVideoSession.handleTabChange(to: tab, isHomeSessionVisible: isHomeMascotSessionVisible)
     }
 
-    private func handleScenePhase(_ phase: ScenePhase) {
-        switch phase {
-        case .active:
-            if selectedTab == .home && (onboardingCompleted || entryAnimating) {
-                homeMascotVideoController.start()
-            }
-        case .inactive:
-            homeMascotVideoController.pause()
-        case .background:
-            homeMascotVideoController.releaseQueue()
-        @unknown default:
-            homeMascotVideoController.pause()
-        }
+    private func syncHomeMascotVideoSession() {
+        homeMascotVideoSession.handleTabChange(
+            to: selectedTab,
+            isHomeSessionVisible: isHomeMascotSessionVisible
+        )
     }
 
     private func presentShareCard() {

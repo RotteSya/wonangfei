@@ -127,12 +127,6 @@ private struct HomeMascotVideoSequence: View {
     var body: some View {
         HomeMascotPlayerView(player: controller.player)
             .accessibilityHidden(true)
-            .onAppear {
-                controller.start()
-            }
-            .onDisappear {
-                controller.pause()
-            }
     }
 }
 
@@ -211,17 +205,21 @@ final class HomeMascotVideoController: ObservableObject {
     }
 
     func start() {
+        if isPlaybackRequested, !player.items().isEmpty {
+            player.play()
+            return
+        }
+
         isPlaybackRequested = true
         fillQueue()
         player.play()
     }
 
-    func pause() {
-        isPlaybackRequested = false
+    func pauseTemporarily() {
         player.pause()
     }
 
-    func releaseQueue() {
+    func pauseAndRelease() {
         isPlaybackRequested = false
         player.pause()
         player.removeAllItems()
@@ -288,7 +286,7 @@ final class HomeMascotVideoController: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.releaseQueue()
+            self?.pauseAndRelease()
         }
     }
 }

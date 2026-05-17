@@ -27,6 +27,7 @@ When XcodeBuildMCP is available, call `session_show_defaults` first, then `build
 - `WNF/HomeView.swift`, `WNF/RecordsView.swift`, and `WNF/SettingsView.swift` consume shared state directly.
 - `WNF/RecordsView.swift` must aggregate week/month/year chart data from the record-backed snapshot (`dailyRecords` payload, `recordsRevision` cache key, and current-day calculation); do not reintroduce hard-coded chart multipliers or full-dictionary cache equality for production records.
 - `WNF/OnboardingView.swift` owns the first-launch onboarding flow and writes through the same `WageState` settings path.
+- Share-card export is still main-thread bound on iOS: `ImageRenderer.render(rasterizationScale:)` and the `UIGraphicsImageRenderer` context run synchronously on `MainActor`. The one-frame loading pre-flight in `RootView` is a UX/perceptual-feedback fix, not a real rendering-concurrency or P1 performance fix.
 
 ## Onboarding Asset Rules
 

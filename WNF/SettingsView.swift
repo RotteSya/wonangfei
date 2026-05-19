@@ -2,10 +2,28 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var state: WageState
+    @EnvironmentObject private var premium: PremiumEntitlementStore
+    @EnvironmentObject private var premiumPreferences: PremiumPreferencesStore
+    @EnvironmentObject private var paywallController: PremiumPaywallController
 
     var onShowOnboarding: () -> Void = {}
 
+    @State private var exportActivityItems: [Any] = []
+    @State private var isExportActivityPresented = false
+    @State private var isExportWarningPresented = false
+    @State private var exportError: String?
+    @State private var legalDocument: LegalDocument?
+
     private var day: WageDay { state.calculation }
+    private var premiumPresentation: PremiumSettingsCardPresentation {
+        PremiumSettingsCardPresentation(
+            accessState: premium.accessState,
+            displayPrice: premium.displayPrice,
+            statusMessage: premium.statusMessage,
+            refundRequestedAt: premium.refundRequestedAt,
+            canMakePayments: premium.canMakePayments
+        )
+    }
 
     var body: some View {
         ScrollView {
@@ -15,6 +33,7 @@ struct SettingsView: View {
 
                 VStack(spacing: 16) {
                     profileBanner
+                    premiumCard
 
                     SectionCard(title: "收入") {
                         SettingsRow(title: "月薪 · 税后") {
@@ -106,6 +125,29 @@ struct SettingsView: View {
             .padding(.bottom, 105)
         }
         .background(WNFTheme.bg)
+        .background {
+            ActivityView(activityItems: exportActivityItems, isPresented: $isExportActivityPresented)
+                .allowsHitTesting(false)
+        }
+        .alert("导出完整金额数据", isPresented: $isExportWarningPresented) {
+            Button("取消", role: .cancel) {}
+            Button("导出") {
+                exportHistory()
+            }
+        } message: {
+            Text("导出文件包含完整金额和工时数据，请确认分享对象和保存位置。")
+        }
+        .alert("导出失败", isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })) {
+            Button("知道了", role: .cancel) {}
+        } message: {
+            Text(exportError ?? "")
+        }
+        .sheet(item: $legalDocument) { document in
+            LegalDocumentView(document: document)
+        }
+        .onDisappear {
+            premiumPreferences.clearPreview()
+        }
     }
 
     private var profileBanner: some View {
@@ -167,6 +209,245 @@ struct SettingsView: View {
                     .foregroundStyle(WNFTheme.muted)
             }
             .padding(14)
+        }
+    }
+
+    private var premiumCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "crown.fill")
+                    .font(.system(size: 20, weight: .black))
+                    .foregroundStyle(WNFTheme.ink)
+                    .frame(width: 44, height: 44)
+                    .background(WNFTheme.yellow, in: RoundedRectangle(cornerRadius: 15))
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Premium")
+                        .font(.system(size: 23, weight: .black, design: .rounded))
+                        .foregroundStyle(WNFTheme.ink)
+                    Text(premiumPresentation.subtitle)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(WNFTheme.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+                PremiumStatusPill(
+                    isUnlocked: premiumPresentation.isUnlocked,
+                    isPending: premiumPresentation.isPending
+                )
+            }
+
+            HStack(spacing: 8) {
+                PremiumFeatureLockButton(
+                    title: premiumPresentation.primaryActionTitle,
+                    isUnlocked: premiumPresentation.primaryActionIsUnlocked
+                ) {
+                    if !premiumPresentation.isUnlocked {
+                        paywallController.present(.settings)
+                    }
+                }
+                PremiumFeatureLockButton(title: "Restore", isUnlocked: true) {
+                    Task { await premium.restorePurchases() }
+                }
+                PremiumFeatureLockButton(title: "退款", isUnlocked: premiumPresentation.refundActionIsUnlocked) {
+                    Task { await premium.requestRefund(in: UIApplication.shared.currentActiveWindowScene) }
+                }
+            }
+
+            if let inlineMessage = premiumPresentation.inlineMessage {
+                premiumInlineMessage(inlineMessage)
+            }
+
+            Divider().overlay(WNFTheme.hairline)
+
+            premiumFeatureRows
+            themePicker
+            shareTemplatePicker
+            widgetPrivacyRow
+            exportRow
+            legalRow
+        }
+        .padding(16)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 24))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(WNFTheme.hairline, lineWidth: 0.5))
+        .shadow(color: .black.opacity(0.05), radius: 12, y: 6)
+    }
+
+    private var premiumFeatureRows: some View {
+        VStack(spacing: 8) {
+            ForEach(premiumPresentation.featureRows()) { row in
+                let feature = row.feature
+                HStack(spacing: 10) {
+                    Image(systemName: feature.symbol)
+                        .font(.system(size: 14, weight: .black))
+                        .foregroundStyle(WNFTheme.ink)
+                        .frame(width: 28, height: 28)
+                        .background(WNFTheme.surfaceSoft, in: RoundedRectangle(cornerRadius: 9))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(feature.title)
+                            .font(.system(size: 13, weight: .black))
+                        Text(feature.subtitle)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(WNFTheme.muted)
+                            .lineLimit(2)
+                    }
+                    Spacer(minLength: 0)
+                    if row.isLocked {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(WNFTheme.muted)
+                    }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if row.isLocked {
+                        paywallController.present(.feature(feature))
+                    }
+                }
+            }
+        }
+    }
+
+    private var themePicker: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text("主题皮肤")
+                .font(.system(size: 13, weight: .black))
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                ForEach(premiumPresentation.themeOptions(activeTheme: premiumPreferences.activeTheme)) { option in
+                    let theme = option.theme
+                    Button {
+                        let saved = premiumPreferences.selectTheme(theme, isPremiumUnlocked: premium.isPremiumUnlocked)
+                        if !saved && theme.isPremium {
+                            paywallController.present(.feature(.themeSkins))
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(theme.palette.yellow)
+                                .frame(width: 14, height: 14)
+                            Text(theme.title)
+                                .font(.system(size: 12, weight: .black))
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                            if option.isLocked {
+                                Image(systemName: "lock.fill")
+                            } else if option.isSelected {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                        .foregroundStyle(option.isSelected ? Color.white : WNFTheme.ink)
+                        .padding(10)
+                        .background(option.isSelected ? WNFTheme.ink : WNFTheme.surfaceSoft, in: RoundedRectangle(cornerRadius: 13))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(option.accessibilityLabel)
+                }
+            }
+        }
+    }
+
+    private var shareTemplatePicker: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text("默认分享模板")
+                .font(.system(size: 13, weight: .black))
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(premiumPresentation.shareTemplateOptions(selectedTemplate: premiumPreferences.selectedShareTemplate)) { option in
+                        let template = option.template
+                        Button {
+                            let saved = premiumPreferences.selectShareTemplate(template, isPremiumUnlocked: premium.isPremiumUnlocked)
+                            if !saved {
+                                paywallController.present(.shareTemplate(template))
+                            }
+                        } label: {
+                            HStack(spacing: 5) {
+                                if option.isLocked {
+                                    Image(systemName: "lock.fill")
+                                }
+                                Text(option.title)
+                            }
+                            .font(.system(size: 11, weight: .black))
+                            .foregroundStyle(option.isSelected ? Color.white : WNFTheme.ink)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(option.isSelected ? WNFTheme.ink : WNFTheme.surfaceSoft, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    private var widgetPrivacyRow: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("锁屏小组件显示金额")
+                    .font(.system(size: 13, weight: .black))
+                Text("关闭后，锁屏只显示状态和图标。")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(WNFTheme.muted)
+            }
+            Spacer()
+            WNFToggle(isOn: $premiumPreferences.lockScreenWidgetShowsAmount)
+        }
+        .padding(12)
+        .background(WNFTheme.surfaceSoft, in: RoundedRectangle(cornerRadius: 15))
+    }
+
+    private var exportRow: some View {
+        Button {
+            if premiumPresentation.isUnlocked {
+                isExportWarningPresented = true
+            } else {
+                paywallController.present(.historyExport)
+            }
+        } label: {
+            HStack {
+                Image(systemName: "square.and.arrow.down")
+                Text("导出历史记录 CSV / JSON")
+                Spacer()
+                Image(systemName: premiumPresentation.exportTrailingSymbol)
+            }
+            .font(.system(size: 13, weight: .black))
+            .foregroundStyle(WNFTheme.ink)
+            .padding(12)
+            .background(WNFTheme.yellow.opacity(0.88), in: RoundedRectangle(cornerRadius: 15))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var legalRow: some View {
+        HStack {
+            Button("Terms") {
+                legalDocument = .terms
+            }
+            Spacer()
+            Button("Privacy") {
+                legalDocument = .privacy
+            }
+        }
+        .font(.system(size: 12, weight: .black))
+        .foregroundStyle(WNFTheme.ink)
+        .padding(.horizontal, 4)
+    }
+
+    private func premiumInlineMessage(_ message: String) -> some View {
+        Text(message)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(WNFTheme.inkSoft)
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(WNFTheme.surfaceSoft, in: RoundedRectangle(cornerRadius: 13))
+    }
+
+    private func exportHistory() {
+        do {
+            exportActivityItems = try HistoryExportService.makeExportItems(state: state)
+            isExportActivityPresented = true
+        } catch {
+            exportError = String(describing: error)
         }
     }
 
@@ -302,4 +583,7 @@ private struct TimePickerRow: View {
 #Preview {
     SettingsView()
         .environmentObject(WageState())
+        .environmentObject(PremiumEntitlementStore())
+        .environmentObject(PremiumPreferencesStore())
+        .environmentObject(PremiumPaywallController())
 }

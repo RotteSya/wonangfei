@@ -105,6 +105,7 @@
 - Container: rounded cream card, max width close to `330px` on iPhone 17 portrait.
 - Header: yellow band with compact mascot, `窝囊费`, `今日窝囊战报`, and three icon controls.
 - Copy behavior: `RootView` refreshes the active `ShareCardCopy` from `ShareCardCopy.pool` whenever the home share action opens the card. The current pair is excluded when possible, so consecutive opens do not repeat the same wording.
+- Template behavior: classic is free; Premium templates are visible but locked until entitlement is purchased. Locked taps route through the global Paywall controller.
 - Controls:
   - eye / eye slash masks only the card amount and duration;
   - share shows an inline loading spinner, disables repeat taps while rendering, and exports a control-free card image through iOS system share using the current `UIWindowScene.screen.scale`; the spinner pre-flight is UX/perceptual feedback only because `ImageRenderer.render(rasterizationScale:)` plus `UIGraphicsImageRenderer` remain main-thread bound; the activity presenter must provide a UIKit popover source view for iPad / Mac Catalyst;
@@ -121,6 +122,47 @@
   - `体面没赢，余额加分。` / `把不想上班的心情，换成可见进度。`
   - `工位困住我，到账放过我。` / `今天的辛苦，有数字替我作证。`
 - Overlay: home content remains underneath but blurred and dimmed across the full screen, including status bar and bottom home-indicator areas; tapping outside closes the card.
+
+### Premium Paywall
+
+- Source: `WNF/PremiumUI.swift`.
+- Presentation: global SwiftUI sheet owned by `PremiumPaywallController`, `.large` detent, close button, and swipe-to-dismiss enabled.
+- Structure: title, unlock feature list, purchase/status panel, Restore, Terms, Privacy.
+- Required actions: Buy, Restore Purchases, Terms of Use, Privacy Policy, Close.
+- State contract:
+  - product loaded: show `Product.displayPrice`;
+  - product unavailable / empty array: show `Premium 即将开放`;
+  - product load thrown or timed out: show retry button;
+  - pending Ask to Buy: show waiting approval copy;
+  - `canMakePayments == false`: disable buy and show account/device restriction copy.
+- Accessibility order: title, feature list, price/status, buy, restore, terms, privacy, close.
+- Motion: avoid essential motion and respect Reduce Motion for decorative transitions.
+
+### Premium Settings Card
+
+- Source: `WNF/SettingsView.swift`.
+- Position: top of Settings, below the profile banner.
+- Always visible so users can discover Premium without first tapping a locked feature.
+- Shows entitlement status, price/load status, Buy/Restore, refund request, feature rows, theme picker, share-template picker, lock-screen Widget amount toggle, history export, Terms, and Privacy.
+- Restore button enters a spinner state while `AppStore.sync()` runs.
+- Refund request status is only stored after `Transaction.beginRefundRequest(in:)` returns success.
+- Theme preview session belongs to the current Settings navigation lifecycle. Entering and closing Paywall keeps the preview; leaving Settings clears unsaved preview.
+
+### Premium Locks
+
+- Use a lock row or disabled option state when a feature can be previewed but not saved.
+- Locked Widget access routes to Paywall; Widget Gallery still shows example content and Premium treatment.
+- Locked history export routes to Paywall; unlocked export shows a confirmation because exported files include complete amount and work-time data.
+
+### Widget Cards
+
+- Source: `WNFWidget/WNFWidget.swift`.
+- Families: `.systemSmall`, `.systemMedium`, `.accessoryRectangular`, `.accessoryInline`.
+- Gallery/placeholder data: fixed sample amount such as `¥888.88`; never read real App Group wage data in preview mode.
+- Free real timeline: Premium prompt with link to `https://wonangfei.app/premium`.
+- Purchased real timeline: use App Group snapshot only. Main app entitlement must never trust this snapshot.
+- Required rendering wrapper: `containerBackground(for: .widget)` on every widget view.
+- Lock-screen amount visibility follows Settings `锁屏小组件显示金额`.
 
 ### Onboarding Hero Panel
 

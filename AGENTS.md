@@ -3,6 +3,9 @@
 ## Project Surface
 
 - Native app: `WNF.xcodeproj` / `WNF/`, scheme `WNF`, bundle id `com.wonangfei.app`, iOS deployment target `17.0`.
+- Widget extension: `WNFWidget/`, bundle id `com.wonangfei.app.widget`, App Group `group.com.wonangfei.app`.
+- Unit tests: `WNFTests/`, currently focused on Premium entitlement/preferences behavior.
+- StoreKit local config: `WNFPremium.storekit`, product ID `com.wonangfei.app.premium.lifetime`.
 - Browser/design handoff: `index.html`, `assets/source/*.jsx`, `brand-tokens.css`, `design-tokens.json`.
 - Treat the SwiftUI app as the implementation surface when the task is app behavior, build, or asset-catalog work. Treat the HTML/Open Design files as visual reference unless the task explicitly says prototype/design only.
 
@@ -20,13 +23,16 @@ When XcodeBuildMCP is available, call `session_show_defaults` first, then `build
 
 ## Current Architecture Notes
 
-- The active native checkout is a single app target. There is no current `WNFWidget/`, `WageCore.swift`, or `WageDisplayModel.swift` in this tree.
+- The active native checkout now has the main app target, `WNFWidget`, and `WNFTests`. There is no current `WageCore.swift` or `WageDisplayModel.swift` split.
 - `WNF/WageState.swift` owns editable salary, workday, weekday, time, lunch, overtime, and privacy state.
 - `WNF/WageState.swift` persists those editable settings with `UserDefaults` keys under `wnf.settings.*`; first-launch completion remains separate at `wnf.onboarding.completed`.
 - `WNF/WageState.swift` owns in-memory daily record history and the monotonic `recordsRevision`; `WNF/DailyRecordStorage.swift` owns the `wnf.records.daily` JSON envelope, legacy migration, recovery keys, and shared JSON coders. `WNFApp.swift` persists the current-day snapshot when the app leaves the active scene phase, and `WageState` closes the previous date when `currentDate` crosses into a new calendar day.
 - `WNF/HomeView.swift`, `WNF/RecordsView.swift`, and `WNF/SettingsView.swift` consume shared state directly.
 - `WNF/RecordsView.swift` must aggregate week/month/year chart data from the record-backed snapshot (`dailyRecords` payload, `recordsRevision` cache key, and current-day calculation); do not reintroduce hard-coded chart multipliers or full-dictionary cache equality for production records.
 - `WNF/OnboardingView.swift` owns the first-launch onboarding flow and writes through the same `WageState` settings path.
+- `WNF/PremiumStore.swift` owns StoreKit 2 integration, entitlement refresh, restore, refund request, and the long-running `Transaction.updates` listener. Keep `PremiumEntitlementStore` `@MainActor`, start it from `WNFApp.init`, and do not move transaction listening into a view `.task`.
+- `WNF/PremiumCore.swift` owns Premium constants, App Group snapshot schema, preferences, export helpers, and the future verifier seam. Main app unlock state must come from verified StoreKit transactions, never from the App Group mirror.
+- `WNFWidget/WNFWidget.swift` reads only App Group mirrors. Widget preview/gallery paths must use fixed sample values, and all widget views must keep `containerBackground(for: .widget)`.
 - Share-card export is still main-thread bound on iOS: `ImageRenderer.render(rasterizationScale:)` and the `UIGraphicsImageRenderer` context run synchronously on `MainActor`. The one-frame loading pre-flight in `RootView` is a UX/perceptual-feedback fix, not a real rendering-concurrency or P1 performance fix.
 
 ## Onboarding Asset Rules

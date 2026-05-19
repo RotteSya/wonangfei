@@ -1,0 +1,41 @@
+{
+  "identifier" : "WNFPremium",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "18.00",
+      "familyShareable" : false,
+      "internalID" : "wnf-premium-lifetime",
+      "localizations" : [
+        {
+          "description" : "Unlock widgets, themes, share templates, and history export.",
+          "displayName" : "WNF Premium",
+          "locale" : "en_US"
+        },
+        {
+          "description" : "解锁小组件、主题皮肤、截图分享模板和历史记录导出。",
+          "displayName" : "窝囊费 Premium",
+          "locale" : "zh_Hans"
+        }
+      ],
+      "productID" : "com.wonangfei.app.premium.lifetime",
+      "referenceName" : "WNF Premium Lifetime",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_askToBuyEnabled" : false,
+    "_billingGracePeriodIsEnabled" : false,
+    "_billingRetryIsEnabled" : false,
+    "_storefront" : "CHN"
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

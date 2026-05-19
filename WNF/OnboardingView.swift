@@ -37,11 +37,16 @@ private final class OnboardingImageStore: ObservableObject {
 
 struct OnboardingView: View {
     @StateObject private var imageStore = OnboardingImageStore()
-    @State private var page = 0
+    @State private var page: Int
 
     var onFinish: () -> Void
 
     private let pageCount = 4
+
+    init(initialPage: Int = 0, onFinish: @escaping () -> Void) {
+        _page = State(initialValue: min(max(initialPage, 0), 3))
+        self.onFinish = onFinish
+    }
 
     var body: some View {
         GeometryReader { proxy in

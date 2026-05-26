@@ -8,10 +8,9 @@ enum SettlementSentiment: Int, CaseIterable, Equatable {
     case mild = 2
     case standard = 3
     case heavy = 4
-    case overtime = 5
 
     var stars: Int { rawValue }
-    var maxStars: Int { 5 }
+    var maxStars: Int { 4 }
 
     var label: String {
         switch self {
@@ -19,7 +18,6 @@ enum SettlementSentiment: Int, CaseIterable, Equatable {
         case .mild: "轻度搬砖"
         case .standard: "稳定窝囊"
         case .heavy: "高强度忍耐"
-        case .overtime: "超额加班"
         }
     }
 
@@ -29,7 +27,6 @@ enum SettlementSentiment: Int, CaseIterable, Equatable {
         case .mild: "😐"
         case .standard: "😮‍💨"
         case .heavy: "🥲"
-        case .overtime: "🥵"
         }
     }
 }
@@ -78,15 +75,16 @@ struct DailySettlement: Equatable {
     }
 
     private static func deriveSentiment(progress: Double, status: WorkStatus) -> SettlementSentiment {
-        if status == .done && progress >= 1.0 {
+        // `.done` always implies the user finished a full workday's worth of
+        // elapsed time (WageCalculator caps elapsed at workdayMinutes).
+        if status == .done {
             return .heavy
         }
         switch progress {
         case ..<0.05: return .wisp
         case ..<0.35: return .mild
         case ..<0.65: return .standard
-        case ..<1.0: return .heavy
-        default: return .overtime
+        default: return .heavy
         }
     }
 
@@ -96,16 +94,18 @@ struct DailySettlement: Equatable {
         today: Date
     ) -> Int {
         let calendar = DateComponents.calendar
-        var streak = 0
-        if includingTodayEarned > 0 {
-            streak = 1
-        } else if let record = dailyRecords[WageState.dateKey(for: today)], record.earnedToday > 0 {
-            streak = 1
-        }
+        let todayEarned: Double = includingTodayEarned > 0
+            ? includingTodayEarned
+            : (dailyRecords[WageState.dateKey(for: today)]?.earnedToday ?? 0)
 
+        // A streak that "ends today" must include today. If today is zero,
+        // the streak is zero — don't silently pick up yesterday's history.
+        guard todayEarned > 0 else { return 0 }
+
+        let maxStreak = 60
+        var streak = 1
         var cursor = today
-        let maxLookBack = 60
-        for _ in 0..<maxLookBack {
+        while streak < maxStreak {
             guard let previous = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
             cursor = previous
             let key = WageState.dateKey(for: previous)
@@ -171,14 +171,6 @@ struct DailySettlement: Equatable {
                 subCopy: streakDays > 1
                     ? "连续 \(streakDays) 天全勤，今日窝囊费已结算。"
                     : "完整熬完一天，窝囊费已结算。",
-                bestMoment: bestMoment
-            )
-        case .overtime:
-            return CopyPick(
-                headline: "今天加班入账",
-                subCopy: streakDays > 1
-                    ? "连续 \(streakDays) 天到账，今天还加了一截。"
-                    : "正餐之外又加了一份，明天记得早点走。",
                 bestMoment: bestMoment
             )
         }
@@ -402,6 +394,8 @@ struct DailySettlementOverlay: View {
             .padding(.horizontal, 28)
             .scaleEffect(revealCardVisible ? 1 : 0.86)
             .opacity(revealCardVisible ? 1 : 0)
+            // SwiftUI hit-testing still applies at opacity 0; block taps until reveal.
+            .allowsHitTesting(revealCardVisible)
             .shadow(color: .black.opacity(0.32), radius: 28, y: 18)
 
             Spacer(minLength: 12)
@@ -409,6 +403,7 @@ struct DailySettlementOverlay: View {
             actionRow
                 .opacity(revealActionsVisible ? 1 : 0)
                 .offset(y: revealActionsVisible ? 0 : 14)
+                .allowsHitTesting(revealActionsVisible)
 
             Spacer(minLength: 16)
         }
@@ -479,7 +474,7 @@ struct DailySettlementOverlay: View {
         phase = .burst
         triggerBurstHaptic()
 
-        withAnimation(.spring(response: 0.78, dampingFraction: 0.76)) {
+        withAnimation(.spring(response: burstDuration, dampingFraction: 0.76)) {
             burstExpanded = true
         }
 
@@ -490,7 +485,7 @@ struct DailySettlementOverlay: View {
             withAnimation(.spring(response: 0.55, dampingFraction: 0.82)) {
                 revealCardVisible = true
             }
-            withAnimation(.easeOut(duration: 0.7)) {
+            withAnimation(.easeOut(duration: amountRampDuration)) {
                 displayedAmount = settlement.earnedToday
             }
             try? await sleep(seconds: 0.18)

@@ -1,4 +1,6 @@
 import SwiftUI
+import UIKit
+import UserNotifications
 
 struct SettingsView: View {
     @EnvironmentObject private var state: WageState
@@ -13,6 +15,7 @@ struct SettingsView: View {
     @State private var isExportWarningPresented = false
     @State private var exportError: String?
     @State private var legalDocument: LegalDocument?
+    @State private var notificationAuthStatus: UNAuthorizationStatus = .notDetermined
 
     private var day: WageDay { state.calculation }
     private var premiumPresentation: PremiumSettingsCardPresentation {
@@ -99,6 +102,8 @@ struct SettingsView: View {
                         }
                     }
 
+                    clockOutReminderCard
+
                     SectionCard(title: "引导") {
                         SettingsRow(title: "重新设置工资/时间", isLast: true) {
                             Button {
@@ -148,6 +153,96 @@ struct SettingsView: View {
         .onDisappear {
             premiumPreferences.clearPreview()
         }
+        .task {
+            await refreshNotificationAuthStatus()
+        }
+    }
+
+    @MainActor
+    private func refreshNotificationAuthStatus() async {
+        notificationAuthStatus = await ClockOutReminderService.shared.currentAuthorizationStatus()
+    }
+
+    private var clockOutReminderBinding: Binding<Bool> {
+        Binding(
+            get: { state.clockOutReminderEnabled },
+            set: { newValue in
+                state.clockOutReminderEnabled = newValue
+                if newValue {
+                    Task { @MainActor in
+                        _ = await ClockOutReminderService.shared.requestAuthorizationIfNeeded()
+                        await refreshNotificationAuthStatus()
+                        state.reconcileClockOutReminder()
+                    }
+                } else {
+                    Task { @MainActor in
+                        await refreshNotificationAuthStatus()
+                    }
+                }
+            }
+        )
+    }
+
+    private var clockOutReminderShouldShowSystemHint: Bool {
+        state.clockOutReminderEnabled && notificationAuthStatus == .denied
+    }
+
+    private var clockOutReminderCard: some View {
+        SectionCard(title: "提醒") {
+            VStack(spacing: 0) {
+                HStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("下班结算提醒")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(WNFTheme.ink)
+                        Text("默认关闭。开启后每天 \(state.workEnd.clockText) 通知一次。")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(WNFTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 12)
+                    WNFToggle(isOn: clockOutReminderBinding)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+
+                if clockOutReminderShouldShowSystemHint {
+                    Rectangle()
+                        .fill(WNFTheme.hairline)
+                        .frame(height: 0.5)
+                        .padding(.leading, 16)
+
+                    Button {
+                        openSystemNotificationSettings()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.bubble.fill")
+                                .font(.system(size: 12, weight: .black))
+                                .foregroundStyle(WNFTheme.coral)
+                            Text("iOS 通知权限被关闭，到系统设置开启后才会真的弹通知。")
+                                .font(.system(size: 11, weight: .heavy))
+                                .foregroundStyle(WNFTheme.inkSoft)
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 4)
+                            Image(systemName: "arrow.up.right.square")
+                                .font(.system(size: 12, weight: .heavy))
+                                .foregroundStyle(WNFTheme.inkSoft)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("打开系统通知设置")
+                }
+            }
+        }
+    }
+
+    private func openSystemNotificationSettings() {
+        guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 
     private var profileBanner: some View {

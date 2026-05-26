@@ -57,6 +57,7 @@ Native sources:
 - `WNF/WageFormatting.swift`: amount and duration formatting helpers used by home, records, onboarding, and share surfaces.
 - `WNF/ShareCard.swift`: share-card copy pool, Premium template picker, dim backdrop, overlay, card layout, icon controls, and the `UIActivityViewController` wrapper.
 - `WNF/DailySettlement.swift`: 下班结算数据模型 (`DailySettlement` + `SettlementSentiment`), 爆金币动画 (`SettlementCoinBurst`), 全屏结算 overlay (`DailySettlementOverlay`), 结算分享卡 (`DailySettlementShareCard`), 首页 CTA 入口 (`ClockOutCTA`). 数据派生纯函数从 `WageDay` + `dailyRecords` 计算情绪等级和连续打工天数, 不修改任何持久化路径.
+- `WNF/ClockOutReminder.swift`: `ClockOutReminderService` (@MainActor 单例)，封装 `UNUserNotificationCenter` 权限查询/请求和按工作日 + workEnd 时间调度 `UNCalendarNotificationTrigger` 重复本地通知。idempotent `reconcile(enabled:workEnd:selectedWeekdays:)` 先清空 `wnf.clockout.weekday.*` 前缀的现有通知再按需重建；权限非 authorized/provisional/ephemeral 时静默跳过调度。
 - `WNF/PremiumCore.swift`: product constants, entitlement snapshots, Paywall routing, theme/template preferences, App Group snapshot writing, export service, and deep-link parsing.
 - `WNF/PremiumStore.swift`: StoreKit 2 client, entitlement verifier seam, transaction listener, restore, refund request, product loading, and entitlement state.
 - `WNF/PremiumUI.swift`: Paywall, purchase/restore UI states, legal document presentation, and offline legal fallback.
@@ -220,6 +221,17 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 - 「分享卡片」走与首页分享相同的渲染管线：`renderAndPresentSettlementShare` 同步生成 `DailySettlementShareCard` 的 `UIImage`（main-thread bound 的 `ImageRenderer.render(rasterizationScale:)`，使用 `windowSceneScale`，宽度固定 360pt），失败时退化到包含金额、已忍时长、连续打工天数的 fallback 文本。复用现有 `ActivityView` 和 `ActivityPresenterViewController`，避免 iPad / Mac Catalyst 弹窗崩溃。
 - 共用一份 `isPreparingShareActivity` 标志：因为 settlement overlay 与原 share card 不会同时呈现，所以共用同一份「正在生成分享图」状态不冲突。
 - 结算 overlay 打开时，bottom tab bar 同样被 opacity / hit-testing 屏蔽（与原 share card 行为对齐）。
+
+### 下班结算提醒
+
+- **默认关闭**。开关入口位于「我的」页 `提醒` section，复用 `WNFToggle`。
+- 持久化键：`wnf.settings.clockOutReminderEnabled`（默认 `false`）。
+- 用户在 Settings 中开启 toggle 时：先通过 `ClockOutReminderService.requestAuthorizationIfNeeded()` 请求 `[.alert, .sound]` 权限；不论权限结果，`state.clockOutReminderEnabled` 都会持久化为 `true`（toggle 反映用户意图，不强制系统权限）；之后 `state.reconcileClockOutReminder()` 触发实际调度。
+- `WageState` 在 `clockOutReminderEnabled`、`workEnd`、`selectedWeekdays` 任一变更时 didSet 中调用 `reconcileClockOutReminder()`；`WNFApp.onChange(of: scenePhase)` 在 `.active` 时也调用一次，保证回到前台时系统通知排程与最新设置同步。
+- 调度逻辑：`ClockOutReminderService.reconcile(...)` 先清空所有 `wnf.clockout.weekday.*` 前缀的 pending notification，再按每个选中工作日新建一条 `UNCalendarNotificationTrigger(dateMatching:repeats:true)`，时间 = workEnd 的 hour/minute，weekday = app 0-索引 (`周一=0`) 转 iOS Gregorian (`周日=1`)。
+- 权限非 authorized/provisional/ephemeral 时静默不调度（OSLog 记录原因）；Settings 页在 `task` 中查询 `currentAuthorizationStatus()`，若返回 `.denied` 且 toggle 处于 ON，会展示 `iOS 通知权限被关闭，到系统设置开启后才会真的弹通知。` 行内引导，点击调 `UIApplication.openNotificationSettingsURLString` 跳转系统设置。
+- 不引入 deep link / 自定义 action：通知点击只把 app 拉到前台，由用户自行点击首页 CTA 完成结算（避免在没有用户操作的情况下自动弹结算 overlay）。
+- 通知文案目前固定：`今天可以结算窝囊费啦` / `点开 App 看看今天的窝囊战绩。`，后续可以加 i18n 或 A/B。
 
 ### 记录页
 

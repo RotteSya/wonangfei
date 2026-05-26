@@ -34,6 +34,7 @@
 		100000000000000000000125 /* PremiumCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000234 /* PremiumCoreTests.swift */; };
 		100000000000000000000126 /* WNFWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 100000000000000000000233 /* WNFWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, CodeSignOnCopy, ); }; };
 		100000000000000000000127 /* DailySettlement.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000236 /* DailySettlement.swift */; };
+		100000000000000000000128 /* ClockOutReminder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000237 /* ClockOutReminder.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -102,6 +103,7 @@
 		100000000000000000000234 /* PremiumCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumCoreTests.swift; sourceTree = "<group>"; };
 		100000000000000000000235 /* WNFTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WNFTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		100000000000000000000236 /* DailySettlement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailySettlement.swift; sourceTree = "<group>"; };
+		100000000000000000000237 /* ClockOutReminder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockOutReminder.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -161,6 +163,7 @@
 				100000000000000000000217 /* HomeMascotVideoSessionCoordinator.swift */,
 				100000000000000000000216 /* ShareCard.swift */,
 				100000000000000000000236 /* DailySettlement.swift */,
+				100000000000000000000237 /* ClockOutReminder.swift */,
 				100000000000000000000207 /* RecordsView.swift */,
 				100000000000000000000208 /* SettingsView.swift */,
 				100000000000000000000210 /* OnboardingView.swift */,
@@ -352,6 +355,7 @@
 				100000000000000000000117 /* HomeMascotVideoSessionCoordinator.swift in Sources */,
 				100000000000000000000116 /* ShareCard.swift in Sources */,
 				100000000000000000000127 /* DailySettlement.swift in Sources */,
+				100000000000000000000128 /* ClockOutReminder.swift in Sources */,
 				100000000000000000000107 /* RecordsView.swift in Sources */,
 				100000000000000000000108 /* SettingsView.swift in Sources */,
 				100000000000000000000110 /* OnboardingView.swift in Sources */,

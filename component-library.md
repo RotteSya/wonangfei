@@ -152,6 +152,21 @@
   - Secondary `分享卡片`: white fill, ink text, drives system share through the existing `ImageRenderer` pipeline; shows `渲染中…` while preparing.
 - Hides bottom tab bar while presented (same contract as share card).
 
+### Clock-Out Reminder Row
+
+- Source: `WNF/SettingsView.swift` (`clockOutReminderCard`), service in `WNF/ClockOutReminder.swift`.
+- Use on: Settings page, dedicated `提醒` `SectionCard`.
+- Default state: **OFF**. The toggle must reflect `WageState.clockOutReminderEnabled` and write through that binding so persistence + scheduling stay aligned.
+- Primary row:
+  - Title `下班结算提醒` (15pt heavy ink).
+  - Subtitle `默认关闭。开启后每天 HH:MM 通知一次。`，时间从 `WageState.workEnd.clockText` 实时取值。
+  - Trailing `WNFToggle` bound to a `Binding` that triggers `ClockOutReminderService.requestAuthorizationIfNeeded()` on flip-to-on.
+- System-permission hint (only when toggle is on AND `UNAuthorizationStatus == .denied`):
+  - Coral `exclamationmark.bubble.fill` glyph.
+  - Copy `iOS 通知权限被关闭，到系统设置开启后才会真的弹通知。`
+  - Trailing `arrow.up.right.square`; tap calls `UIApplication.open(UIApplication.openNotificationSettingsURLString)`.
+- The hint banner must never appear when `clockOutReminderEnabled == false` (toggle off implies user opted out — no need to nag).
+
 ### Settlement Share Card
 
 - Source: `WNF/DailySettlement.swift`.

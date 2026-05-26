@@ -42,7 +42,6 @@ struct DailySettlement: Equatable {
     var headline: String
     var subCopy: String
     var bestMoment: String
-    var bossMonologue: String
     var cumulativeEarned: Double
     var status: WorkStatus
     var capturedAt: Date
@@ -76,7 +75,6 @@ struct DailySettlement: Equatable {
             headline: copy.headline,
             subCopy: copy.subCopy,
             bestMoment: copy.bestMoment,
-            bossMonologue: pickBossMonologue(sentiment: sentiment),
             cumulativeEarned: cumulativeEarned,
             status: day.status,
             capturedAt: date
@@ -88,12 +86,6 @@ struct DailySettlement: Equatable {
     static func alternateBestMoment(excluding current: String) -> String {
         let pool = bestMomentPool.filter { $0 != current }
         return pool.randomElement() ?? bestMomentPool[0]
-    }
-
-    /// Pick a different boss-monologue line than the current one. Used by the tear gesture.
-    static func alternateBossMonologue(excluding current: String, sentiment: SettlementSentiment) -> String {
-        let pool = bossMonologuePool(for: sentiment).filter { $0 != current }
-        return pool.randomElement() ?? bossMonologuePool(for: sentiment)[0]
     }
 
     private static func deriveSentiment(progress: Double, status: WorkStatus) -> SettlementSentiment {
@@ -122,41 +114,6 @@ struct DailySettlement: Equatable {
         "刷新邮箱十七次",
         "回了一句「收到，马上处理」"
     ]
-
-    static func bossMonologuePool(for sentiment: SettlementSentiment) -> [String] {
-        switch sentiment {
-        case .wisp:
-            return [
-                "（老板心想）他今天又划水了，工资是不是给多了。",
-                "（老板心想）这点活都干不完，绩效再压一压。",
-                "（老板心想）摸鱼摸得倒挺熟练。"
-            ]
-        case .mild:
-            return [
-                "（老板心想）干这点活还想准时下班？再加点。",
-                "（老板心想）他工作三小时，我赚了他六小时的钱。",
-                "（老板心想）这状态还行，可以再压榨一下。"
-            ]
-        case .standard:
-            return [
-                "（老板心想）这小伙挺能扛，再加点活试试。",
-                "（老板心想）这点钱让他熬这么久，真划算。",
-                "（老板心想）他还能扛，工资暂时不用涨。",
-                "（老板心想）下次裁员先看他敢不敢请假。"
-            ]
-        case .heavy:
-            return [
-                "（老板心想）这小伙挺能熬，明年再不涨工资。",
-                "（老板心想）他熬完全天，下次会议再叫他做纪要。",
-                "（老板心想）感谢他用青春换我利润。",
-                "（老板心想）这种员工最划算，给点画饼就完事。"
-            ]
-        }
-    }
-
-    private static func pickBossMonologue(sentiment: SettlementSentiment) -> String {
-        bossMonologuePool(for: sentiment).randomElement() ?? "（老板心想）真划算。"
-    }
 
     private static func deriveCumulativeEarned(
         dailyRecords: [String: DailyWageRecord],
@@ -385,7 +342,6 @@ struct DailySettlementOverlay: View {
     @State private var revealCardVisible = false
     @State private var revealActionsVisible = false
     @State private var currentBestMoment: String = ""
-    @State private var currentBossMonologue: String = ""
 
     private let burstDuration: TimeInterval = 0.85
     private let amountRampDuration: TimeInterval = 0.7
@@ -401,7 +357,6 @@ struct DailySettlementOverlay: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             if currentBestMoment.isEmpty { currentBestMoment = settlement.bestMoment }
-            if currentBossMonologue.isEmpty { currentBossMonologue = settlement.bossMonologue }
             startBurstSequence()
         }
     }
@@ -412,18 +367,6 @@ struct DailySettlementOverlay: View {
         let next = DailySettlement.alternateBestMoment(excluding: currentBestMoment)
         withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) {
             currentBestMoment = next
-        }
-    }
-
-    private func tearBossMonologue() {
-        let generator = UIImpactFeedbackGenerator(style: .rigid)
-        generator.impactOccurred()
-        let next = DailySettlement.alternateBossMonologue(
-            excluding: currentBossMonologue,
-            sentiment: settlement.sentiment
-        )
-        withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) {
-            currentBossMonologue = next
         }
     }
 
@@ -481,7 +424,6 @@ struct DailySettlementOverlay: View {
                 template: template,
                 displayedAmount: displayedAmount,
                 displayedBestMoment: currentBestMoment.isEmpty ? settlement.bestMoment : currentBestMoment,
-                displayedBossMonologue: currentBossMonologue.isEmpty ? settlement.bossMonologue : currentBossMonologue,
                 hidesSensitiveInfo: hidesSensitiveInfo,
                 showsControls: true,
                 isPreparingShare: isPreparingShare,
@@ -491,7 +433,6 @@ struct DailySettlementOverlay: View {
                     }
                 },
                 onTearBestMoment: tearBestMoment,
-                onTearBossMonologue: tearBossMonologue,
                 onShare: onShare,
                 onDismiss: onDismiss
             )
@@ -633,13 +574,11 @@ struct DailySettlementShareCard: View {
     var template: PremiumShareTemplateID
     var displayedAmount: Double?
     var displayedBestMoment: String?
-    var displayedBossMonologue: String?
     var hidesSensitiveInfo: Bool
     var showsControls: Bool
     var isPreparingShare: Bool = false
     var onTogglePrivacy: () -> Void = {}
     var onTearBestMoment: (() -> Void)? = nil
-    var onTearBossMonologue: (() -> Void)? = nil
     var onShare: () -> Void = {}
     var onDismiss: () -> Void = {}
 
@@ -649,10 +588,6 @@ struct DailySettlementShareCard: View {
 
     private var renderedBestMoment: String {
         displayedBestMoment ?? settlement.bestMoment
-    }
-
-    private var renderedBossMonologue: String {
-        displayedBossMonologue ?? settlement.bossMonologue
     }
 
     var body: some View {
@@ -763,14 +698,6 @@ struct DailySettlementShareCard: View {
                 content: renderedBestMoment,
                 hint: onTearBestMoment == nil ? nil : "长按可换一句",
                 onTear: onTearBestMoment
-            )
-
-            SettlementQuoteCard(
-                iconName: "person.fill",
-                prefix: nil,
-                content: renderedBossMonologue,
-                hint: onTearBossMonologue == nil ? nil : "长按可换一句",
-                onTear: onTearBossMonologue
             )
 
             cumulativeRow
@@ -1019,7 +946,7 @@ struct DailySettlementShareCard: View {
     }
 }
 
-// MARK: - Quote Card (best moment / boss monologue)
+// MARK: - Quote Card (best moment)
 
 private struct SettlementQuoteCard: View {
     var iconName: String

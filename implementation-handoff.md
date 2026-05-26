@@ -221,10 +221,7 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 - 「分享卡片」走与首页分享相同的渲染管线：`renderAndPresentSettlementShare` 同步生成 `DailySettlementShareCard` 的 `UIImage`（main-thread bound 的 `ImageRenderer.render(rasterizationScale:)`，使用 `windowSceneScale`，宽度固定 360pt），失败时退化到包含金额、已忍时长、连续打工天数的 fallback 文本。复用现有 `ActivityView` 和 `ActivityPresenterViewController`，避免 iPad / Mac Catalyst 弹窗崩溃。
 - 共用一份 `isPreparingShareActivity` 标志：因为 settlement overlay 与原 share card 不会同时呈现，所以共用同一份「正在生成分享图」状态不冲突。
 - 结算 overlay 打开时，bottom tab bar 同样被 opacity / hit-testing 屏蔽（与原 share card 行为对齐）。
-- 结算卡内除金额/统计外，还包含两条 quote card：
-  - 「今日最佳忍耐时刻」从 `DailySettlement.bestMomentPool` 随机选一句。
-  - 「老板内心独白」从 `DailySettlement.bossMonologuePool(for: sentiment)` 按 sentiment 等级选；wisp/mild/standard/heavy 各有不同口吻的黑色幽默池。
-  - 两条 quote 均支持长按 0.4s 撕碎换内容：rigid 触感 + `withAnimation` 包裹 state 切换 + `.id(combined)` 驱动 SwiftUI insertion/removal transition（旧文案缩放偏移消散，新文案 fade + slide-in）。pool 内会 exclude 当前文案，保证连续撕碎一定出新内容。撕碎只发生在 overlay 内（`showsControls == true`）；导出分享图时 `onTearBestMoment` / `onTearBossMonologue` 传 nil 不渲染长按 hint。
+- 结算卡内除金额/统计外，还包含一条 quote card「今日最佳忍耐时刻」：从 `DailySettlement.bestMomentPool` 随机选一句，支持长按 0.4s 撕碎换内容（rigid 触感 + `withAnimation` 包裹 state 切换 + `.id(combined)` 驱动 SwiftUI insertion/removal transition；pool 内会 exclude 当前文案，保证连续撕碎一定出新内容）。撕碎只发生在 overlay 内（`showsControls == true`）；导出分享图时 `onTearBestMoment` 传 nil 不渲染长按 hint。
 - 结算卡底部增加「累积窝囊费」单行：从 `DailySettlement.cumulativeEarned` 渲染（所有历史 daily records earnedToday 求和 + 今日 live amount，避免重复计入今日 closed snapshot）。privacy 模式打码为 `¥•••.••`。
 
 ### 个人时间模式

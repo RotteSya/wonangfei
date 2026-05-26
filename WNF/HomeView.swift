@@ -93,7 +93,7 @@ private struct HeroHomePage: View {
             Spacer(minLength: 16)
 
             HomeMascotStage(quote: statusPresentation.quote)
-                .padding(.bottom, 145)
+                .padding(.bottom, 100)
         }
     }
 }

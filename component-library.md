@@ -123,6 +123,50 @@
   - `工位困住我，到账放过我。` / `今天的辛苦，有数字替我作证。`
 - Overlay: home content remains underneath but blurred and dimmed across the full screen, including status bar and bottom home-indicator areas; tapping outside closes the card.
 
+### Clock-Out CTA
+
+- Source: `WNF/DailySettlement.swift`.
+- Use on: home page, directly below the progress track.
+- Container: ink-filled rounded rectangle, radius `18px`, padding `12px 16px`, drop shadow.
+- Leading icon: yellow circle (`36px`) with `tray.and.arrow.down.fill`.
+- Copy adapts to `WorkStatus`:
+  - `.before`: `提前结算今日` / `今天的窝囊费还没开张`
+  - `.morning`, `.afternoon`: `提前下班结算` / 状态对应的提示
+  - `.lunch`: `中场结算一下` / `午休回血中，要不要小结一下`
+  - `.done`: `我下班了` / `今日通关，看看今天的窝囊费`
+- Trailing affordance: small `arrow.right` chevron, white at 82%.
+- Tap: opens settlement overlay via `RootView.presentSettlement()`.
+
+### Settlement Overlay
+
+- Source: `WNF/DailySettlement.swift`.
+- Trigger: only from the home Clock-Out CTA.
+- Phases:
+  - `prep` → `burst` (≈0.85s, heavy haptic on entry, central yen + radial gradient explode outward into a coin/confetti shower)
+  - `burst` → `reveal` (≈0.55s spring, settlement card scales/opacity in, amount text content-transitions 0 → today's amount)
+  - 底部 action 行延后 0.18s ease-in 出现
+- Skip control: top-right `跳过` capsule visible until `reveal` phase, completes burst immediately.
+- Background: full-bleed black at 0.62 opacity during `reveal`, 0.32 during `burst`; tap-to-dismiss only enabled during `reveal`.
+- Bottom action row:
+  - Primary `存入资产`: ink fill, white text, persists today's snapshot through `WageState.persistCurrentDaySnapshot()` and emits success haptic.
+  - Secondary `分享卡片`: white fill, ink text, drives system share through the existing `ImageRenderer` pipeline; shows `渲染中…` while preparing.
+- Hides bottom tab bar while presented (same contract as share card).
+
+### Settlement Share Card
+
+- Source: `WNF/DailySettlement.swift`.
+- Use on: settlement overlay and the system share image.
+- Container: rounded card, radius `30px`, max width `340pt` in overlay, fixed `360pt` width when exported.
+- Header: yellow band (or white for `quietLedger` template), compact mascot, `窝囊费`, `今日下班结算`, and three icon controls (eye / share / close) when `showsControls == true`.
+- Template background: matches `PremiumShareTemplateID` (classic / overtimeReceipt / survivalBadge / quietLedger).
+- Body:
+  - Dynamic headline + subcopy from `DailySettlement.headline` / `.subCopy`.
+  - Amount panel: `今日窝囊费` label, sentiment badge (emoji + label), large yen-prefixed amount with content-transition driven `displayedAmount` for ticker animation.
+  - Stats row (three tiles): `忍耐指数` (1-5 yellow stars), `已忍时长` (h/min split), `连续打工` (天 / 暂无).
+  - `今日最佳忍耐时刻` quote card with `quote.opening` glyph.
+  - Footer: `丧萌有理 · 自嘲无罪` left, `来自窝囊费` right with yen badge.
+- Privacy: eye toggle masks amount (`•••.••`) and duration (`••h••min`); fallback share text also honors the mask.
+
 ### Premium Paywall
 
 - Source: `WNF/PremiumUI.swift`.

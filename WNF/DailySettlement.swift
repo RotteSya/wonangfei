@@ -1,0 +1,943 @@
+import SwiftUI
+import UIKit
+
+// MARK: - Data Model
+
+enum SettlementSentiment: Int, CaseIterable, Equatable {
+    case wisp = 1
+    case mild = 2
+    case standard = 3
+    case heavy = 4
+    case overtime = 5
+
+    var stars: Int { rawValue }
+    var maxStars: Int { 5 }
+
+    var label: String {
+        switch self {
+        case .wisp: "今日溜走"
+        case .mild: "轻度搬砖"
+        case .standard: "稳定窝囊"
+        case .heavy: "高强度忍耐"
+        case .overtime: "超额加班"
+        }
+    }
+
+    var emoji: String {
+        switch self {
+        case .wisp: "🫥"
+        case .mild: "😐"
+        case .standard: "😮‍💨"
+        case .heavy: "🥲"
+        case .overtime: "🥵"
+        }
+    }
+}
+
+struct DailySettlement: Equatable {
+    var dateKey: String
+    var earnedToday: Double
+    var elapsedPaidMinutes: Int
+    var workdayMinutes: Int
+    var progress: Double
+    var sentiment: SettlementSentiment
+    var streakDays: Int
+    var headline: String
+    var subCopy: String
+    var bestMoment: String
+    var status: WorkStatus
+    var capturedAt: Date
+
+    static func derive(
+        from day: WageDay,
+        dailyRecords: [String: DailyWageRecord],
+        at date: Date = Date()
+    ) -> DailySettlement {
+        let progress = day.progress
+        let sentiment = deriveSentiment(progress: progress, status: day.status)
+        let streakDays = deriveStreakDays(
+            dailyRecords: dailyRecords,
+            includingTodayEarned: day.earnedToday,
+            today: date
+        )
+        let copy = pickCopy(sentiment: sentiment, status: day.status, streakDays: streakDays)
+        return DailySettlement(
+            dateKey: WageState.dateKey(for: date),
+            earnedToday: day.earnedToday,
+            elapsedPaidMinutes: day.elapsedPaidMinutes,
+            workdayMinutes: day.workdayMinutes,
+            progress: progress,
+            sentiment: sentiment,
+            streakDays: streakDays,
+            headline: copy.headline,
+            subCopy: copy.subCopy,
+            bestMoment: copy.bestMoment,
+            status: day.status,
+            capturedAt: date
+        )
+    }
+
+    private static func deriveSentiment(progress: Double, status: WorkStatus) -> SettlementSentiment {
+        if status == .done && progress >= 1.0 {
+            return .heavy
+        }
+        switch progress {
+        case ..<0.05: return .wisp
+        case ..<0.35: return .mild
+        case ..<0.65: return .standard
+        case ..<1.0: return .heavy
+        default: return .overtime
+        }
+    }
+
+    private static func deriveStreakDays(
+        dailyRecords: [String: DailyWageRecord],
+        includingTodayEarned: Double,
+        today: Date
+    ) -> Int {
+        let calendar = DateComponents.calendar
+        var streak = 0
+        if includingTodayEarned > 0 {
+            streak = 1
+        } else if let record = dailyRecords[WageState.dateKey(for: today)], record.earnedToday > 0 {
+            streak = 1
+        }
+
+        var cursor = today
+        let maxLookBack = 60
+        for _ in 0..<maxLookBack {
+            guard let previous = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
+            cursor = previous
+            let key = WageState.dateKey(for: previous)
+            guard let record = dailyRecords[key], record.earnedToday > 0 else { break }
+            streak += 1
+        }
+        return streak
+    }
+
+    private struct CopyPick {
+        var headline: String
+        var subCopy: String
+        var bestMoment: String
+    }
+
+    private static func pickCopy(
+        sentiment: SettlementSentiment,
+        status: WorkStatus,
+        streakDays: Int
+    ) -> CopyPick {
+        let bestMomentPool: [String] = [
+            "把哈欠忍成了沉默",
+            "在工位坐到走不动",
+            "看完一封不想回的邮件",
+            "听完一场无关的会",
+            "对显示器叹了三次气",
+            "把咖啡喝凉了第二轮",
+            "假装在写代码其实在发呆",
+            "把不耐烦藏进了「好的」",
+            "刷新邮箱十七次",
+            "回了一句「收到，马上处理」"
+        ]
+        let bestMoment = bestMomentPool.randomElement() ?? bestMomentPool[0]
+
+        switch sentiment {
+        case .wisp:
+            return CopyPick(
+                headline: "今天还没真正开张",
+                subCopy: streakDays > 1
+                    ? "连续 \(streakDays) 天打工的你，偶尔溜走也算合理。"
+                    : "今天的窝囊费比较薄，明天再战。",
+                bestMoment: bestMoment
+            )
+        case .mild:
+            return CopyPick(
+                headline: "轻量忍耐入账",
+                subCopy: streakDays > 1
+                    ? "连续 \(streakDays) 天，今天的窝囊费小到可以请杯咖啡。"
+                    : "今天的窝囊费小，但已经收下了。",
+                bestMoment: bestMoment
+            )
+        case .standard:
+            return CopyPick(
+                headline: "今天稳定窝囊",
+                subCopy: streakDays > 1
+                    ? "连续 \(streakDays) 天稳定到账，工位虽冷板凳但票稳。"
+                    : "稳定挣进口袋，没赢也没输。",
+                bestMoment: bestMoment
+            )
+        case .heavy:
+            return CopyPick(
+                headline: "今天全程忍住",
+                subCopy: streakDays > 1
+                    ? "连续 \(streakDays) 天全勤，今日窝囊费已结算。"
+                    : "完整熬完一天，窝囊费已结算。",
+                bestMoment: bestMoment
+            )
+        case .overtime:
+            return CopyPick(
+                headline: "今天加班入账",
+                subCopy: streakDays > 1
+                    ? "连续 \(streakDays) 天到账，今天还加了一截。"
+                    : "正餐之外又加了一份，明天记得早点走。",
+                bestMoment: bestMoment
+            )
+        }
+    }
+}
+
+// MARK: - Coin Burst Animation
+
+struct SettlementCoinBurst: View {
+    var expanded: Bool
+    var coinCount: Int = 24
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = min(proxy.size.width, proxy.size.height)
+            ZStack {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color.white.opacity(expanded ? 0.0 : 0.96),
+                                WNFTheme.yellow.opacity(expanded ? 0.0 : 0.78),
+                                WNFTheme.gold.opacity(0)
+                            ],
+                            center: .center,
+                            startRadius: 1,
+                            endRadius: size * 0.62
+                        )
+                    )
+                    .frame(width: expanded ? size * 2.4 : 36, height: expanded ? size * 2.4 : 36)
+                    .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+                    .opacity(expanded ? 0 : 1)
+
+                ForEach(0..<coinCount, id: \.self) { index in
+                    SettlementCoinParticle(index: index, total: coinCount, expanded: expanded)
+                        .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+                }
+
+                Text("¥")
+                    .font(.system(size: expanded ? 92 : 32, weight: .black, design: .rounded))
+                    .foregroundStyle(WNFTheme.yellow)
+                    .shadow(color: .black.opacity(0.22), radius: 10, y: 5)
+                    .scaleEffect(expanded ? 1.18 : 0.35)
+                    .opacity(expanded ? 0 : 1)
+                    .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+private struct SettlementCoinParticle: View {
+    var index: Int
+    var total: Int
+    var expanded: Bool
+
+    private var angle: Double {
+        Double(index) / Double(max(1, total)) * .pi * 2
+    }
+
+    private var distance: CGFloat {
+        expanded ? CGFloat(120 + (index % 6) * 30) : 0
+    }
+
+    private var coinSize: CGFloat {
+        CGFloat(26 + (index % 4) * 6)
+    }
+
+    private var fontSize: CGFloat {
+        CGFloat(14 + (index % 4) * 3)
+    }
+
+    private var xOffset: CGFloat {
+        CGFloat(cos(angle)) * distance
+    }
+
+    private var yOffset: CGFloat {
+        CGFloat(sin(angle)) * distance
+    }
+
+    private var confettiColor: Color {
+        let palette: [Color] = [WNFTheme.coral, Color(red: 0.49, green: 0.78, blue: 0.38), WNFTheme.cyan]
+        return palette[index % palette.count]
+    }
+
+    private var isCoin: Bool { index % 3 != 0 }
+
+    var body: some View {
+        content
+            .offset(x: xOffset, y: yOffset)
+            .scaleEffect(expanded ? 1 : 0.2)
+            .rotationEffect(.degrees(expanded ? Double(index * 27 + 90) : 0))
+            .opacity(expanded ? 0 : 1)
+            .animation(
+                .spring(response: 0.72, dampingFraction: 0.78).delay(Double(index % 6) * 0.02),
+                value: expanded
+            )
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if isCoin {
+            Text("¥")
+                .font(.system(size: fontSize, weight: .black, design: .rounded))
+                .foregroundStyle(Color.white)
+                .frame(width: coinSize, height: coinSize)
+                .background(WNFTheme.yellow, in: Circle())
+                .shadow(color: .black.opacity(0.18), radius: 8, y: 4)
+        } else {
+            RoundedRectangle(cornerRadius: 5)
+                .fill(confettiColor)
+                .frame(width: 16, height: 11)
+                .rotationEffect(.degrees(Double(index * 17)))
+        }
+    }
+}
+
+// MARK: - Settlement Overlay (Modal)
+
+struct DailySettlementOverlay: View {
+    enum Phase: Equatable {
+        case prep
+        case burst
+        case reveal
+    }
+
+    var settlement: DailySettlement
+    var template: PremiumShareTemplateID
+    @Binding var hidesSensitiveInfo: Bool
+    var isPreparingShare: Bool
+    var onShare: () -> Void
+    var onSaveAsAsset: () -> Void
+    var onDismiss: () -> Void
+
+    @State private var phase: Phase = .prep
+    @State private var burstExpanded = false
+    @State private var displayedAmount: Double = 0
+    @State private var revealCardVisible = false
+    @State private var revealActionsVisible = false
+
+    private let burstDuration: TimeInterval = 0.85
+    private let amountRampDuration: TimeInterval = 0.7
+    private let revealDelay: TimeInterval = 0.5
+
+    var body: some View {
+        ZStack {
+            backdrop
+            content
+            burstLayer
+            skipControl
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear(perform: startBurstSequence)
+    }
+
+    private var backdrop: some View {
+        Color.black
+            .opacity(phase == .prep ? 0 : (phase == .burst ? 0.32 : 0.62))
+            .ignoresSafeArea()
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if phase == .reveal {
+                    onDismiss()
+                }
+            }
+            .animation(.easeInOut(duration: 0.32), value: phase)
+    }
+
+    private var burstLayer: some View {
+        SettlementCoinBurst(expanded: burstExpanded)
+            .allowsHitTesting(false)
+            .opacity(phase == .burst ? 1 : 0)
+            .animation(.easeOut(duration: 0.4), value: phase)
+            .ignoresSafeArea()
+    }
+
+    private var skipControl: some View {
+        VStack {
+            HStack {
+                Spacer()
+                if phase != .reveal {
+                    Button(action: completeBurstImmediately) {
+                        Text("跳过")
+                            .font(.system(size: 13, weight: .heavy))
+                            .foregroundStyle(Color.white)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(Color.black.opacity(0.32), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, 18)
+                    .padding(.top, 18)
+                    .transition(.opacity)
+                }
+            }
+            Spacer()
+        }
+        .animation(.easeInOut(duration: 0.2), value: phase)
+    }
+
+    private var content: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 24)
+
+            DailySettlementShareCard(
+                settlement: settlement,
+                template: template,
+                displayedAmount: displayedAmount,
+                hidesSensitiveInfo: hidesSensitiveInfo,
+                showsControls: true,
+                isPreparingShare: isPreparingShare,
+                onTogglePrivacy: {
+                    withAnimation(.snappy(duration: 0.18)) {
+                        hidesSensitiveInfo.toggle()
+                    }
+                },
+                onShare: onShare,
+                onDismiss: onDismiss
+            )
+            .frame(maxWidth: 340)
+            .padding(.horizontal, 28)
+            .scaleEffect(revealCardVisible ? 1 : 0.86)
+            .opacity(revealCardVisible ? 1 : 0)
+            .shadow(color: .black.opacity(0.32), radius: 28, y: 18)
+
+            Spacer(minLength: 12)
+
+            actionRow
+                .opacity(revealActionsVisible ? 1 : 0)
+                .offset(y: revealActionsVisible ? 0 : 14)
+
+            Spacer(minLength: 16)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(.spring(response: 0.55, dampingFraction: 0.82), value: revealCardVisible)
+        .animation(.easeOut(duration: 0.32).delay(0.18), value: revealActionsVisible)
+    }
+
+    private var actionRow: some View {
+        HStack(spacing: 12) {
+            settlementActionButton(
+                title: "存入资产",
+                systemImage: "tray.and.arrow.down.fill",
+                style: .primary
+            ) {
+                onSaveAsAsset()
+            }
+
+            settlementActionButton(
+                title: isPreparingShare ? "渲染中…" : "分享卡片",
+                systemImage: "square.and.arrow.up.fill",
+                style: .secondary,
+                isDisabled: isPreparingShare
+            ) {
+                onShare()
+            }
+        }
+        .padding(.horizontal, 28)
+        .padding(.bottom, 8)
+    }
+
+    private enum ActionStyle { case primary, secondary }
+
+    private func settlementActionButton(
+        title: String,
+        systemImage: String,
+        style: ActionStyle,
+        isDisabled: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 13, weight: .heavy))
+                Text(title)
+                    .font(.system(size: 14, weight: .heavy))
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 48)
+            .foregroundStyle(style == .primary ? Color.white : WNFTheme.ink)
+            .background(
+                style == .primary ? WNFTheme.ink : Color.white,
+                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(style == .secondary ? WNFTheme.hairline : Color.clear, lineWidth: 0.5)
+            )
+            .shadow(color: .black.opacity(0.12), radius: 8, y: 4)
+            .opacity(isDisabled ? 0.62 : 1)
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+    }
+
+    private func startBurstSequence() {
+        guard phase == .prep else { return }
+        phase = .burst
+        triggerBurstHaptic()
+
+        withAnimation(.spring(response: 0.78, dampingFraction: 0.76)) {
+            burstExpanded = true
+        }
+
+        Task { @MainActor in
+            try? await sleep(seconds: revealDelay)
+            guard phase == .burst else { return }
+            phase = .reveal
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.82)) {
+                revealCardVisible = true
+            }
+            withAnimation(.easeOut(duration: 0.7)) {
+                displayedAmount = settlement.earnedToday
+            }
+            try? await sleep(seconds: 0.18)
+            withAnimation(.easeOut(duration: 0.32)) {
+                revealActionsVisible = true
+            }
+        }
+    }
+
+    private func completeBurstImmediately() {
+        guard phase != .reveal else { return }
+        phase = .reveal
+        withAnimation(.easeInOut(duration: 0.18)) {
+            burstExpanded = true
+        }
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) {
+            revealCardVisible = true
+        }
+        displayedAmount = settlement.earnedToday
+        withAnimation(.easeOut(duration: 0.22)) {
+            revealActionsVisible = true
+        }
+    }
+
+    private func triggerBurstHaptic() {
+        let generator = UIImpactFeedbackGenerator(style: .heavy)
+        generator.impactOccurred()
+    }
+
+    private func sleep(seconds: TimeInterval) async throws {
+        let nanoseconds = UInt64((max(0, seconds) * 1_000_000_000).rounded())
+        try await Task.sleep(nanoseconds: nanoseconds)
+    }
+}
+
+// MARK: - Settlement Share Card
+
+struct DailySettlementShareCard: View {
+    var settlement: DailySettlement
+    var template: PremiumShareTemplateID
+    var displayedAmount: Double?
+    var hidesSensitiveInfo: Bool
+    var showsControls: Bool
+    var isPreparingShare: Bool = false
+    var onTogglePrivacy: () -> Void = {}
+    var onShare: () -> Void = {}
+    var onDismiss: () -> Void = {}
+
+    private var renderedAmount: Double {
+        displayedAmount ?? settlement.earnedToday
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            cardBody
+        }
+        .background(templateBackground, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .stroke(Color.white.opacity(0.72), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+    }
+
+    private var templateBackground: Color {
+        switch template {
+        case .classic: WNFTheme.bg
+        case .overtimeReceipt: WNFTheme.surfaceSoft
+        case .survivalBadge: WNFTheme.coralSoft
+        case .quietLedger: Color.white
+        }
+    }
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image("CowThreeQ")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 30, height: 30)
+                .padding(4)
+                .background(Color.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("窝囊费")
+                    .font(.system(size: 20, weight: .black, design: .rounded))
+                    .foregroundStyle(WNFTheme.ink)
+                Text("今日下班结算")
+                    .font(.system(size: 10, weight: .heavy))
+                    .tracking(1.2)
+                    .foregroundStyle(WNFTheme.inkSoft)
+            }
+
+            Spacer(minLength: 8)
+
+            if showsControls {
+                HStack(spacing: 8) {
+                    settlementHeaderButton(
+                        systemName: hidesSensitiveInfo ? "eye.slash" : "eye",
+                        accessibilityLabel: hidesSensitiveInfo ? "显示敏感信息" : "隐藏敏感信息",
+                        action: onTogglePrivacy
+                    )
+                    settlementHeaderButton(
+                        systemName: "square.and.arrow.up",
+                        accessibilityLabel: isPreparingShare ? "正在生成分享图" : "唤起系统分享",
+                        isLoading: isPreparingShare,
+                        isDisabled: isPreparingShare,
+                        action: onShare
+                    )
+                    settlementHeaderButton(
+                        systemName: "xmark",
+                        accessibilityLabel: "退出结算",
+                        action: onDismiss
+                    )
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 13)
+        .background(template == .quietLedger ? Color.white : WNFTheme.gold)
+    }
+
+    private var cardBody: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Rectangle()
+                .fill(Color.clear)
+                .frame(height: 0)
+                .overlay(
+                    Rectangle()
+                        .stroke(WNFTheme.muted.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [8, 8]))
+                )
+                .padding(.horizontal, -18)
+                .padding(.top, -14)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(settlement.headline)
+                    .font(.system(size: 26, weight: .black, design: .rounded))
+                    .foregroundStyle(WNFTheme.ink)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.78)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(settlement.subCopy)
+                    .font(.system(size: 12, weight: .heavy))
+                    .foregroundStyle(WNFTheme.inkSoft)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            amountPanel
+
+            statsRow
+
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "quote.opening")
+                    .font(.system(size: 11, weight: .heavy))
+                    .foregroundStyle(WNFTheme.muted)
+                    .padding(.top, 2)
+                Text("今日最佳忍耐时刻：\(settlement.bestMoment)")
+                    .font(.system(size: 12, weight: .heavy))
+                    .foregroundStyle(WNFTheme.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(WNFTheme.hairline, lineWidth: 0.5)
+            )
+
+            HStack {
+                Text("丧萌有理 · 自嘲无罪")
+                    .font(.system(size: 12, weight: .heavy))
+                    .foregroundStyle(WNFTheme.inkSoft)
+
+                Spacer(minLength: 8)
+
+                HStack(spacing: 5) {
+                    YenBadge(size: 16)
+                    Text("来自窝囊费")
+                        .font(.system(size: 12, weight: .black))
+                        .foregroundStyle(WNFTheme.ink)
+                }
+            }
+        }
+        .padding(14)
+        .background(
+            LinearGradient(
+                colors: [WNFTheme.bg.opacity(0.98), WNFTheme.surfaceSoft.opacity(0.78)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+    }
+
+    private var amountPanel: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("今日窝囊费")
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundStyle(WNFTheme.inkSoft)
+                Spacer(minLength: 12)
+                sentimentBadge
+            }
+
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text("¥")
+                    .font(.system(size: 30, weight: .black, design: .rounded))
+                    .foregroundStyle(WNFTheme.yellow)
+                Group {
+                    if hidesSensitiveInfo {
+                        Text("•••.••")
+                            .foregroundStyle(WNFTheme.muted)
+                    } else {
+                        Text(formattedAmount)
+                            .foregroundStyle(WNFTheme.ink)
+                            .contentTransition(.numericText(value: renderedAmount))
+                            .animation(.easeOut(duration: 0.25), value: renderedAmount)
+                    }
+                }
+                .font(.system(size: 44, weight: .black, design: .rounded))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(WNFTheme.muted.opacity(0.18), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                .padding(6)
+        )
+    }
+
+    private var formattedAmount: String {
+        String(format: "%.2f", renderedAmount)
+    }
+
+    private var sentimentBadge: some View {
+        HStack(spacing: 5) {
+            Text(settlement.sentiment.emoji)
+                .font(.system(size: 13))
+            Text(settlement.sentiment.label)
+                .font(.system(size: 11, weight: .heavy))
+                .foregroundStyle(WNFTheme.ink)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(WNFTheme.surfaceSoft, in: Capsule())
+    }
+
+    private var statsRow: some View {
+        HStack(spacing: 10) {
+            settlementStatTile(
+                title: "忍耐指数",
+                value: settlement.sentiment.stars,
+                outOf: settlement.sentiment.maxStars
+            )
+            settlementStatTile(
+                title: "已忍时长",
+                primary: durationPrimary,
+                secondary: durationSecondary
+            )
+            settlementStatTile(
+                title: "连续打工",
+                primary: settlement.streakDays > 0 ? "\(settlement.streakDays)" : "—",
+                secondary: settlement.streakDays > 0 ? "天" : "暂无"
+            )
+        }
+    }
+
+    private var durationPrimary: String {
+        if hidesSensitiveInfo {
+            return "••"
+        }
+        let h = settlement.elapsedPaidMinutes / 60
+        if h > 0 { return "\(h)" }
+        return "\(settlement.elapsedPaidMinutes)"
+    }
+
+    private var durationSecondary: String {
+        if hidesSensitiveInfo {
+            return "h••min"
+        }
+        let h = settlement.elapsedPaidMinutes / 60
+        let m = settlement.elapsedPaidMinutes % 60
+        if h > 0 {
+            return m > 0 ? "h \(m)min" : "h"
+        }
+        return "min"
+    }
+
+    private func settlementStatTile(
+        title: String,
+        primary: String,
+        secondary: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.system(size: 10, weight: .heavy))
+                .foregroundStyle(WNFTheme.muted)
+                .tracking(1)
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(primary)
+                    .font(.system(size: 22, weight: .black, design: .rounded))
+                    .foregroundStyle(WNFTheme.ink)
+                Text(secondary)
+                    .font(.system(size: 10, weight: .heavy))
+                    .foregroundStyle(WNFTheme.muted)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(WNFTheme.hairline, lineWidth: 0.5)
+        )
+    }
+
+    private func settlementStatTile(
+        title: String,
+        value: Int,
+        outOf max: Int
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.system(size: 10, weight: .heavy))
+                .foregroundStyle(WNFTheme.muted)
+                .tracking(1)
+            HStack(spacing: 2) {
+                ForEach(0..<max, id: \.self) { index in
+                    Image(systemName: index < value ? "star.fill" : "star")
+                        .font(.system(size: 11, weight: .heavy))
+                        .foregroundStyle(index < value ? WNFTheme.yellow : WNFTheme.muted.opacity(0.5))
+                }
+            }
+            .padding(.top, 5)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(WNFTheme.hairline, lineWidth: 0.5)
+        )
+    }
+
+    private func settlementHeaderButton(
+        systemName: String,
+        accessibilityLabel: String,
+        isLoading: Bool = false,
+        isDisabled: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Group {
+                if isLoading {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .tint(WNFTheme.ink)
+                        .scaleEffect(0.68)
+                } else {
+                    Image(systemName: systemName)
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(WNFTheme.ink)
+                }
+            }
+            .frame(width: 32, height: 32)
+            .background(Color.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .shadow(color: .black.opacity(0.07), radius: 5, y: 2)
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.72 : 1)
+        .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+// MARK: - CTA Button (Home entry)
+
+struct ClockOutCTA: View {
+    var status: WorkStatus
+    var action: () -> Void
+
+    private var title: String {
+        switch status {
+        case .before: "提前结算今日"
+        case .morning, .afternoon: "提前下班结算"
+        case .lunch: "中场结算一下"
+        case .done: "我下班了"
+        }
+    }
+
+    private var subtitle: String {
+        switch status {
+        case .before: "今天的窝囊费还没开张"
+        case .morning: "已经熬过早上的两小时最值钱"
+        case .lunch: "午休回血中，要不要小结一下"
+        case .afternoon: "再忍忍，也可以提前看看战绩"
+        case .done: "今日通关，看看今天的窝囊费"
+        }
+    }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(WNFTheme.yellow)
+                        .frame(width: 36, height: 36)
+                    Image(systemName: "tray.and.arrow.down.fill")
+                        .font(.system(size: 16, weight: .heavy))
+                        .foregroundStyle(WNFTheme.ink)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 15, weight: .black, design: .rounded))
+                        .foregroundStyle(Color.white)
+                    Text(subtitle)
+                        .font(.system(size: 11, weight: .heavy))
+                        .foregroundStyle(Color.white.opacity(0.72))
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundStyle(Color.white.opacity(0.82))
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity)
+            .background(WNFTheme.ink, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .shadow(color: .black.opacity(0.18), radius: 12, y: 6)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityHint(subtitle)
+    }
+}

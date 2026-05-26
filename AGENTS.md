@@ -34,6 +34,7 @@ When XcodeBuildMCP is available, call `session_show_defaults` first, then `build
 - `WNF/PremiumCore.swift` owns Premium constants, App Group snapshot schema, preferences, export helpers, and the future verifier seam. Main app unlock state must come from verified StoreKit transactions, never from the App Group mirror.
 - `WNFWidget/WNFWidget.swift` reads only App Group mirrors. Widget preview/gallery paths must use fixed sample values, and all widget views must keep `containerBackground(for: .widget)`.
 - Share-card export is still main-thread bound on iOS: `ImageRenderer.render(rasterizationScale:)` and the `UIGraphicsImageRenderer` context run synchronously on `MainActor`. The one-frame loading pre-flight in `RootView` is a UX/perceptual-feedback fix, not a real rendering-concurrency or P1 performance fix.
+- `WNF/DailySettlement.swift` owns the下班结算 feature: pure-function snapshot derivation (`DailySettlement.derive`), 爆金币 burst animation, full-screen overlay, settlement share card, and home CTA. `RootView` is the only owner of overlay presentation state and reuses the existing share-render / `ActivityView` pipeline for system share. The settlement flow must not be triggered from anywhere other than the home Clock-Out CTA, and must not introduce new persistence keys — `存入资产` reuses `WageState.persistCurrentDaySnapshot()`.
 
 ## Onboarding Asset Rules
 

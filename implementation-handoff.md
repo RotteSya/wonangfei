@@ -56,6 +56,7 @@ Native sources:
 - `WNF/WorkStatusPresentation.swift`: presentation-only status labels, quotes, and mascot asset names consumed by home/share surfaces.
 - `WNF/WageFormatting.swift`: amount and duration formatting helpers used by home, records, onboarding, and share surfaces.
 - `WNF/ShareCard.swift`: share-card copy pool, Premium template picker, dim backdrop, overlay, card layout, icon controls, and the `UIActivityViewController` wrapper.
+- `WNF/DailySettlement.swift`: 下班结算数据模型 (`DailySettlement` + `SettlementSentiment`), 爆金币动画 (`SettlementCoinBurst`), 全屏结算 overlay (`DailySettlementOverlay`), 结算分享卡 (`DailySettlementShareCard`), 首页 CTA 入口 (`ClockOutCTA`). 数据派生纯函数从 `WageDay` + `dailyRecords` 计算情绪等级和连续打工天数, 不修改任何持久化路径.
 - `WNF/PremiumCore.swift`: product constants, entitlement snapshots, Paywall routing, theme/template preferences, App Group snapshot writing, export service, and deep-link parsing.
 - `WNF/PremiumStore.swift`: StoreKit 2 client, entitlement verifier seam, transaction listener, restore, refund request, product loading, and entitlement state.
 - `WNF/PremiumUI.swift`: Paywall, purchase/restore UI states, legal document presentation, and offline legal fallback.
@@ -207,6 +208,18 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
   - share button enters a loading/disabled state and waits one frame so the spinner can render; this is a UX/perceptual-feedback fix, not a concurrency fix, because SwiftUI `ImageRenderer.render(rasterizationScale:)` and the explicit `UIGraphicsImageRenderer` context are still main-thread bound. Export uses the current `UIWindowScene.screen.scale`, then presents iOS `UIActivityViewController` from an attached presenter view with `popoverPresentationController.sourceView` configured for iPad / Mac Catalyst;
   - x button closes the card.
 - Tapping outside the card closes the card. While the card is open, bottom tab bar interaction is disabled.
+- 首页 progress track 下方常驻一个「下班结算」CTA 按钮 (`ClockOutCTA`)，文案随 `WageDay.status` 切换：尚未开工时为「提前结算今日」，上午 / 下午为「提前下班结算」，午休为「中场结算一下」，已通关为「我下班了」。点击触发 `RootView.presentSettlement()`，与右上角分享互相独立。
+
+### 下班结算
+
+- 入口仅在首页 CTA。`RootView` 拥有 `settlementPresented`、`settlementSnapshot`、`settlementHidesSensitiveInfo` 三个状态。
+- `DailySettlement.derive(from:dailyRecords:at:)` 从当前 `WageDay` 与 `dailyRecords` 派生快照：金额、已忍时长、进度、忍耐指数 (`SettlementSentiment` 1-5 星，按 `progress` 落档并把 `.done && progress >= 1.0` 视为 heavy)、连续打工天数 (从今天向前回溯，遇到 `earnedToday > 0` 即继续，遇到 0 即停止，最多回溯 60 天)、动态 headline / subCopy（按情绪等级 + 连续天数动态拼接）、随机选中的今日最佳忍耐时刻文案。派生过程是纯函数，不修改任何持久化路径。
+- 全屏 overlay 有三个阶段：`prep`（背景刚淡入） → `burst`（中心金币雨向外扩散，触发 heavy 触感反馈） → `reveal`（金币消散后结算卡 spring-in，数字 0 → 今日金额线性 ease-out 滚动，底部「存入资产 / 分享卡片」action 行延后 0.18s ease-in）。整个动画 < 2s，右上角始终有「跳过」按钮可立即完成 burst 跳到 reveal 态。
+- 结算卡复用 `PremiumShareTemplateID` 模板背景色 (classic / overtimeReceipt / survivalBadge / quietLedger)，与现有 `WonangfeiShareCard` 模板色保持一致；header 同时提供眼睛（敏感信息打码）/ 分享 / 关闭按钮，与分享卡操作保持一致。
+- 「存入资产」调用 `state.persistCurrentDaySnapshot()` 写回当前快照并发出 `UINotificationFeedbackGenerator(.success)`，然后关闭 overlay。
+- 「分享卡片」走与首页分享相同的渲染管线：`renderAndPresentSettlementShare` 同步生成 `DailySettlementShareCard` 的 `UIImage`（main-thread bound 的 `ImageRenderer.render(rasterizationScale:)`，使用 `windowSceneScale`，宽度固定 360pt），失败时退化到包含金额、已忍时长、连续打工天数的 fallback 文本。复用现有 `ActivityView` 和 `ActivityPresenterViewController`，避免 iPad / Mac Catalyst 弹窗崩溃。
+- 共用一份 `isPreparingShareActivity` 标志：因为 settlement overlay 与原 share card 不会同时呈现，所以共用同一份「正在生成分享图」状态不冲突。
+- 结算 overlay 打开时，bottom tab bar 同样被 opacity / hit-testing 屏蔽（与原 share card 行为对齐）。
 
 ### 记录页
 

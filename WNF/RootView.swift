@@ -52,6 +52,9 @@ struct RootView: View {
     @State private var isActivityPresented = false
     @State private var isPreparingShareActivity = false
     @State private var windowSceneScale: CGFloat?
+    @State private var settlementPresented = false
+    @State private var settlementSnapshot: DailySettlement?
+    @State private var settlementHidesSensitiveInfo = false
     @AppStorage("wnf.onboarding.completed") private var onboardingCompleted = false
 
     private static let shareExportWidth: CGFloat = 360
@@ -200,9 +203,10 @@ struct RootView: View {
 
             AppTabBar(selectedTab: tabSelection)
                 .padding(.bottom, 10)
-                .opacity(homeSharePresented ? 0 : 1)
-                .allowsHitTesting(!homeSharePresented)
+                .opacity(homeSharePresented || settlementPresented ? 0 : 1)
+                .allowsHitTesting(!homeSharePresented && !settlementPresented)
                 .animation(.easeInOut(duration: 0.18), value: homeSharePresented)
+                .animation(.easeInOut(duration: 0.18), value: settlementPresented)
                 .zIndex(1)
 
             ShareCardBackdrop(isPresented: homeSharePresented, onDismiss: dismissShareCard)
@@ -228,6 +232,22 @@ struct RootView: View {
                 .transition(.opacity)
                 .zIndex(3)
             }
+
+            if settlementPresented, let snapshot = settlementSnapshot {
+                DailySettlementOverlay(
+                    settlement: snapshot,
+                    template: premiumPreferences.selectedShareTemplate,
+                    hidesSensitiveInfo: $settlementHidesSensitiveInfo,
+                    isPreparingShare: isPreparingShareActivity,
+                    onShare: presentSettlementSystemShare,
+                    onSaveAsAsset: saveSettlementAsAsset,
+                    onDismiss: dismissSettlement
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .ignoresSafeArea(.container, edges: .all)
+                .transition(.opacity)
+                .zIndex(4)
+            }
         }
         .background {
             ActivityView(activityItems: activityItems, isPresented: $isActivityPresented)
@@ -247,8 +267,12 @@ struct RootView: View {
     private var currentTabContent: some View {
         switch selectedTab {
         case .home:
-            HomeView(isShareCardPresented: $homeSharePresented, onShare: presentShareCard)
-                .environmentObject(homeMascotVideoSession.controller)
+            HomeView(
+                isShareCardPresented: $homeSharePresented,
+                onShare: presentShareCard,
+                onClockOut: presentSettlement
+            )
+            .environmentObject(homeMascotVideoSession.controller)
         case .records:
             RecordsView()
         case .settings:
@@ -293,6 +317,35 @@ struct RootView: View {
         withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
             homeSharePresented = true
         }
+    }
+
+    private func presentSettlement() {
+        guard selectedTab == .home else { return }
+        let now = Date()
+        let day = state.calculation(at: now)
+        settlementSnapshot = DailySettlement.derive(
+            from: day,
+            dailyRecords: state.dailyRecords,
+            at: now
+        )
+        settlementHidesSensitiveInfo = state.privacyMode
+        withAnimation(.easeInOut(duration: 0.22)) {
+            settlementPresented = true
+        }
+    }
+
+    private func dismissSettlement() {
+        isPreparingShareActivity = false
+        withAnimation(.easeOut(duration: 0.22)) {
+            settlementPresented = false
+        }
+    }
+
+    private func saveSettlementAsAsset() {
+        state.persistCurrentDaySnapshot()
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(.success)
+        dismissSettlement()
     }
 
     private func selectShareTemplate(_ template: PremiumShareTemplateID) {
@@ -354,6 +407,55 @@ struct RootView: View {
         }
         isPreparingShareActivity = false
         isActivityPresented = true
+    }
+
+    @MainActor
+    private func presentSettlementSystemShare() {
+        guard !isPreparingShareActivity, let snapshot = settlementSnapshot else { return }
+
+        isPreparingShareActivity = true
+        let exportSnapshot = snapshot
+        let exportHidesSensitiveInfo = settlementHidesSensitiveInfo
+
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: Self.shareLoadingRefreshDelayNanoseconds)
+            guard settlementPresented else {
+                isPreparingShareActivity = false
+                return
+            }
+
+            renderAndPresentSettlementShare(
+                settlement: exportSnapshot,
+                hidesSensitiveInfo: exportHidesSensitiveInfo
+            )
+        }
+    }
+
+    @MainActor
+    private func renderAndPresentSettlementShare(settlement: DailySettlement, hidesSensitiveInfo: Bool) {
+        let exportCard = DailySettlementShareCard(
+            settlement: settlement,
+            template: premiumPreferences.selectedShareTemplate,
+            displayedAmount: settlement.earnedToday,
+            hidesSensitiveInfo: hidesSensitiveInfo,
+            showsControls: false
+        )
+        .frame(width: Self.shareExportWidth)
+
+        if let image = renderedShareImage(exportCard, scale: shareRenderScale) {
+            activityItems = [image]
+        } else {
+            activityItems = [settlementFallbackText(settlement: settlement, hidesSensitiveInfo: hidesSensitiveInfo)]
+        }
+        isPreparingShareActivity = false
+        isActivityPresented = true
+    }
+
+    private func settlementFallbackText(settlement: DailySettlement, hidesSensitiveInfo: Bool) -> String {
+        let amount = WNFFormat.moneyDecimal(settlement.earnedToday, privacy: hidesSensitiveInfo)
+        let duration = hidesSensitiveInfo ? "••h••min" : WNFFormat.duration(settlement.elapsedPaidMinutes)
+        let streakSuffix = settlement.streakDays > 1 ? "，连续 \(settlement.streakDays) 天到账" : ""
+        return "今日下班结算：\(amount)，已忍 \(duration)\(streakSuffix)。——窝囊费"
     }
 
     // Main-thread bound: the loading pre-flight gives perceptual feedback, not actual concurrency.

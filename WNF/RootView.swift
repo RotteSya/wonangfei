@@ -343,6 +343,7 @@ struct RootView: View {
 
     private func saveSettlementAsAsset() {
         state.persistCurrentDaySnapshot()
+        state.markTodaySettled()
         let generator = UINotificationFeedbackGenerator()
         generator.notificationOccurred(.success)
         dismissSettlement()

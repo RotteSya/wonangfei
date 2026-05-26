@@ -74,6 +74,27 @@ final class WageState: ObservableObject {
     @Published private(set) var dailyRecords: [String: DailyWageRecord]
     private(set) var recordsRevision = 0
 
+    @Published private(set) var lastSettlementDateKey: String? {
+        didSet {
+            if let key = lastSettlementDateKey {
+                userDefaults.set(key, forKey: StorageKey.lastSettlementDateKey)
+            } else {
+                userDefaults.removeObject(forKey: StorageKey.lastSettlementDateKey)
+            }
+        }
+    }
+
+    /// `true` when the user has explicitly completed (or saved) today's settlement.
+    /// Used by Home to switch into the lightweight "personal time" presentation.
+    /// Naturally resets when `currentDateKey` advances past the stored date.
+    var isTodaySettled: Bool {
+        lastSettlementDateKey == currentDateKey
+    }
+
+    func markTodaySettled() {
+        lastSettlementDateKey = currentDateKey
+    }
+
     let userDefaults: UserDefaults
     var dailyRecordStorageMode: DailyRecordStorageMode
     private var dayBoundaryTimer: Timer?
@@ -92,6 +113,7 @@ final class WageState: ObservableObject {
         privacyMode = userDefaults.boolValue(forKey: StorageKey.privacyMode) ?? Default.privacyMode
         selectedWeekdays = userDefaults.weekdaySet(forKey: StorageKey.selectedWeekdays) ?? Default.selectedWeekdays
         clockOutReminderEnabled = userDefaults.boolValue(forKey: StorageKey.clockOutReminderEnabled) ?? Default.clockOutReminderEnabled
+        lastSettlementDateKey = userDefaults.string(forKey: StorageKey.lastSettlementDateKey)
         let now = Date()
         currentDateKey = Self.dateKey(for: now)
         let dailyRecordLoadResult = Self.loadDailyRecords(from: userDefaults)

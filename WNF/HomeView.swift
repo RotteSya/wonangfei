@@ -49,13 +49,17 @@ private struct HeroHomePage: View {
         WorkStatusPresentation(status: day.status)
     }
 
+    private var statusChipLabel: String {
+        state.isTodaySettled ? "今日已结算 · 个人时间" : statusPresentation.label
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             TopBar(onShare: onShare)
                 .padding(.top, 2)
 
             VStack(alignment: .leading, spacing: 14) {
-                StatusChip(label: statusPresentation.label)
+                StatusChip(label: statusChipLabel)
                     .padding(.top, 12)
 
                 VStack(alignment: .leading, spacing: 5) {
@@ -77,8 +81,12 @@ private struct HeroHomePage: View {
 
                 ProgressTrack(day: day, startText: state.workStart.clockText, endText: state.workEnd.clockText)
 
-                ClockOutCTA(status: day.status, action: onClockOut)
-                    .padding(.top, 4)
+                ClockOutCTA(
+                    status: day.status,
+                    isSettled: state.isTodaySettled,
+                    action: onClockOut
+                )
+                .padding(.top, 4)
             }
             .padding(.horizontal, 22)
 

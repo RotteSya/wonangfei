@@ -174,13 +174,40 @@
 - Container: rounded card, radius `30px`, max width `340pt` in overlay, fixed `360pt` width when exported.
 - Header: yellow band (or white for `quietLedger` template), compact mascot, `窝囊费`, `今日下班结算`, and three icon controls (eye / share / close) when `showsControls == true`.
 - Template background: matches `PremiumShareTemplateID` (classic / overtimeReceipt / survivalBadge / quietLedger).
-- Body:
+- Body order (top → bottom):
   - Dynamic headline + subcopy from `DailySettlement.headline` / `.subCopy`.
   - Amount panel: `今日窝囊费` label, sentiment badge (emoji + label), large yen-prefixed amount with content-transition driven `displayedAmount` for ticker animation.
-  - Stats row (three tiles): `忍耐指数` (1-5 yellow stars), `已忍时长` (h/min split), `连续打工` (天 / 暂无).
-  - `今日最佳忍耐时刻` quote card with `quote.opening` glyph.
+  - Stats row (three tiles): `忍耐指数` (1-4 yellow stars), `已忍时长` (h/min split), `连续打工` (天 / 暂无，封顶 60 天).
+  - `今日最佳忍耐时刻` quote card (`SettlementQuoteCard`, `quote.opening` glyph) — long-press to swap when shown in overlay.
+  - `老板内心独白` quote card (`SettlementQuoteCard`, `person.fill` glyph) — sentiment-bucketed dark-humor pool, also long-press to swap.
+  - `累积窝囊费` row: `tray.full.fill` glyph + value pill from `DailySettlement.cumulativeEarned`.
   - Footer: `丧萌有理 · 自嘲无罪` left, `来自窝囊费` right with yen badge.
-- Privacy: eye toggle masks amount (`•••.••`) and duration (`••h••min`); fallback share text also honors the mask.
+- Privacy: eye toggle masks amount (`•••.••`), duration (`••h••min`), and cumulative (`¥•••.••`); fallback share text also honors the mask.
+- Tear gesture is only active in overlay (`showsControls == true`); when the card is rendered for share-image export, `onTearBestMoment` / `onTearBossMonologue` are `nil` so no long-press hint shows up in the exported image.
+
+### Settlement Quote Card
+
+- Source: `WNF/DailySettlement.swift` (private subview `SettlementQuoteCard`).
+- Use on: inside Settlement Share Card for `今日最佳忍耐时刻` and `老板内心独白`.
+- Container: white-translucent card, radius `16px`, hairline outline.
+- Content: leading SF Symbol glyph + quote text. The text honors an `.id(combined)` modifier so SwiftUI plays insertion/removal transitions when the parent swaps the string.
+- Tear gesture:
+  - `.onLongPressGesture(minimumDuration: 0.4)` with `onPressingChanged` for visible compress feedback.
+  - On commit: triggers `rigid` haptic and calls back to the parent, which picks a different pool entry (`DailySettlement.alternateBestMoment(excluding:)` / `alternateBossMonologue(excluding:sentiment:)`) and wraps the swap in `withAnimation`.
+  - Below the quote, an optional `hand.tap` + `长按可换一句` hint surfaces; the hint is omitted when no `onTear` is wired (e.g., in the exported share image).
+- Accessibility: includes `accessibilityHint` describing the long-press affordance when active.
+
+### Personal Time CTA
+
+- Source: `WNF/DailySettlement.swift` (`ClockOutCTA` with `isSettled` flag), driven from `HomeView`.
+- Active when `WageState.isTodaySettled == true` (today's date key matches `lastSettlementDateKey`).
+- Visual differences vs default Clock-Out CTA:
+  - Leading icon: `checkmark.circle.fill` (was `tray.and.arrow.down.fill`).
+  - Title: `今日已结算 · 再看一眼`.
+  - Subtitle: `进入个人时间，钱已经稳了`.
+- Status chip on Home also swaps to `今日已结算 · 个人时间` when settled.
+- Live wage amount, elapsed/remaining time, progress bar, and mascot all stay real-time — settled mode is a tone shift, not a data freeze.
+- Day boundary naturally resets the state when `currentDateKey` advances past the stored date.
 
 ### Premium Paywall
 

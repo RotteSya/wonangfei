@@ -15,6 +15,7 @@ enum StorageKey {
     static let privacyMode = "wnf.settings.privacyMode"
     static let selectedWeekdays = "wnf.settings.selectedWeekdays"
     static let clockOutReminderEnabled = "wnf.settings.clockOutReminderEnabled"
+    static let lastSettlementDateKey = "wnf.settlement.lastCompletedDateKey"
     static let dailyRecords = "wnf.records.daily"
     static let dailyRecordsLegacyRawBackup = "wnf.records.daily.rawBackup.legacy"
     static let dailyRecordsUnsupportedRawBackup = "wnf.records.daily.rawBackup.unsupported"

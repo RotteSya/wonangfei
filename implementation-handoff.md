@@ -215,12 +215,28 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 
 - 入口仅在首页 CTA。`RootView` 拥有 `settlementPresented`、`settlementSnapshot`、`settlementHidesSensitiveInfo` 三个状态。
 - `DailySettlement.derive(from:dailyRecords:at:)` 从当前 `WageDay` 与 `dailyRecords` 派生快照：金额、已忍时长、进度、忍耐指数 (`SettlementSentiment` 1-5 星，按 `progress` 落档并把 `.done && progress >= 1.0` 视为 heavy)、连续打工天数 (从今天向前回溯，遇到 `earnedToday > 0` 即继续，遇到 0 即停止，最多回溯 60 天)、动态 headline / subCopy（按情绪等级 + 连续天数动态拼接）、随机选中的今日最佳忍耐时刻文案。派生过程是纯函数，不修改任何持久化路径。
-- 全屏 overlay 有三个阶段：`prep`（背景刚淡入） → `burst`（中心金币雨向外扩散，触发 heavy 触感反馈） → `reveal`（金币消散后结算卡 spring-in，数字 0 → 今日金额线性 ease-out 滚动，底部「存入资产 / 分享卡片」action 行延后 0.18s ease-in）。整个动画 < 2s，右上角始终有「跳过」按钮可立即完成 burst 跳到 reveal 态。
+- 全屏 overlay 有三个阶段：`prep`（背景刚淡入） → `burst`（中心金币雨向外扩散，触发 heavy 触感反馈） → `reveal`（金币消散后结算卡 spring-in，数字 0 → 今日金额线性 ease-out 滚动，底部「存入资产 / 分享卡片」action 行延后 0.18s ease-in）。整个动画 < 2s，右上角始终有「跳过」按钮可立即完成 burst 跳到 reveal 态。`burst` 期间 settlement card 和 action row 通过 `allowsHitTesting(...)` 屏蔽 hit-test，避免透明态被误触。
 - 结算卡复用 `PremiumShareTemplateID` 模板背景色 (classic / overtimeReceipt / survivalBadge / quietLedger)，与现有 `WonangfeiShareCard` 模板色保持一致；header 同时提供眼睛（敏感信息打码）/ 分享 / 关闭按钮，与分享卡操作保持一致。
 - 「存入资产」调用 `state.persistCurrentDaySnapshot()` 写回当前快照并发出 `UINotificationFeedbackGenerator(.success)`，然后关闭 overlay。
 - 「分享卡片」走与首页分享相同的渲染管线：`renderAndPresentSettlementShare` 同步生成 `DailySettlementShareCard` 的 `UIImage`（main-thread bound 的 `ImageRenderer.render(rasterizationScale:)`，使用 `windowSceneScale`，宽度固定 360pt），失败时退化到包含金额、已忍时长、连续打工天数的 fallback 文本。复用现有 `ActivityView` 和 `ActivityPresenterViewController`，避免 iPad / Mac Catalyst 弹窗崩溃。
 - 共用一份 `isPreparingShareActivity` 标志：因为 settlement overlay 与原 share card 不会同时呈现，所以共用同一份「正在生成分享图」状态不冲突。
 - 结算 overlay 打开时，bottom tab bar 同样被 opacity / hit-testing 屏蔽（与原 share card 行为对齐）。
+- 结算卡内除金额/统计外，还包含两条 quote card：
+  - 「今日最佳忍耐时刻」从 `DailySettlement.bestMomentPool` 随机选一句。
+  - 「老板内心独白」从 `DailySettlement.bossMonologuePool(for: sentiment)` 按 sentiment 等级选；wisp/mild/standard/heavy 各有不同口吻的黑色幽默池。
+  - 两条 quote 均支持长按 0.4s 撕碎换内容：rigid 触感 + `withAnimation` 包裹 state 切换 + `.id(combined)` 驱动 SwiftUI insertion/removal transition（旧文案缩放偏移消散，新文案 fade + slide-in）。pool 内会 exclude 当前文案，保证连续撕碎一定出新内容。撕碎只发生在 overlay 内（`showsControls == true`）；导出分享图时 `onTearBestMoment` / `onTearBossMonologue` 传 nil 不渲染长按 hint。
+- 结算卡底部增加「累积窝囊费」单行：从 `DailySettlement.cumulativeEarned` 渲染（所有历史 daily records earnedToday 求和 + 今日 live amount，避免重复计入今日 closed snapshot）。privacy 模式打码为 `¥•••.••`。
+
+### 个人时间模式
+
+- 触发：用户在 settlement overlay 点「存入资产」时，`RootView.saveSettlementAsAsset()` 在 `persistCurrentDaySnapshot()` 之后调用 `state.markTodaySettled()`，把 `WageState.lastSettlementDateKey` 设为今天的日期键。
+- 持久化：`wnf.settlement.lastCompletedDateKey`（`UserDefaults` String，可为空）。
+- 状态：`WageState.isTodaySettled` 计算属性 = (lastSettlementDateKey == currentDateKey)。跨日时 `currentDateKey` 自然推进，旧值不再相等，状态自动回归。
+- 首页响应：
+  - `StatusChip` label 改为「今日已结算 · 个人时间」（替代 `WorkStatusPresentation.label`）。
+  - `ClockOutCTA` title / subtitle / icon 切到 settled 文案（「今日已结算 · 再看一眼」/「进入个人时间，钱已经稳了」/ `checkmark.circle.fill`）。点击仍打开 overlay，让用户回看结算卡。
+- 不影响：金额、进度条、已忍/离下班时长、吉祥物视频、share card — 实时数据保持同步，避免遮蔽今天还在涨的窝囊费。
+- 仅 `存入资产` 触发 settled 状态；X / 屏外 tap dismiss / 跳过 都不算 "完成"，避免误触。
 
 ### 下班结算提醒
 

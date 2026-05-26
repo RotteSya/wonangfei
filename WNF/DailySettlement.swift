@@ -42,6 +42,8 @@ struct DailySettlement: Equatable {
     var headline: String
     var subCopy: String
     var bestMoment: String
+    var bossMonologue: String
+    var cumulativeEarned: Double
     var status: WorkStatus
     var capturedAt: Date
 
@@ -57,6 +59,11 @@ struct DailySettlement: Equatable {
             includingTodayEarned: day.earnedToday,
             today: date
         )
+        let cumulativeEarned = deriveCumulativeEarned(
+            dailyRecords: dailyRecords,
+            includingTodayEarned: day.earnedToday,
+            todayDateKey: WageState.dateKey(for: date)
+        )
         let copy = pickCopy(sentiment: sentiment, status: day.status, streakDays: streakDays)
         return DailySettlement(
             dateKey: WageState.dateKey(for: date),
@@ -69,9 +76,24 @@ struct DailySettlement: Equatable {
             headline: copy.headline,
             subCopy: copy.subCopy,
             bestMoment: copy.bestMoment,
+            bossMonologue: pickBossMonologue(sentiment: sentiment),
+            cumulativeEarned: cumulativeEarned,
             status: day.status,
             capturedAt: date
         )
+    }
+
+    /// Pick a different best-moment line than the current one. Used by the tear gesture
+    /// on the settlement card so consecutive long-presses always swap content.
+    static func alternateBestMoment(excluding current: String) -> String {
+        let pool = bestMomentPool.filter { $0 != current }
+        return pool.randomElement() ?? bestMomentPool[0]
+    }
+
+    /// Pick a different boss-monologue line than the current one. Used by the tear gesture.
+    static func alternateBossMonologue(excluding current: String, sentiment: SettlementSentiment) -> String {
+        let pool = bossMonologuePool(for: sentiment).filter { $0 != current }
+        return pool.randomElement() ?? bossMonologuePool(for: sentiment)[0]
     }
 
     private static func deriveSentiment(progress: Double, status: WorkStatus) -> SettlementSentiment {
@@ -86,6 +108,70 @@ struct DailySettlement: Equatable {
         case ..<0.65: return .standard
         default: return .heavy
         }
+    }
+
+    static let bestMomentPool: [String] = [
+        "把哈欠忍成了沉默",
+        "在工位坐到走不动",
+        "看完一封不想回的邮件",
+        "听完一场无关的会",
+        "对显示器叹了三次气",
+        "把咖啡喝凉了第二轮",
+        "假装在写代码其实在发呆",
+        "把不耐烦藏进了「好的」",
+        "刷新邮箱十七次",
+        "回了一句「收到，马上处理」"
+    ]
+
+    static func bossMonologuePool(for sentiment: SettlementSentiment) -> [String] {
+        switch sentiment {
+        case .wisp:
+            return [
+                "（老板心想）他今天又划水了，工资是不是给多了。",
+                "（老板心想）这点活都干不完，绩效再压一压。",
+                "（老板心想）摸鱼摸得倒挺熟练。"
+            ]
+        case .mild:
+            return [
+                "（老板心想）干这点活还想准时下班？再加点。",
+                "（老板心想）他工作三小时，我赚了他六小时的钱。",
+                "（老板心想）这状态还行，可以再压榨一下。"
+            ]
+        case .standard:
+            return [
+                "（老板心想）这小伙挺能扛，再加点活试试。",
+                "（老板心想）这点钱让他熬这么久，真划算。",
+                "（老板心想）他还能扛，工资暂时不用涨。",
+                "（老板心想）下次裁员先看他敢不敢请假。"
+            ]
+        case .heavy:
+            return [
+                "（老板心想）这小伙挺能熬，明年再不涨工资。",
+                "（老板心想）他熬完全天，下次会议再叫他做纪要。",
+                "（老板心想）感谢他用青春换我利润。",
+                "（老板心想）这种员工最划算，给点画饼就完事。"
+            ]
+        }
+    }
+
+    private static func pickBossMonologue(sentiment: SettlementSentiment) -> String {
+        bossMonologuePool(for: sentiment).randomElement() ?? "（老板心想）真划算。"
+    }
+
+    private static func deriveCumulativeEarned(
+        dailyRecords: [String: DailyWageRecord],
+        includingTodayEarned: Double,
+        todayDateKey: String
+    ) -> Double {
+        // Sum every closed daily record plus today's live amount. The dictionary may also
+        // contain a record for today (when it was persisted on scene change), so we replace
+        // that with the live amount to avoid double counting.
+        let historicalSum = dailyRecords
+            .filter { $0.key != todayDateKey }
+            .values
+            .map(\.earnedToday)
+            .reduce(0, +)
+        return historicalSum + max(includingTodayEarned, dailyRecords[todayDateKey]?.earnedToday ?? 0)
     }
 
     private static func deriveStreakDays(
@@ -126,18 +212,6 @@ struct DailySettlement: Equatable {
         status: WorkStatus,
         streakDays: Int
     ) -> CopyPick {
-        let bestMomentPool: [String] = [
-            "把哈欠忍成了沉默",
-            "在工位坐到走不动",
-            "看完一封不想回的邮件",
-            "听完一场无关的会",
-            "对显示器叹了三次气",
-            "把咖啡喝凉了第二轮",
-            "假装在写代码其实在发呆",
-            "把不耐烦藏进了「好的」",
-            "刷新邮箱十七次",
-            "回了一句「收到，马上处理」"
-        ]
         let bestMoment = bestMomentPool.randomElement() ?? bestMomentPool[0]
 
         switch sentiment {
@@ -310,6 +384,8 @@ struct DailySettlementOverlay: View {
     @State private var displayedAmount: Double = 0
     @State private var revealCardVisible = false
     @State private var revealActionsVisible = false
+    @State private var currentBestMoment: String = ""
+    @State private var currentBossMonologue: String = ""
 
     private let burstDuration: TimeInterval = 0.85
     private let amountRampDuration: TimeInterval = 0.7
@@ -323,7 +399,32 @@ struct DailySettlementOverlay: View {
             skipControl
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear(perform: startBurstSequence)
+        .onAppear {
+            if currentBestMoment.isEmpty { currentBestMoment = settlement.bestMoment }
+            if currentBossMonologue.isEmpty { currentBossMonologue = settlement.bossMonologue }
+            startBurstSequence()
+        }
+    }
+
+    private func tearBestMoment() {
+        let generator = UIImpactFeedbackGenerator(style: .rigid)
+        generator.impactOccurred()
+        let next = DailySettlement.alternateBestMoment(excluding: currentBestMoment)
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) {
+            currentBestMoment = next
+        }
+    }
+
+    private func tearBossMonologue() {
+        let generator = UIImpactFeedbackGenerator(style: .rigid)
+        generator.impactOccurred()
+        let next = DailySettlement.alternateBossMonologue(
+            excluding: currentBossMonologue,
+            sentiment: settlement.sentiment
+        )
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) {
+            currentBossMonologue = next
+        }
     }
 
     private var backdrop: some View {
@@ -379,6 +480,8 @@ struct DailySettlementOverlay: View {
                 settlement: settlement,
                 template: template,
                 displayedAmount: displayedAmount,
+                displayedBestMoment: currentBestMoment.isEmpty ? settlement.bestMoment : currentBestMoment,
+                displayedBossMonologue: currentBossMonologue.isEmpty ? settlement.bossMonologue : currentBossMonologue,
                 hidesSensitiveInfo: hidesSensitiveInfo,
                 showsControls: true,
                 isPreparingShare: isPreparingShare,
@@ -387,6 +490,8 @@ struct DailySettlementOverlay: View {
                         hidesSensitiveInfo.toggle()
                     }
                 },
+                onTearBestMoment: tearBestMoment,
+                onTearBossMonologue: tearBossMonologue,
                 onShare: onShare,
                 onDismiss: onDismiss
             )
@@ -527,15 +632,27 @@ struct DailySettlementShareCard: View {
     var settlement: DailySettlement
     var template: PremiumShareTemplateID
     var displayedAmount: Double?
+    var displayedBestMoment: String?
+    var displayedBossMonologue: String?
     var hidesSensitiveInfo: Bool
     var showsControls: Bool
     var isPreparingShare: Bool = false
     var onTogglePrivacy: () -> Void = {}
+    var onTearBestMoment: (() -> Void)? = nil
+    var onTearBossMonologue: (() -> Void)? = nil
     var onShare: () -> Void = {}
     var onDismiss: () -> Void = {}
 
     private var renderedAmount: Double {
         displayedAmount ?? settlement.earnedToday
+    }
+
+    private var renderedBestMoment: String {
+        displayedBestMoment ?? settlement.bestMoment
+    }
+
+    private var renderedBossMonologue: String {
+        displayedBossMonologue ?? settlement.bossMonologue
     }
 
     var body: some View {
@@ -640,23 +757,23 @@ struct DailySettlementShareCard: View {
 
             statsRow
 
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "quote.opening")
-                    .font(.system(size: 11, weight: .heavy))
-                    .foregroundStyle(WNFTheme.muted)
-                    .padding(.top, 2)
-                Text("今日最佳忍耐时刻：\(settlement.bestMoment)")
-                    .font(.system(size: 12, weight: .heavy))
-                    .foregroundStyle(WNFTheme.inkSoft)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(WNFTheme.hairline, lineWidth: 0.5)
+            SettlementQuoteCard(
+                iconName: "quote.opening",
+                prefix: "今日最佳忍耐时刻：",
+                content: renderedBestMoment,
+                hint: onTearBestMoment == nil ? nil : "长按可换一句",
+                onTear: onTearBestMoment
             )
+
+            SettlementQuoteCard(
+                iconName: "person.fill",
+                prefix: nil,
+                content: renderedBossMonologue,
+                hint: onTearBossMonologue == nil ? nil : "长按可换一句",
+                onTear: onTearBossMonologue
+            )
+
+            cumulativeRow
 
             HStack {
                 Text("丧萌有理 · 自嘲无罪")
@@ -681,6 +798,36 @@ struct DailySettlementShareCard: View {
                 endPoint: .bottom
             )
         )
+    }
+
+    private var cumulativeRow: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "tray.full.fill")
+                .font(.system(size: 11, weight: .heavy))
+                .foregroundStyle(WNFTheme.gold)
+            Text("累积窝囊费")
+                .font(.system(size: 12, weight: .heavy))
+                .foregroundStyle(WNFTheme.inkSoft)
+            Spacer(minLength: 12)
+            Text(cumulativeText)
+                .font(.system(size: 14, weight: .black, design: .rounded))
+                .foregroundStyle(WNFTheme.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(WNFTheme.surfaceSoft.opacity(0.72), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(WNFTheme.hairline, lineWidth: 0.5)
+        )
+    }
+
+    private var cumulativeText: String {
+        if hidesSensitiveInfo { return "¥•••.••" }
+        return WNFFormat.moneyDecimal(settlement.cumulativeEarned, privacy: false)
     }
 
     private var amountPanel: some View {
@@ -872,29 +1019,113 @@ struct DailySettlementShareCard: View {
     }
 }
 
+// MARK: - Quote Card (best moment / boss monologue)
+
+private struct SettlementQuoteCard: View {
+    var iconName: String
+    var prefix: String?
+    var content: String
+    var hint: String?
+    var onTear: (() -> Void)?
+
+    @State private var pressFeedback = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: iconName)
+                    .font(.system(size: 11, weight: .heavy))
+                    .foregroundStyle(WNFTheme.muted)
+                    .padding(.top, 2)
+                Text(combined)
+                    // id-driven transition: when content changes, the old text fades + slides out
+                    // and the new one slides in. The parent wraps the swap in withAnimation.
+                    .id(combined)
+                    .font(.system(size: 12, weight: .heavy))
+                    .foregroundStyle(WNFTheme.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity.combined(with: .move(edge: .top)),
+                            removal: .opacity
+                                .combined(with: .scale(scale: 0.86, anchor: .leading))
+                                .combined(with: .offset(y: 12))
+                        )
+                    )
+                Spacer(minLength: 0)
+            }
+
+            if let hint, onTear != nil {
+                HStack(spacing: 4) {
+                    Image(systemName: "hand.tap")
+                        .font(.system(size: 9, weight: .heavy))
+                    Text(hint)
+                        .font(.system(size: 10, weight: .heavy))
+                }
+                .foregroundStyle(WNFTheme.muted.opacity(0.7))
+                .padding(.leading, 19)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(WNFTheme.hairline, lineWidth: 0.5)
+        )
+        .scaleEffect(pressFeedback ? 0.97 : 1)
+        .animation(.spring(response: 0.22, dampingFraction: 0.78), value: pressFeedback)
+        .contentShape(Rectangle())
+        .onLongPressGesture(minimumDuration: 0.4) {
+            handleTear()
+        } onPressingChanged: { isPressing in
+            // visible feedback during the long-press hold so the user knows the gesture registered
+            pressFeedback = isPressing && onTear != nil
+        }
+        .accessibilityHint(onTear == nil ? "" : "长按可以换一句")
+    }
+
+    private var combined: String {
+        if let prefix { return "\(prefix)\(content)" }
+        return content
+    }
+
+    private func handleTear() {
+        guard let onTear else { return }
+        onTear()
+    }
+}
+
 // MARK: - CTA Button (Home entry)
 
 struct ClockOutCTA: View {
     var status: WorkStatus
+    var isSettled: Bool = false
     var action: () -> Void
 
     private var title: String {
+        if isSettled { return "今日已结算 · 再看一眼" }
         switch status {
-        case .before: "提前结算今日"
-        case .morning, .afternoon: "提前下班结算"
-        case .lunch: "中场结算一下"
-        case .done: "我下班了"
+        case .before: return "提前结算今日"
+        case .morning, .afternoon: return "提前下班结算"
+        case .lunch: return "中场结算一下"
+        case .done: return "我下班了"
         }
     }
 
     private var subtitle: String {
+        if isSettled { return "进入个人时间，钱已经稳了" }
         switch status {
-        case .before: "今天的窝囊费还没开张"
-        case .morning: "已经熬过早上的两小时最值钱"
-        case .lunch: "午休回血中，要不要小结一下"
-        case .afternoon: "再忍忍，也可以提前看看战绩"
-        case .done: "今日通关，看看今天的窝囊费"
+        case .before: return "今天的窝囊费还没开张"
+        case .morning: return "已经熬过早上的两小时最值钱"
+        case .lunch: return "午休回血中，要不要小结一下"
+        case .afternoon: return "再忍忍，也可以提前看看战绩"
+        case .done: return "今日通关，看看今天的窝囊费"
         }
+    }
+
+    private var iconName: String {
+        isSettled ? "checkmark.circle.fill" : "tray.and.arrow.down.fill"
     }
 
     var body: some View {
@@ -904,7 +1135,7 @@ struct ClockOutCTA: View {
                     Circle()
                         .fill(WNFTheme.yellow)
                         .frame(width: 36, height: 36)
-                    Image(systemName: "tray.and.arrow.down.fill")
+                    Image(systemName: iconName)
                         .font(.system(size: 16, weight: .heavy))
                         .foregroundStyle(WNFTheme.ink)
                 }

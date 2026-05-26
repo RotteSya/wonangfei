@@ -20,6 +20,7 @@ struct WNFApp: App {
                         state.resumeCalendarDayTimer()
                         premium.handleSceneBecameActive()
                         writeWidgetSnapshot()
+                        state.reconcileClockOutReminder()
                     } else {
                         state.persistCurrentDaySnapshot()
                         writeWidgetSnapshot()

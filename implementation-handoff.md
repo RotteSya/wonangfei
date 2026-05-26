@@ -56,6 +56,8 @@ Native sources:
 - `WNF/WorkStatusPresentation.swift`: presentation-only status labels, quotes, and mascot asset names consumed by home/share surfaces.
 - `WNF/WageFormatting.swift`: amount and duration formatting helpers used by home, records, onboarding, and share surfaces.
 - `WNF/ShareCard.swift`: share-card copy pool, Premium template picker, dim backdrop, overlay, card layout, icon controls, and the `UIActivityViewController` wrapper.
+- `WNF/DailySettlement.swift`: 下班结算数据模型 (`DailySettlement` + `SettlementSentiment`), 爆金币动画 (`SettlementCoinBurst`), 全屏结算 overlay (`DailySettlementOverlay`), 结算分享卡 (`DailySettlementShareCard`), 首页 CTA 入口 (`ClockOutCTA`). 数据派生纯函数从 `WageDay` + `dailyRecords` 计算情绪等级和连续打工天数, 不修改任何持久化路径.
+- `WNF/ClockOutReminder.swift`: `ClockOutReminderService` (@MainActor 单例)，封装 `UNUserNotificationCenter` 权限查询/请求和按工作日 + workEnd 时间调度 `UNCalendarNotificationTrigger` 重复本地通知。idempotent `reconcile(enabled:workEnd:selectedWeekdays:)` 先清空 `wnf.clockout.weekday.*` 前缀的现有通知再按需重建；权限非 authorized/provisional/ephemeral 时静默跳过调度。
 - `WNF/PremiumCore.swift`: product constants, entitlement snapshots, Paywall routing, theme/template preferences, App Group snapshot writing, export service, and deep-link parsing.
 - `WNF/PremiumStore.swift`: StoreKit 2 client, entitlement verifier seam, transaction listener, restore, refund request, product loading, and entitlement state.
 - `WNF/PremiumUI.swift`: Paywall, purchase/restore UI states, legal document presentation, and offline legal fallback.
@@ -207,6 +209,42 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
   - share button enters a loading/disabled state and waits one frame so the spinner can render; this is a UX/perceptual-feedback fix, not a concurrency fix, because SwiftUI `ImageRenderer.render(rasterizationScale:)` and the explicit `UIGraphicsImageRenderer` context are still main-thread bound. Export uses the current `UIWindowScene.screen.scale`, then presents iOS `UIActivityViewController` from an attached presenter view with `popoverPresentationController.sourceView` configured for iPad / Mac Catalyst;
   - x button closes the card.
 - Tapping outside the card closes the card. While the card is open, bottom tab bar interaction is disabled.
+- 首页 progress track 下方常驻一个「下班结算」CTA 按钮 (`ClockOutCTA`)，文案随 `WageDay.status` 切换：尚未开工时为「提前结算今日」，上午 / 下午为「提前下班结算」，午休为「中场结算一下」，已通关为「我下班了」。点击触发 `RootView.presentSettlement()`，与右上角分享互相独立。
+
+### 下班结算
+
+- 入口仅在首页 CTA。`RootView` 拥有 `settlementPresented`、`settlementSnapshot`、`settlementHidesSensitiveInfo` 三个状态。
+- `DailySettlement.derive(from:dailyRecords:at:)` 从当前 `WageDay` 与 `dailyRecords` 派生快照：金额、已忍时长、进度、忍耐指数 (`SettlementSentiment` 1-5 星，按 `progress` 落档并把 `.done && progress >= 1.0` 视为 heavy)、连续打工天数 (从今天向前回溯，遇到 `earnedToday > 0` 即继续，遇到 0 即停止，最多回溯 60 天)、动态 headline / subCopy（按情绪等级 + 连续天数动态拼接）、随机选中的今日最佳忍耐时刻文案。派生过程是纯函数，不修改任何持久化路径。
+- 全屏 overlay 有三个阶段：`prep`（背景刚淡入） → `burst`（中心金币雨向外扩散，触发 heavy 触感反馈） → `reveal`（金币消散后结算卡 spring-in，数字 0 → 今日金额线性 ease-out 滚动，底部「存入资产 / 分享卡片」action 行延后 0.18s ease-in）。整个动画 < 2s，右上角始终有「跳过」按钮可立即完成 burst 跳到 reveal 态。`burst` 期间 settlement card 和 action row 通过 `allowsHitTesting(...)` 屏蔽 hit-test，避免透明态被误触。
+- 结算卡复用 `PremiumShareTemplateID` 模板背景色 (classic / overtimeReceipt / survivalBadge / quietLedger)，与现有 `WonangfeiShareCard` 模板色保持一致；header 同时提供眼睛（敏感信息打码）/ 分享 / 关闭按钮，与分享卡操作保持一致。
+- 「存入资产」调用 `state.persistCurrentDaySnapshot()` 写回当前快照并发出 `UINotificationFeedbackGenerator(.success)`，然后关闭 overlay。
+- 「分享卡片」走与首页分享相同的渲染管线：`renderAndPresentSettlementShare` 同步生成 `DailySettlementShareCard` 的 `UIImage`（main-thread bound 的 `ImageRenderer.render(rasterizationScale:)`，使用 `windowSceneScale`，宽度固定 360pt），失败时退化到包含金额、已忍时长、连续打工天数的 fallback 文本。复用现有 `ActivityView` 和 `ActivityPresenterViewController`，避免 iPad / Mac Catalyst 弹窗崩溃。
+- 共用一份 `isPreparingShareActivity` 标志：因为 settlement overlay 与原 share card 不会同时呈现，所以共用同一份「正在生成分享图」状态不冲突。
+- 结算 overlay 打开时，bottom tab bar 同样被 opacity / hit-testing 屏蔽（与原 share card 行为对齐）。
+- 结算卡内除金额/统计外，还包含一条 quote card「今日最佳忍耐时刻」：从 `DailySettlement.bestMomentPool` 随机选一句，支持长按 0.4s 撕碎换内容（rigid 触感 + `withAnimation` 包裹 state 切换 + `.id(combined)` 驱动 SwiftUI insertion/removal transition；pool 内会 exclude 当前文案，保证连续撕碎一定出新内容）。撕碎只发生在 overlay 内（`showsControls == true`）；导出分享图时 `onTearBestMoment` 传 nil 不渲染长按 hint。
+- 结算卡底部增加「累积窝囊费」单行：从 `DailySettlement.cumulativeEarned` 渲染（所有历史 daily records earnedToday 求和 + 今日 live amount，避免重复计入今日 closed snapshot）。privacy 模式打码为 `¥•••.••`。
+
+### 个人时间模式
+
+- 触发：用户在 settlement overlay 点「存入资产」时，`RootView.saveSettlementAsAsset()` 在 `persistCurrentDaySnapshot()` 之后调用 `state.markTodaySettled()`，把 `WageState.lastSettlementDateKey` 设为今天的日期键。
+- 持久化：`wnf.settlement.lastCompletedDateKey`（`UserDefaults` String，可为空）。
+- 状态：`WageState.isTodaySettled` 计算属性 = (lastSettlementDateKey == currentDateKey)。跨日时 `currentDateKey` 自然推进，旧值不再相等，状态自动回归。
+- 首页响应：
+  - `StatusChip` label 改为「今日已结算 · 个人时间」（替代 `WorkStatusPresentation.label`）。
+  - `ClockOutCTA` title / subtitle / icon 切到 settled 文案（「今日已结算 · 再看一眼」/「进入个人时间，钱已经稳了」/ `checkmark.circle.fill`）。点击仍打开 overlay，让用户回看结算卡。
+- 不影响：金额、进度条、已忍/离下班时长、吉祥物视频、share card — 实时数据保持同步，避免遮蔽今天还在涨的窝囊费。
+- 仅 `存入资产` 触发 settled 状态；X / 屏外 tap dismiss / 跳过 都不算 "完成"，避免误触。
+
+### 下班结算提醒
+
+- **默认关闭**。开关入口位于「我的」页 `提醒` section，复用 `WNFToggle`。
+- 持久化键：`wnf.settings.clockOutReminderEnabled`（默认 `false`）。
+- 用户在 Settings 中开启 toggle 时：先通过 `ClockOutReminderService.requestAuthorizationIfNeeded()` 请求 `[.alert, .sound]` 权限；不论权限结果，`state.clockOutReminderEnabled` 都会持久化为 `true`（toggle 反映用户意图，不强制系统权限）；之后 `state.reconcileClockOutReminder()` 触发实际调度。
+- `WageState` 在 `clockOutReminderEnabled`、`workEnd`、`selectedWeekdays` 任一变更时 didSet 中调用 `reconcileClockOutReminder()`；`WNFApp.onChange(of: scenePhase)` 在 `.active` 时也调用一次，保证回到前台时系统通知排程与最新设置同步。
+- 调度逻辑：`ClockOutReminderService.reconcile(...)` 先清空所有 `wnf.clockout.weekday.*` 前缀的 pending notification，再按每个选中工作日新建一条 `UNCalendarNotificationTrigger(dateMatching:repeats:true)`，时间 = workEnd 的 hour/minute，weekday = app 0-索引 (`周一=0`) 转 iOS Gregorian (`周日=1`)。
+- 权限非 authorized/provisional/ephemeral 时静默不调度（OSLog 记录原因）；Settings 页在 `task` 中查询 `currentAuthorizationStatus()`，若返回 `.denied` 且 toggle 处于 ON，会展示 `iOS 通知权限被关闭，到系统设置开启后才会真的弹通知。` 行内引导，点击调 `UIApplication.openNotificationSettingsURLString` 跳转系统设置。
+- 不引入 deep link / 自定义 action：通知点击只把 app 拉到前台，由用户自行点击首页 CTA 完成结算（避免在没有用户操作的情况下自动弹结算 overlay）。
+- 通知文案目前固定：`今天可以结算窝囊费啦` / `点开 App 看看今天的窝囊战绩。`，后续可以加 i18n 或 A/B。
 
 ### 记录页
 

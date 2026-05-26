@@ -123,6 +123,91 @@
   - `工位困住我，到账放过我。` / `今天的辛苦，有数字替我作证。`
 - Overlay: home content remains underneath but blurred and dimmed across the full screen, including status bar and bottom home-indicator areas; tapping outside closes the card.
 
+### Clock-Out CTA
+
+- Source: `WNF/DailySettlement.swift`.
+- Use on: home page, directly below the progress track.
+- Container: ink-filled rounded rectangle, radius `18px`, padding `12px 16px`, drop shadow.
+- Leading icon: yellow circle (`36px`) with `tray.and.arrow.down.fill`.
+- Copy adapts to `WorkStatus`:
+  - `.before`: `提前结算今日` / `今天的窝囊费还没开张`
+  - `.morning`, `.afternoon`: `提前下班结算` / 状态对应的提示
+  - `.lunch`: `中场结算一下` / `午休回血中，要不要小结一下`
+  - `.done`: `我下班了` / `今日通关，看看今天的窝囊费`
+- Trailing affordance: small `arrow.right` chevron, white at 82%.
+- Tap: opens settlement overlay via `RootView.presentSettlement()`.
+
+### Settlement Overlay
+
+- Source: `WNF/DailySettlement.swift`.
+- Trigger: only from the home Clock-Out CTA.
+- Phases:
+  - `prep` → `burst` (≈0.85s, heavy haptic on entry, central yen + radial gradient explode outward into a coin/confetti shower)
+  - `burst` → `reveal` (≈0.55s spring, settlement card scales/opacity in, amount text content-transitions 0 → today's amount)
+  - 底部 action 行延后 0.18s ease-in 出现
+- Skip control: top-right `跳过` capsule visible until `reveal` phase, completes burst immediately.
+- Background: full-bleed black at 0.62 opacity during `reveal`, 0.32 during `burst`; tap-to-dismiss only enabled during `reveal`.
+- Bottom action row:
+  - Primary `存入资产`: ink fill, white text, persists today's snapshot through `WageState.persistCurrentDaySnapshot()` and emits success haptic.
+  - Secondary `分享卡片`: white fill, ink text, drives system share through the existing `ImageRenderer` pipeline; shows `渲染中…` while preparing.
+- Hides bottom tab bar while presented (same contract as share card).
+
+### Clock-Out Reminder Row
+
+- Source: `WNF/SettingsView.swift` (`clockOutReminderCard`), service in `WNF/ClockOutReminder.swift`.
+- Use on: Settings page, dedicated `提醒` `SectionCard`.
+- Default state: **OFF**. The toggle must reflect `WageState.clockOutReminderEnabled` and write through that binding so persistence + scheduling stay aligned.
+- Primary row:
+  - Title `下班结算提醒` (15pt heavy ink).
+  - Subtitle `默认关闭。开启后每天 HH:MM 通知一次。`，时间从 `WageState.workEnd.clockText` 实时取值。
+  - Trailing `WNFToggle` bound to a `Binding` that triggers `ClockOutReminderService.requestAuthorizationIfNeeded()` on flip-to-on.
+- System-permission hint (only when toggle is on AND `UNAuthorizationStatus == .denied`):
+  - Coral `exclamationmark.bubble.fill` glyph.
+  - Copy `iOS 通知权限被关闭，到系统设置开启后才会真的弹通知。`
+  - Trailing `arrow.up.right.square`; tap calls `UIApplication.open(UIApplication.openNotificationSettingsURLString)`.
+- The hint banner must never appear when `clockOutReminderEnabled == false` (toggle off implies user opted out — no need to nag).
+
+### Settlement Share Card
+
+- Source: `WNF/DailySettlement.swift`.
+- Use on: settlement overlay and the system share image.
+- Container: rounded card, radius `30px`, max width `340pt` in overlay, fixed `360pt` width when exported.
+- Header: yellow band (or white for `quietLedger` template), compact mascot, `窝囊费`, `今日下班结算`, and three icon controls (eye / share / close) when `showsControls == true`.
+- Template background: matches `PremiumShareTemplateID` (classic / overtimeReceipt / survivalBadge / quietLedger).
+- Body order (top → bottom):
+  - Dynamic headline + subcopy from `DailySettlement.headline` / `.subCopy`.
+  - Amount panel: `今日窝囊费` label, sentiment badge (emoji + label), large yen-prefixed amount with content-transition driven `displayedAmount` for ticker animation.
+  - Stats row (three tiles): `忍耐指数` (1-4 yellow stars), `已忍时长` (h/min split), `连续打工` (天 / 暂无，封顶 60 天).
+  - `今日最佳忍耐时刻` quote card (`SettlementQuoteCard`, `quote.opening` glyph) — long-press to swap when shown in overlay.
+  - `累积窝囊费` row: `tray.full.fill` glyph + value pill from `DailySettlement.cumulativeEarned`.
+  - Footer: `丧萌有理 · 自嘲无罪` left, `来自窝囊费` right with yen badge.
+- Privacy: eye toggle masks amount (`•••.••`), duration (`••h••min`), and cumulative (`¥•••.••`); fallback share text also honors the mask.
+- Tear gesture is only active in overlay (`showsControls == true`); when the card is rendered for share-image export, `onTearBestMoment` is `nil` so no long-press hint shows up in the exported image.
+
+### Settlement Quote Card
+
+- Source: `WNF/DailySettlement.swift` (private subview `SettlementQuoteCard`).
+- Use on: inside Settlement Share Card for `今日最佳忍耐时刻`.
+- Container: white-translucent card, radius `16px`, hairline outline.
+- Content: leading SF Symbol glyph + quote text. The text honors an `.id(combined)` modifier so SwiftUI plays insertion/removal transitions when the parent swaps the string.
+- Tear gesture:
+  - `.onLongPressGesture(minimumDuration: 0.4)` with `onPressingChanged` for visible compress feedback.
+  - On commit: triggers `rigid` haptic and calls back to the parent, which picks a different pool entry (`DailySettlement.alternateBestMoment(excluding:)`) and wraps the swap in `withAnimation`.
+  - Below the quote, an optional `hand.tap` + `长按可换一句` hint surfaces; the hint is omitted when no `onTear` is wired (e.g., in the exported share image).
+- Accessibility: includes `accessibilityHint` describing the long-press affordance when active.
+
+### Personal Time CTA
+
+- Source: `WNF/DailySettlement.swift` (`ClockOutCTA` with `isSettled` flag), driven from `HomeView`.
+- Active when `WageState.isTodaySettled == true` (today's date key matches `lastSettlementDateKey`).
+- Visual differences vs default Clock-Out CTA:
+  - Leading icon: `checkmark.circle.fill` (was `tray.and.arrow.down.fill`).
+  - Title: `今日已结算 · 再看一眼`.
+  - Subtitle: `进入个人时间，钱已经稳了`.
+- Status chip on Home also swaps to `今日已结算 · 个人时间` when settled.
+- Live wage amount, elapsed/remaining time, progress bar, and mascot all stay real-time — settled mode is a tone shift, not a data freeze.
+- Day boundary naturally resets the state when `currentDateKey` advances past the stored date.
+
 ### Premium Paywall
 
 - Source: `WNF/PremiumUI.swift`.

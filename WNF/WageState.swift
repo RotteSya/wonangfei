@@ -22,6 +22,7 @@ final class WageState: ObservableObject {
     @Published var workEnd: DateComponents {
         didSet {
             userDefaults.set(workEnd.minutesInDay, forKey: StorageKey.workEndMinute)
+            reconcileClockOutReminder()
         }
     }
 
@@ -58,12 +59,41 @@ final class WageState: ObservableObject {
     @Published var selectedWeekdays: Set<Int> {
         didSet {
             userDefaults.set(selectedWeekdays.sorted(), forKey: StorageKey.selectedWeekdays)
+            reconcileClockOutReminder()
+        }
+    }
+
+    @Published var clockOutReminderEnabled: Bool {
+        didSet {
+            userDefaults.set(clockOutReminderEnabled, forKey: StorageKey.clockOutReminderEnabled)
+            reconcileClockOutReminder()
         }
     }
 
     @Published private(set) var currentDateKey: String
     @Published private(set) var dailyRecords: [String: DailyWageRecord]
     private(set) var recordsRevision = 0
+
+    @Published private(set) var lastSettlementDateKey: String? {
+        didSet {
+            if let key = lastSettlementDateKey {
+                userDefaults.set(key, forKey: StorageKey.lastSettlementDateKey)
+            } else {
+                userDefaults.removeObject(forKey: StorageKey.lastSettlementDateKey)
+            }
+        }
+    }
+
+    /// `true` when the user has explicitly completed (or saved) today's settlement.
+    /// Used by Home to switch into the lightweight "personal time" presentation.
+    /// Naturally resets when `currentDateKey` advances past the stored date.
+    var isTodaySettled: Bool {
+        lastSettlementDateKey == currentDateKey
+    }
+
+    func markTodaySettled() {
+        lastSettlementDateKey = currentDateKey
+    }
 
     let userDefaults: UserDefaults
     var dailyRecordStorageMode: DailyRecordStorageMode
@@ -82,6 +112,8 @@ final class WageState: ObservableObject {
         includeOvertime = userDefaults.boolValue(forKey: StorageKey.includeOvertime) ?? Default.includeOvertime
         privacyMode = userDefaults.boolValue(forKey: StorageKey.privacyMode) ?? Default.privacyMode
         selectedWeekdays = userDefaults.weekdaySet(forKey: StorageKey.selectedWeekdays) ?? Default.selectedWeekdays
+        clockOutReminderEnabled = userDefaults.boolValue(forKey: StorageKey.clockOutReminderEnabled) ?? Default.clockOutReminderEnabled
+        lastSettlementDateKey = userDefaults.string(forKey: StorageKey.lastSettlementDateKey)
         let now = Date()
         currentDateKey = Self.dateKey(for: now)
         let dailyRecordLoadResult = Self.loadDailyRecords(from: userDefaults)
@@ -330,6 +362,20 @@ final class WageState: ObservableObject {
         userDefaults.set(includeOvertime, forKey: StorageKey.includeOvertime)
         userDefaults.set(privacyMode, forKey: StorageKey.privacyMode)
         userDefaults.set(selectedWeekdays.sorted(), forKey: StorageKey.selectedWeekdays)
+        userDefaults.set(clockOutReminderEnabled, forKey: StorageKey.clockOutReminderEnabled)
+    }
+
+    func reconcileClockOutReminder() {
+        let enabled = clockOutReminderEnabled
+        let workEnd = workEnd
+        let selectedWeekdays = selectedWeekdays
+        Task { @MainActor in
+            await ClockOutReminderService.shared.reconcile(
+                enabled: enabled,
+                workEnd: workEnd,
+                selectedWeekdays: selectedWeekdays
+            )
+        }
     }
 
     private func rememberObservedDate(_ date: Date) {
@@ -374,6 +420,7 @@ private enum Default {
     static let includeOvertime = true
     static let privacyMode = false
     static let selectedWeekdays: Set<Int> = [0, 1, 2, 3, 4]
+    static let clockOutReminderEnabled = false
 }
 
 private extension UserDefaults {

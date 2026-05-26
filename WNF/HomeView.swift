@@ -6,10 +6,16 @@ struct HomeView: View {
     @EnvironmentObject private var state: WageState
     @Binding private var isShareCardPresented: Bool
     private var onShare: () -> Void
+    private var onClockOut: () -> Void
 
-    init(isShareCardPresented: Binding<Bool> = .constant(false), onShare: @escaping () -> Void = {}) {
+    init(
+        isShareCardPresented: Binding<Bool> = .constant(false),
+        onShare: @escaping () -> Void = {},
+        onClockOut: @escaping () -> Void = {}
+    ) {
         self._isShareCardPresented = isShareCardPresented
         self.onShare = onShare
+        self.onClockOut = onClockOut
     }
 
     var body: some View {
@@ -17,7 +23,11 @@ struct HomeView: View {
             WNFTheme.bg.ignoresSafeArea()
 
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                HeroHomePage(day: state.calculation(at: context.date), onShare: onShare)
+                HeroHomePage(
+                    day: state.calculation(at: context.date),
+                    onShare: onShare,
+                    onClockOut: onClockOut
+                )
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .blur(radius: isShareCardPresented ? 18 : 0)
@@ -33,9 +43,14 @@ private struct HeroHomePage: View {
     @EnvironmentObject private var state: WageState
     var day: WageDay
     var onShare: () -> Void
+    var onClockOut: () -> Void
 
     private var statusPresentation: WorkStatusPresentation {
         WorkStatusPresentation(status: day.status)
+    }
+
+    private var statusChipLabel: String {
+        state.isTodaySettled ? "今日已结算 · 个人时间" : statusPresentation.label
     }
 
     var body: some View {
@@ -44,7 +59,7 @@ private struct HeroHomePage: View {
                 .padding(.top, 2)
 
             VStack(alignment: .leading, spacing: 14) {
-                StatusChip(label: statusPresentation.label)
+                StatusChip(label: statusChipLabel)
                     .padding(.top, 12)
 
                 VStack(alignment: .leading, spacing: 5) {
@@ -65,6 +80,13 @@ private struct HeroHomePage: View {
                 .foregroundStyle(WNFTheme.inkSoft)
 
                 ProgressTrack(day: day, startText: state.workStart.clockText, endText: state.workEnd.clockText)
+
+                ClockOutCTA(
+                    status: day.status,
+                    isSettled: state.isTodaySettled,
+                    action: onClockOut
+                )
+                .padding(.top, 4)
             }
             .padding(.horizontal, 22)
 

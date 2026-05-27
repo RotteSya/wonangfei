@@ -42,9 +42,17 @@ struct HomeView: View {
 private struct HeroHomePage: View {
     @EnvironmentObject private var state: WageState
     @Environment(\.tabBarFloorHeight) private var tabBarFloorHeight: CGFloat
+    @StateObject private var quoteEngine: BubbleQuoteEngine
     var day: WageDay
     var onShare: () -> Void
     var onClockOut: () -> Void
+
+    init(day: WageDay, onShare: @escaping () -> Void, onClockOut: @escaping () -> Void) {
+        self.day = day
+        self.onShare = onShare
+        self.onClockOut = onClockOut
+        self._quoteEngine = StateObject(wrappedValue: BubbleQuoteEngine(initialStatus: day.status))
+    }
 
     private var statusPresentation: WorkStatusPresentation {
         WorkStatusPresentation(status: day.status)
@@ -115,7 +123,7 @@ private struct HeroHomePage: View {
 
                 Spacer(minLength: 16)
 
-                HomeMascotStage(quote: statusPresentation.quote)
+                HomeMascotStage(quote: quoteEngine.currentQuote)
                     .padding(.bottom, mascotBottomPadding)
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
@@ -130,6 +138,15 @@ private struct HeroHomePage: View {
                     )
                 }
             }
+        }
+        .onAppear {
+            quoteEngine.setSettled(state.isTodaySettled)
+        }
+        .onChange(of: day.status) { _, newStatus in
+            quoteEngine.setStatus(newStatus)
+        }
+        .onChange(of: state.isTodaySettled) { _, settled in
+            quoteEngine.setSettled(settled)
         }
     }
 
@@ -167,6 +184,8 @@ private struct HomeMascotStage: View {
                     .background(Color.white, in: RoundedRectangle(cornerRadius: 17))
                     .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
                     .offset(x: 42, y: 18)
+                    .id(quote)
+                    .transition(.opacity)
             }
             .frame(maxWidth: .infinity)
             .frame(height: stageHeight)

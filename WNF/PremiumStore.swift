@@ -257,7 +257,7 @@ final class PremiumEntitlementStore: ObservableObject {
                 premiumLogger.info("product_loaded productID=\(product.id, privacy: .public) elapsed=\(elapsed, privacy: .private)")
             } else {
                 productState = .unavailable
-                statusMessage = "Premium 即将开放"
+                statusMessage = "王牌打工人 · 即将开放"
                 premiumLogger.warning("product_loaded empty productID=\(PremiumProductID.lifetime, privacy: .public)")
             }
         } catch PremiumStoreError.timedOut {
@@ -276,7 +276,7 @@ final class PremiumEntitlementStore: ObservableObject {
         }
         guard productState.product != nil else {
             if case .unavailable = productState {
-                statusMessage = "Premium 即将开放"
+                statusMessage = "王牌打工人 · 即将开放"
             } else {
                 await loadProducts()
             }
@@ -308,7 +308,7 @@ final class PremiumEntitlementStore: ObservableObject {
             statusMessage = PremiumStoreError.paymentNotAllowed.errorDescription
         } catch PremiumStoreError.productUnavailable {
             productState = .unavailable
-            statusMessage = "Premium 即将开放"
+            statusMessage = "王牌打工人 · 即将开放"
         } catch {
             statusMessage = "购买失败，请稍后再试"
             premiumLogger.error("purchase_failed productID=\(PremiumProductID.lifetime, privacy: .public) error=\(String(describing: error), privacy: .private)")

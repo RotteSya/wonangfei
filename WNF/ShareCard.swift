@@ -354,7 +354,7 @@ private struct ShareTemplatePicker: View {
                         .overlay(Capsule().stroke(WNFTheme.hairline, lineWidth: 0.5))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(locked ? "\(template.title)，Premium 专属" : template.title)
+                    .accessibilityLabel(locked ? "\(template.title)，王牌打工人专属" : template.title)
                 }
             }
         }

@@ -76,7 +76,7 @@ struct PremiumPaywallView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 YenBadge(size: 24)
-                Text("窝囊费 Premium")
+                Text("窝囊费王牌打工人")
                     .font(.system(size: 30, weight: .black, design: .rounded))
                     .foregroundStyle(WNFTheme.ink)
                     .minimumScaleFactor(0.8)
@@ -118,7 +118,7 @@ struct PremiumPaywallView: View {
     private var statusPanel: some View {
         switch premium.productState {
         case .unavailable:
-            PaywallStatusPanel(symbol: "clock.badge.exclamationmark", title: "Premium 即将开放", message: "当前地区暂时无法购买。免费功能可以继续使用。")
+            PaywallStatusPanel(symbol: "clock.badge.exclamationmark", title: "王牌打工人 · 即将开放", message: "当前地区暂时无法购买。免费功能可以继续使用。")
         case .failed(let message):
             PaywallStatusPanel(symbol: "wifi.exclamationmark", title: "商品加载失败", message: message)
         default:
@@ -176,13 +176,13 @@ struct PremiumPaywallView: View {
     }
 
     private var primaryActionTitle: String {
-        if premium.isPremiumUnlocked { return "已解锁 Premium" }
+        if premium.isPremiumUnlocked { return "王牌打工人 · 已解锁" }
         if !premium.canMakePayments { return "App 内购买受限" }
         switch premium.productState {
         case .loading, .idle:
             return "加载中..."
         case .unavailable:
-            return "Premium 即将开放"
+            return "王牌打工人 · 即将开放"
         case .failed:
             return "重试加载商品"
         case .loaded:

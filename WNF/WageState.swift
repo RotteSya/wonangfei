@@ -70,6 +70,15 @@ final class WageState: ObservableObject {
         }
     }
 
+    @Published var autoSettleEnabled: Bool {
+        didSet {
+            userDefaults.set(autoSettleEnabled, forKey: StorageKey.autoSettleEnabled)
+            if autoSettleEnabled {
+                autoSettleTodayIfNeeded()
+            }
+        }
+    }
+
     @Published private(set) var currentDateKey: String
     @Published private(set) var dailyRecords: [String: DailyWageRecord]
     private(set) var recordsRevision = 0
@@ -113,6 +122,7 @@ final class WageState: ObservableObject {
         privacyMode = userDefaults.boolValue(forKey: StorageKey.privacyMode) ?? Default.privacyMode
         selectedWeekdays = userDefaults.weekdaySet(forKey: StorageKey.selectedWeekdays) ?? Default.selectedWeekdays
         clockOutReminderEnabled = userDefaults.boolValue(forKey: StorageKey.clockOutReminderEnabled) ?? Default.clockOutReminderEnabled
+        autoSettleEnabled = userDefaults.boolValue(forKey: StorageKey.autoSettleEnabled) ?? Default.autoSettleEnabled
         lastSettlementDateKey = userDefaults.string(forKey: StorageKey.lastSettlementDateKey)
         let now = Date()
         currentDateKey = Self.dateKey(for: now)
@@ -363,6 +373,25 @@ final class WageState: ObservableObject {
         userDefaults.set(privacyMode, forKey: StorageKey.privacyMode)
         userDefaults.set(selectedWeekdays.sorted(), forKey: StorageKey.selectedWeekdays)
         userDefaults.set(clockOutReminderEnabled, forKey: StorageKey.clockOutReminderEnabled)
+        userDefaults.set(autoSettleEnabled, forKey: StorageKey.autoSettleEnabled)
+    }
+
+    /// Silently settle today on the user's behalf when:
+    /// - auto-settle is enabled
+    /// - today is a paid workday
+    /// - the workday has ended
+    /// - today isn't already settled
+    /// Mirrors the manual "存入资产" path: persists today's snapshot and stamps the settlement marker.
+    @discardableResult
+    func autoSettleTodayIfNeeded(now: Date = Date()) -> Bool {
+        guard autoSettleEnabled else { return false }
+        guard !isTodaySettled else { return false }
+        guard isPaidWorkday(now) else { return false }
+        guard calculation(at: now).status == .done else { return false }
+
+        persistCurrentDaySnapshot()
+        markTodaySettled()
+        return true
     }
 
     func reconcileClockOutReminder() {
@@ -421,6 +450,7 @@ private enum Default {
     static let privacyMode = false
     static let selectedWeekdays: Set<Int> = [0, 1, 2, 3, 4]
     static let clockOutReminderEnabled = false
+    static let autoSettleEnabled = false
 }
 
 private extension UserDefaults {

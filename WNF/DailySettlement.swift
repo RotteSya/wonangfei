@@ -461,7 +461,7 @@ struct DailySettlementOverlay: View {
     private var actionRow: some View {
         HStack(spacing: 12) {
             settlementActionButton(
-                title: "存入资产",
+                title: "确定下班",
                 systemImage: "tray.and.arrow.down.fill",
                 style: .primary
             ) {

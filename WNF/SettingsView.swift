@@ -212,6 +212,27 @@ struct SettingsView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
 
+                Rectangle()
+                    .fill(WNFTheme.hairline)
+                    .frame(height: 0.5)
+                    .padding(.leading, 16)
+
+                HStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("自动结算")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(WNFTheme.ink)
+                        Text("到点不用动手 · 下班时间一过自动存入今日窝囊费。")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(WNFTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 12)
+                    WNFToggle(isOn: $state.autoSettleEnabled)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+
                 if clockOutReminderShouldShowSystemHint {
                     Rectangle()
                         .fill(WNFTheme.hairline)

@@ -19,6 +19,7 @@ struct WNFApp: App {
                     if newPhase == .active {
                         state.resumeCalendarDayTimer()
                         premium.handleSceneBecameActive()
+                        state.autoSettleTodayIfNeeded()
                         writeWidgetSnapshot()
                         state.reconcileClockOutReminder()
                     } else {
@@ -37,6 +38,7 @@ struct WNFApp: App {
                     writeWidgetSnapshot()
                 }
                 .onAppear {
+                    state.autoSettleTodayIfNeeded()
                     writeWidgetSnapshot()
                 }
         }

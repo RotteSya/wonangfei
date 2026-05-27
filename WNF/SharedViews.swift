@@ -18,19 +18,7 @@ struct TopBar: View {
 
             Spacer()
 
-            if let onShare {
-                Button(action: onShare) {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(WNFTheme.ink)
-                        .frame(width: 40, height: 40)
-                        .background(Color.white, in: RoundedRectangle(cornerRadius: 13))
-                        .overlay(RoundedRectangle(cornerRadius: 13).stroke(WNFTheme.hairline, lineWidth: 0.5))
-                        .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("分享今日窝囊费")
-            } else {
+            HStack(spacing: 8) {
                 Button {
                     state.privacyMode.toggle()
                 } label: {
@@ -44,6 +32,20 @@ struct TopBar: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(state.privacyMode ? "显示工资" : "隐藏工资")
+
+                if let onShare {
+                    Button(action: onShare) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(WNFTheme.ink)
+                            .frame(width: 40, height: 40)
+                            .background(Color.white, in: RoundedRectangle(cornerRadius: 13))
+                            .overlay(RoundedRectangle(cornerRadius: 13).stroke(WNFTheme.hairline, lineWidth: 0.5))
+                            .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("分享今日窝囊费")
+                }
             }
         }
         .frame(maxWidth: .infinity)

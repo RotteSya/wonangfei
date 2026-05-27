@@ -42,9 +42,17 @@ struct HomeView: View {
 private struct HeroHomePage: View {
     @EnvironmentObject private var state: WageState
     @Environment(\.tabBarFloorHeight) private var tabBarFloorHeight: CGFloat
+    @StateObject private var quoteEngine: BubbleQuoteEngine
     var day: WageDay
     var onShare: () -> Void
     var onClockOut: () -> Void
+
+    init(day: WageDay, onShare: @escaping () -> Void, onClockOut: @escaping () -> Void) {
+        self.day = day
+        self.onShare = onShare
+        self.onClockOut = onClockOut
+        self._quoteEngine = StateObject(wrappedValue: BubbleQuoteEngine(initialStatus: day.status))
+    }
 
     private var statusPresentation: WorkStatusPresentation {
         WorkStatusPresentation(status: day.status)
@@ -115,7 +123,7 @@ private struct HeroHomePage: View {
 
                 Spacer(minLength: 16)
 
-                HomeMascotStage(quote: statusPresentation.quote)
+                HomeMascotStage(quote: quoteEngine.currentQuote, bubbleOffset: quoteEngine.bubbleOffset)
                     .padding(.bottom, mascotBottomPadding)
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
@@ -130,6 +138,9 @@ private struct HeroHomePage: View {
                     )
                 }
             }
+        }
+        .onChange(of: day.status) { _, newStatus in
+            quoteEngine.setStatus(newStatus)
         }
     }
 
@@ -151,6 +162,7 @@ private struct ClockOutCTAAnchorKey: PreferenceKey {
 
 private struct HomeMascotStage: View {
     var quote: String
+    var bubbleOffset: CGSize
 
     private let stageHeight: CGFloat = 285
 
@@ -166,7 +178,9 @@ private struct HomeMascotStage: View {
                     .padding(.vertical, 11)
                     .background(Color.white, in: RoundedRectangle(cornerRadius: 17))
                     .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
-                    .offset(x: 42, y: 18)
+                    .offset(x: bubbleOffset.width, y: bubbleOffset.height)
+                    .id(quote)
+                    .transition(.opacity)
             }
             .frame(maxWidth: .infinity)
             .frame(height: stageHeight)

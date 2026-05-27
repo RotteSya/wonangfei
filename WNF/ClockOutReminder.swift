@@ -70,8 +70,8 @@ final class ClockOutReminderService {
             guard let iosWeekday = Self.appWeekdayToiOSWeekday(appWeekday) else { continue }
 
             let content = UNMutableNotificationContent()
-            content.title = "今天可以结算窝囊费啦"
-            content.body = "点开 App 看看今天的窝囊战绩。"
+            content.title = "下班时间到啦"
+            content.body = "工位辛苦，进来看看今天的窝囊费。"
             content.sound = .default
 
             var dateComponents = DateComponents()

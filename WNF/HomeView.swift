@@ -59,7 +59,7 @@ private struct HeroHomePage: View {
     }
 
     private var statusChipLabel: String {
-        state.isTodaySettled ? "今日已结算 · 个人时间" : statusPresentation.label
+        state.isTodaySettled ? "今日已下班 · 个人时间" : statusPresentation.label
     }
 
     /// Height of the transparent margin baked into the bottom of the home

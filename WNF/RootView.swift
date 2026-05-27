@@ -497,7 +497,7 @@ struct RootView: View {
         let amount = WNFFormat.moneyDecimal(settlement.earnedToday, privacy: hidesSensitiveInfo)
         let duration = hidesSensitiveInfo ? "••h••min" : WNFFormat.duration(settlement.elapsedPaidMinutes)
         let streakSuffix = settlement.streakDays > 1 ? "，连续 \(settlement.streakDays) 天到账" : ""
-        return "今日下班结算：\(amount)，已忍 \(duration)\(streakSuffix)。——窝囊费"
+        return "今天挣了 \(amount)，已忍 \(duration)\(streakSuffix)。——窝囊费"
     }
 
     // Main-thread bound: the loading pre-flight gives perceptual feedback, not actual concurrency.

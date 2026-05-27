@@ -198,37 +198,16 @@ struct SettingsView: View {
             VStack(spacing: 0) {
                 HStack(alignment: .center, spacing: 12) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("下班结算提醒")
+                        Text("下班提醒")
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(WNFTheme.ink)
-                        Text("默认关闭。开启后每天 \(state.workEnd.clockText) 通知一次。")
+                        Text("默认关闭。开启后每天 \(state.workEnd.clockText) 提醒你下班。")
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(WNFTheme.muted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 12)
                     WNFToggle(isOn: clockOutReminderBinding)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-
-                Rectangle()
-                    .fill(WNFTheme.hairline)
-                    .frame(height: 0.5)
-                    .padding(.leading, 16)
-
-                HStack(alignment: .center, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("自动结算")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(WNFTheme.ink)
-                        Text("到点不用动手 · 下班时间一过自动存入今日窝囊费。")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(WNFTheme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer(minLength: 12)
-                    WNFToggle(isOn: $state.autoSettleEnabled)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)

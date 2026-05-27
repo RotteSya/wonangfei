@@ -200,8 +200,8 @@ struct DailySettlement: Equatable {
             return CopyPick(
                 headline: "今天全程忍住",
                 subCopy: streakDays > 1
-                    ? "连续 \(streakDays) 天全勤，今日窝囊费已结算。"
-                    : "完整熬完一天，窝囊费已结算。",
+                    ? "连续 \(streakDays) 天全勤，今日窝囊费已收下。"
+                    : "完整熬完一天，窝囊费已收下。",
                 bestMoment: bestMoment
             )
         }
@@ -461,7 +461,7 @@ struct DailySettlementOverlay: View {
     private var actionRow: some View {
         HStack(spacing: 12) {
             settlementActionButton(
-                title: "确定下班",
+                title: "下班！",
                 systemImage: "tray.and.arrow.down.fill",
                 style: .primary
             ) {
@@ -626,7 +626,7 @@ struct DailySettlementShareCard: View {
                 Text("窝囊费")
                     .font(.system(size: 20, weight: .black, design: .rounded))
                     .foregroundStyle(WNFTheme.ink)
-                Text("今日下班结算")
+                Text("今日下班战绩")
                     .font(.system(size: 10, weight: .heavy))
                     .tracking(1.2)
                     .foregroundStyle(WNFTheme.inkSoft)
@@ -1031,21 +1031,19 @@ struct ClockOutCTA: View {
     var action: () -> Void
 
     private var title: String {
-        if isSettled { return "今日已结算 · 再看一眼" }
+        if isSettled { return "今日已下班 · 再看一眼" }
         switch status {
-        case .before: return "提前结算今日"
-        case .morning, .afternoon: return "提前下班结算"
-        case .lunch: return "中场结算一下"
-        case .done: return "我下班了"
+        case .before, .morning, .afternoon, .lunch: return "查看今天挣多少"
+        case .done: return "下班！"
         }
     }
 
     private var subtitle: String {
-        if isSettled { return "进入个人时间，钱已经稳了" }
+        if isSettled { return "今日窝囊费已入账，剩下都是你的时间" }
         switch status {
         case .before: return "今天的窝囊费还没开张"
         case .morning: return "已经熬过早上的两小时最值钱"
-        case .lunch: return "午休回血中，要不要小结一下"
+        case .lunch: return "午休回血中，要不要看看今天挣多少"
         case .afternoon: return "再忍忍，也可以提前看看战绩"
         case .done: return "今日通关，看看今天的窝囊费"
         }

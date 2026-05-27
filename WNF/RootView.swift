@@ -3,13 +3,17 @@ import UIKit
 
 /// Measures the total floor space the bottom tab bar reserves at the bottom of
 /// the app shell (the capsule's own height + its `.padding(.bottom, ...)`).
-/// HomeView uses this to plant the mascot's feet on the tab bar without
-/// hardcoding device-specific offsets.
-struct TabBarFloorHeightKey: PreferenceKey {
+/// HomeView reads it via `EnvironmentValues.tabBarFloorHeight` to plant the
+/// mascot's feet on the tab bar without hardcoding device-specific offsets.
+/// Scoped `private` because only the tab-bar reporter and the `RootView`
+/// listener inside this file produce or consume the preference; the value is
+/// fanned out to the rest of the app through the environment, not the key.
+private struct TabBarFloorHeightKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        let next = nextValue()
-        if next > 0 { value = next }
+        // `max` is order-independent so multiple reporters (or a future split
+        // tab bar) can contribute without the result depending on traversal.
+        value = max(value, nextValue())
     }
 }
 

@@ -139,14 +139,8 @@ private struct HeroHomePage: View {
                 }
             }
         }
-        .onAppear {
-            quoteEngine.setSettled(state.isTodaySettled)
-        }
         .onChange(of: day.status) { _, newStatus in
             quoteEngine.setStatus(newStatus)
-        }
-        .onChange(of: state.isTodaySettled) { _, settled in
-            quoteEngine.setSettled(settled)
         }
     }
 

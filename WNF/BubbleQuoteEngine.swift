@@ -15,8 +15,6 @@ final class BubbleQuoteEngine: ObservableObject {
     private var status: WorkStatus
     private var staticPool: [String]
     private var aiPool: [String] = []
-    private var isSettled: Bool = false
-    private let settledQuote = "今天的工已经收了。"
     private var rotationTask: Task<Void, Never>?
     private var generationTask: Task<Void, Never>?
 
@@ -44,30 +42,11 @@ final class BubbleQuoteEngine: ObservableObject {
         staticPool = WorkStatusPresentation(status: newStatus).quotes
         aiPool.removeAll()
         generationTask?.cancel()
-        // Keep `status`/`staticPool` up to date so we have the right pool when
-        // settlement is undone, but don't bump the bubble while settled — the
-        // user has already seen "今日已结算" and the bubble should stay parked.
-        guard !isSettled else { return }
         let next = staticPool.first(where: { $0 != currentQuote }) ?? staticPool.first ?? currentQuote
         withAnimation(.easeInOut(duration: 0.25)) {
             currentQuote = next
         }
         prefetchAIQuotes()
-    }
-
-    func setSettled(_ settled: Bool) {
-        guard settled != isSettled else { return }
-        isSettled = settled
-        if settled {
-            rotationTask?.cancel()
-            generationTask?.cancel()
-            withAnimation(.easeInOut(duration: 0.25)) {
-                currentQuote = settledQuote
-            }
-        } else {
-            startRotation()
-            prefetchAIQuotes()
-        }
     }
 
     private func startRotation() {
@@ -82,7 +61,6 @@ final class BubbleQuoteEngine: ObservableObject {
     }
 
     private func advance() {
-        guard !isSettled else { return }
         let next = pickNext()
         withAnimation(.easeInOut(duration: 0.25)) {
             currentQuote = next

@@ -123,7 +123,7 @@ private struct HeroHomePage: View {
 
                 Spacer(minLength: 16)
 
-                HomeMascotStage(quote: quoteEngine.currentQuote)
+                HomeMascotStage(quote: quoteEngine.currentQuote, bubbleOffset: quoteEngine.bubbleOffset)
                     .padding(.bottom, mascotBottomPadding)
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
@@ -162,6 +162,7 @@ private struct ClockOutCTAAnchorKey: PreferenceKey {
 
 private struct HomeMascotStage: View {
     var quote: String
+    var bubbleOffset: CGSize
 
     private let stageHeight: CGFloat = 285
 
@@ -177,7 +178,7 @@ private struct HomeMascotStage: View {
                     .padding(.vertical, 11)
                     .background(Color.white, in: RoundedRectangle(cornerRadius: 17))
                     .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
-                    .offset(x: 42, y: 18)
+                    .offset(x: bubbleOffset.width, y: bubbleOffset.height)
                     .id(quote)
                     .transition(.opacity)
             }

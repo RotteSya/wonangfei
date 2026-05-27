@@ -5,28 +5,41 @@ import SwiftUI
 import FoundationModels
 #endif
 
-/// Drives the home page mascot's speech bubble: rotates a quote every ~5s
+/// Drives the home page mascot's speech bubble: rotates a quote every ~8s
 /// from a curated static pool, optionally enriched with on-device Apple
-/// Intelligence-generated lines (iOS 26+ on supported hardware).
+/// Intelligence-generated lines (iOS 26+ on supported hardware). Some
+/// quotes get a context-appropriate kaomoji/emoji tail, and the bubble's
+/// position drifts within a small band on every change.
 @MainActor
 final class BubbleQuoteEngine: ObservableObject {
     @Published private(set) var currentQuote: String
+    @Published private(set) var bubbleOffset: CGSize
 
     private var status: WorkStatus
     private var staticPool: [String]
     private var aiPool: [String] = []
+    private var currentBase: String
     private var rotationTask: Task<Void, Never>?
     private var generationTask: Task<Void, Never>?
 
-    private static let rotationSeconds: UInt64 = 5
+    private static let rotationSeconds: UInt64 = 8
     private static let aiBatchSize = 5
     private static let aiPoolCeiling = 8
+    private static let decorationProbability: Double = 0.4
+    // Bubble position drifts within a small band relative to the mascot
+    // stage's topLeading corner. The mascot stage sits below the 今日结算
+    // card so any value here keeps the bubble strictly below that card.
+    private static let offsetXRange: ClosedRange<CGFloat> = 30...75
+    private static let offsetYRange: ClosedRange<CGFloat> = 8...30
 
     init(initialStatus: WorkStatus) {
         let presentation = WorkStatusPresentation(status: initialStatus)
+        let base = presentation.quotes.first ?? ""
         self.status = initialStatus
         self.staticPool = presentation.quotes
-        self.currentQuote = presentation.quotes.first ?? ""
+        self.currentBase = base
+        self.currentQuote = Self.decorate(base, for: initialStatus)
+        self.bubbleOffset = Self.randomOffset()
         startRotation()
         prefetchAIQuotes()
     }
@@ -42,9 +55,13 @@ final class BubbleQuoteEngine: ObservableObject {
         staticPool = WorkStatusPresentation(status: newStatus).quotes
         aiPool.removeAll()
         generationTask?.cancel()
-        let next = staticPool.first(where: { $0 != currentQuote }) ?? staticPool.first ?? currentQuote
+        let nextBase = staticPool.first(where: { $0 != currentBase }) ?? staticPool.first ?? currentBase
+        currentBase = nextBase
+        let decorated = Self.decorate(nextBase, for: newStatus)
+        let newOffset = Self.randomOffset()
         withAnimation(.easeInOut(duration: 0.25)) {
-            currentQuote = next
+            currentQuote = decorated
+            bubbleOffset = newOffset
         }
         prefetchAIQuotes()
     }
@@ -61,9 +78,13 @@ final class BubbleQuoteEngine: ObservableObject {
     }
 
     private func advance() {
-        let next = pickNext()
+        let nextBase = pickNext()
+        currentBase = nextBase
+        let decorated = Self.decorate(nextBase, for: status)
+        let newOffset = Self.randomOffset()
         withAnimation(.easeInOut(duration: 0.25)) {
-            currentQuote = next
+            currentQuote = decorated
+            bubbleOffset = newOffset
         }
     }
 
@@ -71,10 +92,39 @@ final class BubbleQuoteEngine: ObservableObject {
         if !aiPool.isEmpty {
             let aiNext = aiPool.removeFirst()
             if aiPool.count < 2 { prefetchAIQuotes() }
-            if aiNext != currentQuote { return aiNext }
+            if aiNext != currentBase { return aiNext }
         }
-        let candidates = staticPool.filter { $0 != currentQuote }
-        return candidates.randomElement() ?? staticPool.first ?? currentQuote
+        let candidates = staticPool.filter { $0 != currentBase }
+        return candidates.randomElement() ?? staticPool.first ?? currentBase
+    }
+
+    private static func randomOffset() -> CGSize {
+        CGSize(
+            width: CGFloat.random(in: offsetXRange),
+            height: CGFloat.random(in: offsetYRange)
+        )
+    }
+
+    private static func decorate(_ text: String, for status: WorkStatus) -> String {
+        guard !text.isEmpty else { return text }
+        guard Double.random(in: 0..<1) < decorationProbability else { return text }
+        guard let pick = decorations(for: status).randomElement() else { return text }
+        return "\(text) \(pick)"
+    }
+
+    private static func decorations(for status: WorkStatus) -> [String] {
+        switch status {
+        case .before:
+            return ["(´-ω-`)", "( ´_ゝ`)", "(＿　＿)", "zzZ", "☕"]
+        case .morning:
+            return ["( ´_ゝ`)", "(￣Д￣)", "ﾉ(ﾟдﾟ)ﾉ", "💻", "☕"]
+        case .lunch:
+            return ["(´~`)", "(∪｡∪)zzz", "(￣﹃￣)", "🍱", "(＾ω＾)"]
+        case .afternoon:
+            return ["(눈‸눈)", "(´д`)", "(￣Д￣)ﾉ", "💪", "☕"]
+        case .done:
+            return ["ヽ(´▽`)/", "(´∀`*)", "(￣▽￣)", "🎉", "🚪"]
+        }
     }
 
     private func prefetchAIQuotes() {
@@ -104,7 +154,7 @@ final class BubbleQuoteEngine: ObservableObject {
     @available(iOS 26.0, *)
     @Generable
     struct AIQuote {
-        @Guide(description: "10 到 16 个汉字的中文吐槽")
+        @Guide(description: "10 到 14 个汉字的中文吐槽")
         var line: String
     }
 
@@ -123,8 +173,8 @@ final class BubbleQuoteEngine: ObservableObject {
             每次只回一句中文吐槽，要求：
             - 自嘲、温和、带 deadpan-warm 的丧
             - 优先用打工人词汇：搬砖、工位、回血、打工、房租、咖啡钱、外卖、奶茶、邮件、会议、PPT
-            - 严禁出现：emoji、unicode 图标、"提升效率"、"智能洞察"、"数据驱动"、"用户"、"您"
-            - 长度 10 到 16 个汉字，句末标点可有可无
+            - 严禁出现：emoji、unicode 图标、颜文字、"提升效率"、"智能洞察"、"数据驱动"、"用户"、"您"
+            - 长度 10 到 14 个汉字，句末标点可有可无
             - 每次换个角度，不要复读上一句
             """
         }
@@ -179,7 +229,7 @@ final class BubbleQuoteEngine: ObservableObject {
         })
         s = s.replacingOccurrences(of: "/", with: " · ")
         s = s.replacingOccurrences(of: "|", with: " · ")
-        if s.count > 18 { s = String(s.prefix(18)) }
+        if s.count > 14 { s = String(s.prefix(14)) }
         // Hard reject if a banned voice-rule substring slipped through the
         // model's instructions — the empty return causes the caller to drop it.
         if bannedSubstrings.contains(where: { s.contains($0) }) {

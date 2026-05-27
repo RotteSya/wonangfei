@@ -444,15 +444,15 @@ private struct HomeCoinDropLayer: View {
     var collisionY: CGFloat
 
     @State private var coins: [HomeFallingCoin] = []
-    @State private var lastMilestone: Int?
+    @State private var lastPaidSecond: Int?
     @State private var emissionIndex = 0
 
-    private static let coinStep: Double = 0.10
-    private static let maxCatchUpCoins = 3
+    private static let coinsPerBurst = 6
+    private static let maxCatchUpBursts = 1
 
     private var signal: HomeCoinSignal {
         HomeCoinSignal(
-            milestone: Int((max(0, day.earnedToday) / Self.coinStep + 0.0001).rounded(.down)),
+            paidSecond: day.elapsedPaidSeconds,
             canEmit: canEmitCoins,
             shouldClear: isSettled
         )
@@ -491,8 +491,8 @@ private struct HomeCoinDropLayer: View {
     }
 
     private func primeBaseline() {
-        guard lastMilestone == nil else { return }
-        lastMilestone = signal.milestone
+        guard lastPaidSecond == nil else { return }
+        lastPaidSecond = signal.paidSecond
         if signal.shouldClear {
             coins.removeAll()
         }
@@ -501,28 +501,28 @@ private struct HomeCoinDropLayer: View {
     private func reconcile(_ signal: HomeCoinSignal) {
         if signal.shouldClear {
             coins.removeAll()
-            lastMilestone = signal.milestone
+            lastPaidSecond = signal.paidSecond
             return
         }
 
         guard signal.canEmit else {
-            lastMilestone = signal.milestone
+            lastPaidSecond = signal.paidSecond
             return
         }
 
-        guard let previousMilestone = lastMilestone else {
-            lastMilestone = signal.milestone
+        guard let previousPaidSecond = lastPaidSecond else {
+            lastPaidSecond = signal.paidSecond
             return
         }
 
-        guard signal.milestone > previousMilestone else {
-            lastMilestone = signal.milestone
+        guard signal.paidSecond > previousPaidSecond else {
+            lastPaidSecond = signal.paidSecond
             return
         }
 
-        let spawnCount = min(signal.milestone - previousMilestone, Self.maxCatchUpCoins)
-        lastMilestone = signal.milestone
-        emitCoins(count: spawnCount)
+        let burstCount = min(signal.paidSecond - previousPaidSecond, Self.maxCatchUpBursts)
+        lastPaidSecond = signal.paidSecond
+        emitCoins(count: burstCount * Self.coinsPerBurst)
     }
 
     private func emitCoins(count: Int) {
@@ -537,7 +537,7 @@ private struct HomeCoinDropLayer: View {
     }
 
     private func scheduleRemoval(for coin: HomeFallingCoin) {
-        let lifetimeNanoseconds = UInt64((2.2 + coin.delay) * 1_000_000_000)
+        let lifetimeNanoseconds = UInt64((1.45 + coin.delay) * 1_000_000_000)
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: lifetimeNanoseconds)
             coins.removeAll { $0.id == coin.id }
@@ -546,7 +546,7 @@ private struct HomeCoinDropLayer: View {
 }
 
 private struct HomeCoinSignal: Equatable {
-    var milestone: Int
+    var paidSecond: Int
     var canEmit: Bool
     var shouldClear: Bool
 }
@@ -564,15 +564,15 @@ private struct HomeFallingCoin: Identifiable, Equatable {
     init(sequence: Int, burstIndex: Int) {
         self.sequence = sequence
         lane = sequence % 5
-        size = CGFloat(22 + (sequence % 4) * 3)
-        delay = Double(burstIndex) * 0.08
+        size = CGFloat(21 + (sequence % 5) * 3)
+        delay = Double(burstIndex) * 0.035
 
         let driftDirection: CGFloat = sequence.isMultiple(of: 2) ? -1 : 1
-        drift = driftDirection * CGFloat(18 + (sequence % 3) * 10)
+        drift = driftDirection * CGFloat(24 + (sequence % 4) * 12)
 
         let rotationDirection = sequence.isMultiple(of: 2) ? -1.0 : 1.0
-        rotation = rotationDirection * Double(155 + (sequence % 5) * 26)
-        bounceHeight = CGFloat(22 + (sequence % 4) * 8)
+        rotation = rotationDirection * Double(210 + (sequence % 6) * 32)
+        bounceHeight = CGFloat(26 + (sequence % 4) * 9)
     }
 }
 
@@ -706,16 +706,16 @@ private struct HomeDroppingCoin: View {
             return
         }
 
-        withAnimation(.spring(response: 0.22, dampingFraction: 0.72).delay(coin.delay)) {
+        withAnimation(.spring(response: 0.14, dampingFraction: 0.68).delay(coin.delay)) {
             phase = .emerged
         } completion: {
-            withAnimation(.easeIn(duration: 0.58)) {
+            withAnimation(.easeIn(duration: 0.34)) {
                 phase = .falling
             } completion: {
-                withAnimation(.spring(response: 0.28, dampingFraction: 0.56)) {
+                withAnimation(.spring(response: 0.18, dampingFraction: 0.48)) {
                     phase = .bounced
                 } completion: {
-                    withAnimation(.easeOut(duration: 0.24)) {
+                    withAnimation(.easeOut(duration: 0.16)) {
                         phase = .finished
                     }
                 }

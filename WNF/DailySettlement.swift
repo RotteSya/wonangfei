@@ -346,12 +346,15 @@ struct DailySettlementOverlay: View {
     @State private var tearSnapshot: UIImage?
     @State private var tearNormalizedY: CGFloat = 0.5
     @State private var tearJitter: [CGFloat] = []
-    @State private var tearActive = false
+    @State private var tearWindup: Double = 0
+    @State private var tearSeparation: Double = 0
+    @State private var tearFlight: Double = 0
+    @State private var tearConfettiProgress: Double = 0
+    @State private var tearConfettiSeed: UInt64 = 0
 
     private let burstDuration: TimeInterval = 0.85
     private let amountRampDuration: TimeInterval = 0.7
     private let revealDelay: TimeInterval = 0.5
-    private let tearDuration: TimeInterval = 0.55
 
     var body: some View {
         ZStack {
@@ -470,23 +473,43 @@ struct DailySettlementOverlay: View {
     }
 
     private func tearLayer(snapshot: UIImage) -> some View {
-        ZStack {
+        // Windup briefly compresses the card; the snap then pushes pieces apart with a punchy
+        // overshoot; the flight phase sends them off-screen with rotation + fade.
+        let snapTopOffset: CGFloat = -38 * tearSeparation
+        let snapBottomOffset: CGFloat = 22 * tearSeparation
+        let flyTopOffset: CGFloat = -460 * tearFlight
+        let flyBottomOffset: CGFloat = 260 * tearFlight
+        let topOffsetY = snapTopOffset + flyTopOffset
+        let bottomOffsetY = snapBottomOffset + flyBottomOffset
+        let topRotation = -3 * tearSeparation - 7 * tearFlight
+        let bottomRotation = 2 * tearSeparation + 5 * tearFlight
+        let windupScale = 1 - CGFloat(tearWindup) * 0.035
+        let opacity = 1 - tearFlight
+
+        return ZStack {
             Image(uiImage: snapshot)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .mask(TearMask(tearNormalizedY: tearNormalizedY, jitter: tearJitter, side: .bottom))
-                .offset(y: tearActive ? 140 : 0)
-                .rotationEffect(.degrees(tearActive ? 4 : 0), anchor: .top)
-                .opacity(tearActive ? 0 : 1)
+                .offset(y: bottomOffsetY)
+                .rotationEffect(.degrees(bottomRotation), anchor: .top)
+                .opacity(opacity)
 
             Image(uiImage: snapshot)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .mask(TearMask(tearNormalizedY: tearNormalizedY, jitter: tearJitter, side: .top))
-                .offset(y: tearActive ? -360 : 0)
-                .rotationEffect(.degrees(tearActive ? -5 : 0), anchor: .bottom)
-                .opacity(tearActive ? 0 : 1)
+                .offset(y: topOffsetY)
+                .rotationEffect(.degrees(topRotation), anchor: .bottom)
+                .opacity(opacity)
+
+            TearConfettiBurst(
+                normalizedY: tearNormalizedY,
+                progress: tearConfettiProgress,
+                seed: tearConfettiSeed
+            )
         }
+        .scaleEffect(windupScale)
         .shadow(color: .black.opacity(0.32), radius: 28, y: 18)
         .allowsHitTesting(false)
     }
@@ -623,24 +646,117 @@ struct DailySettlementOverlay: View {
 
         tearSnapshot = image
         tearNormalizedY = CGFloat.random(in: 0.32...0.68)
-        tearJitter = Self.makeTearJitter(count: 16)
+        tearJitter = Self.makeTearJitter(count: 18)
+        tearConfettiSeed = UInt64.random(in: 0..<UInt64.max)
         phase = .tearing
 
-        let generator = UIImpactFeedbackGenerator(style: .rigid)
-        generator.impactOccurred()
+        let prepHaptic = UIImpactFeedbackGenerator(style: .light)
+        let snapHaptic = UIImpactFeedbackGenerator(style: .heavy)
+        prepHaptic.prepare()
+        snapHaptic.prepare()
 
-        withAnimation(.spring(response: tearDuration, dampingFraction: 0.72)) {
-            tearActive = true
+        // Stage 1: 60ms windup — card briefly compresses, like cocking back before the rip.
+        prepHaptic.impactOccurred(intensity: 0.7)
+        withAnimation(.easeIn(duration: 0.06)) {
+            tearWindup = 1
         }
 
         Task { @MainActor in
-            try? await sleep(seconds: tearDuration)
+            try? await sleep(seconds: 0.07)
+
+            // Stage 2: RIP — heavy haptic, snap apart with overshoot, confetti spreads.
+            snapHaptic.impactOccurred()
+            withAnimation(.spring(response: 0.22, dampingFraction: 0.5)) {
+                tearWindup = 0
+                tearSeparation = 1
+            }
+            withAnimation(.easeOut(duration: 0.55)) {
+                tearConfettiProgress = 1
+            }
+
+            try? await sleep(seconds: 0.14)
+
+            // Stage 3: Fly off-screen with rotation + fade.
+            withAnimation(.timingCurve(0.32, 0.72, 0, 1, duration: 0.42)) {
+                tearFlight = 1
+            }
+
+            try? await sleep(seconds: 0.42)
             onSaveAsAsset()
         }
     }
 
     private static func makeTearJitter(count: Int) -> [CGFloat] {
-        (0..<count).map { _ in CGFloat.random(in: -7...7) }
+        (0..<count).map { _ in CGFloat.random(in: -8...8) }
+    }
+}
+
+// MARK: - Tear Confetti
+
+private struct TearConfettiBurst: View {
+    var normalizedY: CGFloat
+    var progress: Double
+    var seed: UInt64
+    var particleCount: Int = 12
+
+    var body: some View {
+        GeometryReader { proxy in
+            let baseY = proxy.size.height * normalizedY
+            let width = proxy.size.width
+            ZStack {
+                ForEach(0..<particleCount, id: \.self) { index in
+                    confettiParticle(index: index, baseY: baseY, width: width)
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func confettiParticle(index: Int, baseY: CGFloat, width: CGFloat) -> some View {
+        // Deterministic per-tear, per-particle pseudo-randomness derived from the seed so the
+        // particle paths feel chaotic without re-randomizing on every redraw.
+        let hash = TearConfettiBurst.hash(seed: seed, index: UInt64(index))
+        let lateralFraction = TearConfettiBurst.unitFraction(from: hash, offset: 0)
+        let angleJitter = (TearConfettiBurst.unitFraction(from: hash, offset: 7) - 0.5) * 0.6
+        let distanceJitter = TearConfettiBurst.unitFraction(from: hash, offset: 13)
+        let rotationOffset = TearConfettiBurst.unitFraction(from: hash, offset: 19)
+        let sizeJitter = TearConfettiBurst.unitFraction(from: hash, offset: 23)
+
+        let originX = width * CGFloat(lateralFraction)
+        let goesUp = index % 2 == 0
+        // Half the particles spray up, half down — paper fibers torn from both sides of the rip.
+        let baseAngle: Double = goesUp ? -.pi / 2 : .pi / 2
+        let angle = baseAngle + angleJitter
+        let distance: CGFloat = 70 + CGFloat(distanceJitter) * 70
+        let travelled = CGFloat(progress) * distance
+        let dx = CGFloat(cos(angle)) * travelled
+        let dy = CGFloat(sin(angle)) * travelled
+
+        let particleWidth: CGFloat = 5 + CGFloat(sizeJitter) * 5
+        let particleHeight: CGFloat = 3 + CGFloat(sizeJitter) * 2
+        let particleColor: Color = (index % 3 == 0) ? WNFTheme.yellow : WNFTheme.bg
+        let fade = 1 - progress * progress
+
+        return RoundedRectangle(cornerRadius: 1, style: .continuous)
+            .fill(particleColor)
+            .frame(width: particleWidth, height: particleHeight)
+            .rotationEffect(.degrees(rotationOffset * 360 + progress * 220))
+            .position(x: originX + dx, y: baseY + dy)
+            .opacity(fade)
+    }
+
+    private static func hash(seed: UInt64, index: UInt64) -> UInt64 {
+        // SplitMix64-flavored mix so neighbouring indices produce wildly different bits.
+        var z = seed &+ (index &* 0x9E37_79B9_7F4A_7C15)
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+        return z ^ (z >> 31)
+    }
+
+    private static func unitFraction(from hash: UInt64, offset: UInt64) -> Double {
+        let shifted = (hash &>> offset) & 0xFFFF
+        return Double(shifted) / Double(0xFFFF)
     }
 }
 

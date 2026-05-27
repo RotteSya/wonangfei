@@ -115,15 +115,15 @@ final class BubbleQuoteEngine: ObservableObject {
     private static func decorations(for status: WorkStatus) -> [String] {
         switch status {
         case .before:
-            return ["(´-ω-`)", "( ´_ゝ`)", "(＿　＿)", "zzZ", "☕"]
+            return ["(´-ω-`)", "( ´_ゝ`)", "(＿　＿)", "zzZ"]
         case .morning:
-            return ["( ´_ゝ`)", "(￣Д￣)", "ﾉ(ﾟдﾟ)ﾉ", "💻", "☕"]
+            return ["( ´_ゝ`)", "(￣Д￣)", "ﾉ(ﾟдﾟ)ﾉ"]
         case .lunch:
-            return ["(´~`)", "(∪｡∪)zzz", "(￣﹃￣)", "🍱", "(＾ω＾)"]
+            return ["(´~`)", "(∪｡∪)zzz", "(￣﹃￣)", "(＾ω＾)"]
         case .afternoon:
-            return ["(눈‸눈)", "(´д`)", "(￣Д￣)ﾉ", "💪", "☕"]
+            return ["(눈‸눈)", "(´д`)", "(￣Д￣)ﾉ"]
         case .done:
-            return ["ヽ(´▽`)/", "(´∀`*)", "(￣▽￣)", "🎉", "🚪"]
+            return ["ヽ(´▽`)/", "(´∀`*)", "(￣▽￣)"]
         }
     }
 

@@ -1,6 +1,29 @@
 import SwiftUI
 import UIKit
 
+/// Measures the total floor space the bottom tab bar reserves at the bottom of
+/// the app shell (the capsule's own height + its `.padding(.bottom, ...)`).
+/// HomeView uses this to plant the mascot's feet on the tab bar without
+/// hardcoding device-specific offsets.
+struct TabBarFloorHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        let next = nextValue()
+        if next > 0 { value = next }
+    }
+}
+
+private struct TabBarFloorHeightEnvironmentKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
+extension EnvironmentValues {
+    var tabBarFloorHeight: CGFloat {
+        get { self[TabBarFloorHeightEnvironmentKey.self] }
+        set { self[TabBarFloorHeightEnvironmentKey.self] = newValue }
+    }
+}
+
 enum AppTab: String, CaseIterable, Identifiable {
     case home
     case records
@@ -55,6 +78,7 @@ struct RootView: View {
     @State private var settlementPresented = false
     @State private var settlementSnapshot: DailySettlement?
     @State private var settlementHidesSensitiveInfo = false
+    @State private var tabBarFloorHeight: CGFloat = 0
     @AppStorage("wnf.onboarding.completed") private var onboardingCompleted = false
 
     private static let shareExportWidth: CGFloat = 360
@@ -123,6 +147,10 @@ struct RootView: View {
             }
         }
         .preferredColorScheme(.light)
+        .environment(\.tabBarFloorHeight, tabBarFloorHeight)
+        .onPreferenceChange(TabBarFloorHeightKey.self) { value in
+            tabBarFloorHeight = value
+        }
         .background {
             WindowSceneScaleReader { scale in
                 windowSceneScale = scale
@@ -203,6 +231,15 @@ struct RootView: View {
 
             AppTabBar(selectedTab: tabSelection)
                 .padding(.bottom, 10)
+                .background(
+                    GeometryReader { proxy in
+                        Color.clear
+                            .preference(
+                                key: TabBarFloorHeightKey.self,
+                                value: proxy.size.height
+                            )
+                    }
+                )
                 .opacity(homeSharePresented || settlementPresented ? 0 : 1)
                 .allowsHitTesting(!homeSharePresented && !settlementPresented)
                 .animation(.easeInOut(duration: 0.18), value: homeSharePresented)

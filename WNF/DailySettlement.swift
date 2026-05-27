@@ -428,29 +428,28 @@ struct DailySettlementOverlay: View {
         VStack(spacing: 0) {
             Spacer(minLength: 24)
 
-            ZStack {
-                DailySettlementShareCard(
-                    settlement: settlement,
-                    template: template,
-                    displayedAmount: displayedAmount,
-                    displayedBestMoment: currentBestMoment.isEmpty ? settlement.bestMoment : currentBestMoment,
-                    hidesSensitiveInfo: hidesSensitiveInfo,
-                    showsControls: true,
-                    isPreparingShare: isPreparingShare,
-                    onTogglePrivacy: {
-                        withAnimation(.snappy(duration: 0.18)) {
-                            hidesSensitiveInfo.toggle()
-                        }
-                    },
-                    onTearBestMoment: tearBestMoment,
-                    onShare: onShare,
-                    onDismiss: onDismiss
-                )
-                .scaleEffect(revealCardVisible ? 1 : 0.86)
-                .opacity(phase == .tearing ? 0 : (revealCardVisible ? 1 : 0))
-                .allowsHitTesting(revealCardVisible && phase != .tearing)
-                .shadow(color: .black.opacity(0.32), radius: 28, y: 18)
-
+            DailySettlementShareCard(
+                settlement: settlement,
+                template: template,
+                displayedAmount: displayedAmount,
+                displayedBestMoment: currentBestMoment.isEmpty ? settlement.bestMoment : currentBestMoment,
+                hidesSensitiveInfo: hidesSensitiveInfo,
+                showsControls: true,
+                isPreparingShare: isPreparingShare,
+                onTogglePrivacy: {
+                    withAnimation(.snappy(duration: 0.18)) {
+                        hidesSensitiveInfo.toggle()
+                    }
+                },
+                onTearBestMoment: tearBestMoment,
+                onShare: onShare,
+                onDismiss: onDismiss
+            )
+            .scaleEffect(revealCardVisible ? 1 : 0.86)
+            .opacity(phase == .tearing ? 0 : (revealCardVisible ? 1 : 0))
+            .allowsHitTesting(revealCardVisible && phase != .tearing)
+            .shadow(color: .black.opacity(0.32), radius: 28, y: 18)
+            .overlay {
                 if phase == .tearing, let snapshot = tearSnapshot {
                     tearLayer(snapshot: snapshot)
                 }
@@ -473,16 +472,17 @@ struct DailySettlementOverlay: View {
     }
 
     private func tearLayer(snapshot: UIImage) -> some View {
-        // Windup briefly compresses the card; the snap then pushes pieces apart with a punchy
-        // overshoot; the flight phase sends them off-screen with rotation + fade.
-        let snapTopOffset: CGFloat = -38 * tearSeparation
-        let snapBottomOffset: CGFloat = 22 * tearSeparation
-        let flyTopOffset: CGFloat = -460 * tearFlight
-        let flyBottomOffset: CGFloat = 260 * tearFlight
+        // The top half is the dramatic piece — it gets yanked up and off-screen. The bottom half
+        // stays roughly put (only a sliver of drift) so the receipt visually feels "torn off in
+        // your hand," not "the whole card slides down."
+        let snapTopOffset: CGFloat = -36 * tearSeparation
+        let snapBottomOffset: CGFloat = 4 * tearSeparation
+        let flyTopOffset: CGFloat = -480 * tearFlight
+        let flyBottomOffset: CGFloat = 70 * tearFlight
         let topOffsetY = snapTopOffset + flyTopOffset
         let bottomOffsetY = snapBottomOffset + flyBottomOffset
-        let topRotation = -3 * tearSeparation - 7 * tearFlight
-        let bottomRotation = 2 * tearSeparation + 5 * tearFlight
+        let topRotation = -3 * tearSeparation - 8 * tearFlight
+        let bottomRotation = 0.6 * tearSeparation + 2 * tearFlight
         let windupScale = 1 - CGFloat(tearWindup) * 0.035
         let opacity = 1 - tearFlight
 

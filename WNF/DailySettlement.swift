@@ -326,6 +326,7 @@ struct DailySettlementOverlay: View {
         case prep
         case burst
         case reveal
+        case tearing
     }
 
     var settlement: DailySettlement
@@ -342,10 +343,15 @@ struct DailySettlementOverlay: View {
     @State private var revealCardVisible = false
     @State private var revealActionsVisible = false
     @State private var currentBestMoment: String = ""
+    @State private var tearSnapshot: UIImage?
+    @State private var tearNormalizedY: CGFloat = 0.5
+    @State private var tearJitter: [CGFloat] = []
+    @State private var tearActive = false
 
     private let burstDuration: TimeInterval = 0.85
     private let amountRampDuration: TimeInterval = 0.7
     private let revealDelay: TimeInterval = 0.5
+    private let tearDuration: TimeInterval = 0.55
 
     var body: some View {
         ZStack {
@@ -419,43 +425,70 @@ struct DailySettlementOverlay: View {
         VStack(spacing: 0) {
             Spacer(minLength: 24)
 
-            DailySettlementShareCard(
-                settlement: settlement,
-                template: template,
-                displayedAmount: displayedAmount,
-                displayedBestMoment: currentBestMoment.isEmpty ? settlement.bestMoment : currentBestMoment,
-                hidesSensitiveInfo: hidesSensitiveInfo,
-                showsControls: true,
-                isPreparingShare: isPreparingShare,
-                onTogglePrivacy: {
-                    withAnimation(.snappy(duration: 0.18)) {
-                        hidesSensitiveInfo.toggle()
-                    }
-                },
-                onTearBestMoment: tearBestMoment,
-                onShare: onShare,
-                onDismiss: onDismiss
-            )
+            ZStack {
+                DailySettlementShareCard(
+                    settlement: settlement,
+                    template: template,
+                    displayedAmount: displayedAmount,
+                    displayedBestMoment: currentBestMoment.isEmpty ? settlement.bestMoment : currentBestMoment,
+                    hidesSensitiveInfo: hidesSensitiveInfo,
+                    showsControls: true,
+                    isPreparingShare: isPreparingShare,
+                    onTogglePrivacy: {
+                        withAnimation(.snappy(duration: 0.18)) {
+                            hidesSensitiveInfo.toggle()
+                        }
+                    },
+                    onTearBestMoment: tearBestMoment,
+                    onShare: onShare,
+                    onDismiss: onDismiss
+                )
+                .scaleEffect(revealCardVisible ? 1 : 0.86)
+                .opacity(phase == .tearing ? 0 : (revealCardVisible ? 1 : 0))
+                .allowsHitTesting(revealCardVisible && phase != .tearing)
+                .shadow(color: .black.opacity(0.32), radius: 28, y: 18)
+
+                if phase == .tearing, let snapshot = tearSnapshot {
+                    tearLayer(snapshot: snapshot)
+                }
+            }
             .frame(maxWidth: 340)
             .padding(.horizontal, 28)
-            .scaleEffect(revealCardVisible ? 1 : 0.86)
-            .opacity(revealCardVisible ? 1 : 0)
-            // SwiftUI hit-testing still applies at opacity 0; block taps until reveal.
-            .allowsHitTesting(revealCardVisible)
-            .shadow(color: .black.opacity(0.32), radius: 28, y: 18)
 
             Spacer(minLength: 12)
 
             actionRow
-                .opacity(revealActionsVisible ? 1 : 0)
+                .opacity(revealActionsVisible && phase != .tearing ? 1 : 0)
                 .offset(y: revealActionsVisible ? 0 : 14)
-                .allowsHitTesting(revealActionsVisible)
+                .allowsHitTesting(revealActionsVisible && phase != .tearing)
 
             Spacer(minLength: 16)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.spring(response: 0.55, dampingFraction: 0.82), value: revealCardVisible)
         .animation(.easeOut(duration: 0.32).delay(0.18), value: revealActionsVisible)
+    }
+
+    private func tearLayer(snapshot: UIImage) -> some View {
+        ZStack {
+            Image(uiImage: snapshot)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .mask(TearMask(tearNormalizedY: tearNormalizedY, jitter: tearJitter, side: .bottom))
+                .offset(y: tearActive ? 140 : 0)
+                .rotationEffect(.degrees(tearActive ? 4 : 0), anchor: .top)
+                .opacity(tearActive ? 0 : 1)
+
+            Image(uiImage: snapshot)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .mask(TearMask(tearNormalizedY: tearNormalizedY, jitter: tearJitter, side: .top))
+                .offset(y: tearActive ? -360 : 0)
+                .rotationEffect(.degrees(tearActive ? -5 : 0), anchor: .bottom)
+                .opacity(tearActive ? 0 : 1)
+        }
+        .shadow(color: .black.opacity(0.32), radius: 28, y: 18)
+        .allowsHitTesting(false)
     }
 
     private var actionRow: some View {
@@ -465,7 +498,7 @@ struct DailySettlementOverlay: View {
                 systemImage: "tray.and.arrow.down.fill",
                 style: .primary
             ) {
-                onSaveAsAsset()
+                performClockOutTear()
             }
 
             settlementActionButton(
@@ -564,6 +597,107 @@ struct DailySettlementOverlay: View {
     private func sleep(seconds: TimeInterval) async throws {
         let nanoseconds = UInt64((max(0, seconds) * 1_000_000_000).rounded())
         try await Task.sleep(nanoseconds: nanoseconds)
+    }
+
+    @MainActor
+    private func performClockOutTear() {
+        guard phase == .reveal else { return }
+
+        let snapshotCard = DailySettlementShareCard(
+            settlement: settlement,
+            template: template,
+            displayedAmount: settlement.earnedToday,
+            displayedBestMoment: currentBestMoment.isEmpty ? settlement.bestMoment : currentBestMoment,
+            hidesSensitiveInfo: hidesSensitiveInfo,
+            showsControls: false
+        )
+        .frame(width: 340)
+
+        let renderer = ImageRenderer(content: snapshotCard)
+        renderer.scale = UIScreen.main.scale
+
+        guard let image = renderer.uiImage else {
+            onSaveAsAsset()
+            return
+        }
+
+        tearSnapshot = image
+        tearNormalizedY = CGFloat.random(in: 0.32...0.68)
+        tearJitter = Self.makeTearJitter(count: 16)
+        phase = .tearing
+
+        let generator = UIImpactFeedbackGenerator(style: .rigid)
+        generator.impactOccurred()
+
+        withAnimation(.spring(response: tearDuration, dampingFraction: 0.72)) {
+            tearActive = true
+        }
+
+        Task { @MainActor in
+            try? await sleep(seconds: tearDuration)
+            onSaveAsAsset()
+        }
+    }
+
+    private static func makeTearJitter(count: Int) -> [CGFloat] {
+        (0..<count).map { _ in CGFloat.random(in: -7...7) }
+    }
+}
+
+// MARK: - Tear Mask
+
+private struct TearMask: Shape {
+    enum Side { case top, bottom }
+
+    var tearNormalizedY: CGFloat
+    var jitter: [CGFloat]
+    var side: Side
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let baseY = rect.height * tearNormalizedY
+        let count = jitter.count
+
+        guard count >= 2 else {
+            switch side {
+            case .top:
+                path.addRect(CGRect(x: 0, y: 0, width: rect.width, height: baseY))
+            case .bottom:
+                path.addRect(CGRect(x: 0, y: baseY, width: rect.width, height: rect.height - baseY))
+            }
+            return path
+        }
+
+        let stepX = rect.width / CGFloat(count - 1)
+        let yAt: (Int) -> CGFloat = { i in
+            // Pin both ends to baseY so the tear meets the card edges cleanly.
+            let offset = (i == 0 || i == count - 1) ? 0 : jitter[i]
+            return baseY + offset
+        }
+
+        switch side {
+        case .top:
+            path.move(to: CGPoint(x: 0, y: 0))
+            path.addLine(to: CGPoint(x: rect.maxX, y: 0))
+            for i in stride(from: count - 1, through: 0, by: -1) {
+                path.addLine(to: CGPoint(x: stepX * CGFloat(i), y: yAt(i)))
+            }
+            path.closeSubpath()
+        case .bottom:
+            for i in 0..<count {
+                let point = CGPoint(x: stepX * CGFloat(i), y: yAt(i))
+                if i == 0 {
+                    path.move(to: point)
+                } else {
+                    path.addLine(to: point)
+                }
+            }
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+            path.addLine(to: CGPoint(x: 0, y: rect.maxY))
+            path.closeSubpath()
+        }
+
+        return path
     }
 }
 

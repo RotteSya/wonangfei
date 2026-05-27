@@ -44,6 +44,10 @@ final class BubbleQuoteEngine: ObservableObject {
         staticPool = WorkStatusPresentation(status: newStatus).quotes
         aiPool.removeAll()
         generationTask?.cancel()
+        // Keep `status`/`staticPool` up to date so we have the right pool when
+        // settlement is undone, but don't bump the bubble while settled — the
+        // user has already seen "今日已结算" and the bubble should stay parked.
+        guard !isSettled else { return }
         let next = staticPool.first(where: { $0 != currentQuote }) ?? staticPool.first ?? currentQuote
         withAnimation(.easeInOut(duration: 0.25)) {
             currentQuote = next
@@ -68,7 +72,7 @@ final class BubbleQuoteEngine: ObservableObject {
 
     private func startRotation() {
         rotationTask?.cancel()
-        rotationTask = Task { [weak self] in
+        rotationTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: Self.rotationSeconds * 1_000_000_000)
                 if Task.isCancelled { return }
@@ -98,10 +102,10 @@ final class BubbleQuoteEngine: ObservableObject {
     private func prefetchAIQuotes() {
         #if canImport(FoundationModels)
         guard #available(iOS 26.0, *) else { return }
-        guard aiPool.count < Self.aiPoolCeiling else { return }
         guard generationTask == nil || generationTask?.isCancelled == true else { return }
         let capturedStatus = status
-        let needed = max(0, Self.aiBatchSize - aiPool.count)
+        // Top up toward the ceiling, but cap per-batch generation cost at aiBatchSize.
+        let needed = min(Self.aiBatchSize, max(0, Self.aiPoolCeiling - aiPool.count))
         guard needed > 0 else { return }
         generationTask = Task { [weak self] in
             await BubbleQuoteEngine.generateBatch(for: capturedStatus, count: needed) { [weak self] line in
@@ -178,13 +182,31 @@ final class BubbleQuoteEngine: ObservableObject {
         }
     }
 
+    private static let bannedSubstrings: [String] = [
+        "您", "用户", "智能洞察", "提升效率", "数据驱动"
+    ]
+
     @available(iOS 26.0, *)
     private static func sanitize(_ raw: String) -> String {
         var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        s = String(s.unicodeScalars.filter { !$0.properties.isEmojiPresentation })
+        // Strip emoji-like scalars: default-emoji presentation, modifiers,
+        // ZWJ (used to glue emoji sequences), and variation selectors.
+        s = String(s.unicodeScalars.filter { scalar in
+            if scalar.value == 0x200D { return false }
+            if scalar.value == 0xFE0E || scalar.value == 0xFE0F { return false }
+            if scalar.properties.isEmojiPresentation { return false }
+            if scalar.properties.isEmojiModifier { return false }
+            if scalar.properties.isEmojiModifierBase { return false }
+            return true
+        })
         s = s.replacingOccurrences(of: "/", with: " · ")
         s = s.replacingOccurrences(of: "|", with: " · ")
         if s.count > 18 { s = String(s.prefix(18)) }
+        // Hard reject if a banned voice-rule substring slipped through the
+        // model's instructions — the empty return causes the caller to drop it.
+        if bannedSubstrings.contains(where: { s.contains($0) }) {
+            return ""
+        }
         return s
     }
     #endif

@@ -271,7 +271,7 @@ The Settings (`我的`) scroll, top to bottom:
 11. `legalFooter`
 12. `footer` (algorithmic-cynicism note)
 
-`其它` carries the history-export row (`exportHistoryRow`) as its second row, separated from the 计入加班 toggle by the standard SettingsRow 0.5pt hairline. The export row uses the same 34×34 / radius `11` yellow icon tile + 14.5pt/11.5pt title-subtitle pattern as the Premium row: title `导出历史记录 CSV / JSON`, subtitle `含完整金额和工时 · 给会计或自己留一份`. The row body is informational only — it is **not** itself a tap target. The action lives in a trailing ink capsule button (`exportActionButton`) that mirrors the `再走一遍` button pattern from the 引导 section: `13pt black` white-on-ink capsule, `padding 12×8`. Capsule contents flip with entitlement:
+`其它` carries the history-export row (`exportHistoryRow`) as its second row, separated from the 计入加班 toggle by the standard SettingsRow 0.5pt hairline. The row has no leading icon tile — title (`导出历史记录 CSV / JSON`, 14.5pt heavy) and subtitle (`含完整金额和工时 · 给会计或自己留一份`, 11.5pt semibold muted) sit flush at the row's leading padding, matching the icon-less rhythm of the 计入加班 toggle row above it. The row body is informational only — it is **not** itself a tap target. The action lives in a trailing ink capsule button (`exportActionButton`) that mirrors the `再走一遍` button pattern from the 引导 section: `13pt black` white-on-ink capsule, `padding 12×8`. Capsule contents flip with entitlement:
 
 - `.unlocked`: `导出` + `arrow.right` glyph → confirmation alert → `HistoryExportService.makeExportItems`.
 - `.locked` / `.pendingApproval`: `lock.fill` + `解锁` → `paywallController.present(.historyExport)`.

@@ -564,12 +564,6 @@ struct SettingsView: View {
 
     private var exportHistoryRow: some View {
         HStack(alignment: .center, spacing: 12) {
-            Image(systemName: "square.and.arrow.down")
-                .font(.system(size: 14, weight: .black))
-                .foregroundStyle(WNFTheme.ink)
-                .frame(width: 34, height: 34)
-                .background(WNFTheme.yellow, in: RoundedRectangle(cornerRadius: 11))
-
             VStack(alignment: .leading, spacing: 2) {
                 Text("导出历史记录 CSV / JSON")
                     .font(.system(size: 14.5, weight: .heavy))

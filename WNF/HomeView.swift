@@ -75,47 +75,77 @@ private struct HeroHomePage: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            TopBar(onShare: onShare)
-                .padding(.top, 2)
+        GeometryReader { proxy in
+            VStack(alignment: .leading, spacing: 0) {
+                TopBar(onShare: onShare)
+                    .padding(.top, 2)
 
-            VStack(alignment: .leading, spacing: 14) {
-                StatusChip(label: statusChipLabel)
-                    .padding(.top, 12)
+                VStack(alignment: .leading, spacing: 14) {
+                    StatusChip(label: statusChipLabel)
+                        .padding(.top, 12)
 
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("今 日 窝 囊 费")
-                        .font(.system(size: 13, weight: .heavy))
-                        .tracking(5)
-                        .foregroundStyle(WNFTheme.inkSoft)
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("今 日 窝 囊 费")
+                            .font(.system(size: 13, weight: .heavy))
+                            .tracking(5)
+                            .foregroundStyle(WNFTheme.inkSoft)
 
-                    BigMoneyText(value: day.earnedToday, privacy: state.privacyMode)
+                        BigMoneyText(value: day.earnedToday, privacy: state.privacyMode)
+                    }
+
+                    HStack(spacing: 18) {
+                        Text("已忍 \(WNFFormat.duration(day.elapsedPaidMinutes))")
+                        Circle().fill(WNFTheme.muted).frame(width: 4, height: 4)
+                        Text("离下班 \(WNFFormat.duration(day.wallToEndMinutes))")
+                    }
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundStyle(WNFTheme.inkSoft)
+
+                    ProgressTrack(day: day, startText: state.workStart.clockText, endText: state.workEnd.clockText)
+
+                    ClockOutCTA(
+                        status: day.status,
+                        isSettled: state.isTodaySettled,
+                        action: onClockOut
+                    )
+                    .anchorPreference(key: ClockOutCTAAnchorKey.self, value: .bounds) { $0 }
+                    .padding(.top, 4)
                 }
+                .padding(.horizontal, 22)
 
-                HStack(spacing: 18) {
-                    Text("已忍 \(WNFFormat.duration(day.elapsedPaidMinutes))")
-                    Circle().fill(WNFTheme.muted).frame(width: 4, height: 4)
-                    Text("离下班 \(WNFFormat.duration(day.wallToEndMinutes))")
-                }
-                .font(.system(size: 13, weight: .heavy))
-                .foregroundStyle(WNFTheme.inkSoft)
+                Spacer(minLength: 16)
 
-                ProgressTrack(day: day, startText: state.workStart.clockText, endText: state.workEnd.clockText)
-
-                ClockOutCTA(
-                    status: day.status,
-                    isSettled: state.isTodaySettled,
-                    action: onClockOut
-                )
-                .padding(.top, 4)
+                HomeMascotStage(quote: statusPresentation.quote)
+                    .padding(.bottom, mascotBottomPadding)
             }
-            .padding(.horizontal, 22)
-
-            Spacer(minLength: 16)
-
-            HomeMascotStage(quote: statusPresentation.quote)
-                .padding(.bottom, mascotBottomPadding)
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+            .overlayPreferenceValue(ClockOutCTAAnchorKey.self) { anchor in
+                if let anchor {
+                    HomeCoinDropLayer(
+                        day: day,
+                        isSettled: state.isTodaySettled,
+                        ctaFrame: proxy[anchor],
+                        pageSize: proxy.size,
+                        collisionY: coinCollisionY(in: proxy.size)
+                    )
+                }
+            }
         }
+    }
+
+    private func coinCollisionY(in size: CGSize) -> CGFloat {
+        guard tabBarFloorHeight > 0 else {
+            return size.height - 72
+        }
+        return max(0, size.height - tabBarFloorHeight)
+    }
+}
+
+private struct ClockOutCTAAnchorKey: PreferenceKey {
+    static var defaultValue: Anchor<CGRect>?
+
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = nextValue() ?? value
     }
 }
 
@@ -123,8 +153,6 @@ private struct HomeMascotStage: View {
     var quote: String
 
     private let stageHeight: CGFloat = 285
-    private let trailingCoinSize: CGFloat = 25
-    private let leadingCoinSize: CGFloat = 22
 
     var body: some View {
         HomeMascotVideoSequence()
@@ -140,31 +168,8 @@ private struct HomeMascotStage: View {
                     .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
                     .offset(x: 42, y: 18)
             }
-            .overlay(alignment: .topLeading) {
-                GeometryReader { proxy in
-                    ZStack(alignment: .topLeading) {
-                        YenCoin(size: trailingCoinSize)
-                            .offset(x: trailingCoinOffsetX(in: proxy.size.width), y: 72)
-                        YenCoin(size: leadingCoinSize)
-                            .offset(x: leadingCoinOffsetX(in: proxy.size.width), y: 220)
-                    }
-                    .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
-                }
-                .allowsHitTesting(false)
-            }
             .frame(maxWidth: .infinity)
             .frame(height: stageHeight)
-    }
-
-    private func trailingCoinOffsetX(in width: CGFloat) -> CGFloat {
-        let requestedOffset = width - 84
-        let maximumVisibleOffset = max(16, width - trailingCoinSize - 16)
-        return min(max(16, requestedOffset), maximumVisibleOffset)
-    }
-
-    private func leadingCoinOffsetX(in width: CGFloat) -> CGFloat {
-        let maximumVisibleOffset = max(16, width - leadingCoinSize - 16)
-        return min(48, maximumVisibleOffset)
     }
 }
 
@@ -414,6 +419,303 @@ private struct ProgressTrack: View {
             .foregroundStyle(WNFTheme.muted)
         }
     }
+}
+
+private struct HomeCoinDropLayer: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var day: WageDay
+    var isSettled: Bool
+    var ctaFrame: CGRect
+    var pageSize: CGSize
+    var collisionY: CGFloat
+
+    @State private var coins: [HomeFallingCoin] = []
+    @State private var lastMilestone: Int?
+    @State private var emissionIndex = 0
+
+    private static let coinStep: Double = 0.10
+    private static let maxCatchUpCoins = 3
+
+    private var signal: HomeCoinSignal {
+        HomeCoinSignal(
+            milestone: Int((max(0, day.earnedToday) / Self.coinStep + 0.0001).rounded(.down)),
+            canEmit: canEmitCoins,
+            shouldClear: isSettled
+        )
+    }
+
+    private var canEmitCoins: Bool {
+        guard !isSettled else { return false }
+        switch day.status {
+        case .morning, .afternoon:
+            return true
+        case .before, .lunch, .done:
+            return false
+        }
+    }
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            ForEach(coins) { coin in
+                HomeDroppingCoin(
+                    coin: coin,
+                    ctaFrame: ctaFrame,
+                    collisionY: collisionY,
+                    pageWidth: pageSize.width,
+                    reduceMotion: reduceMotion
+                )
+            }
+        }
+        .frame(width: pageSize.width, height: pageSize.height, alignment: .topLeading)
+        .clipped()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .onAppear(perform: primeBaseline)
+        .onChange(of: signal) { _, newSignal in
+            reconcile(newSignal)
+        }
+    }
+
+    private func primeBaseline() {
+        guard lastMilestone == nil else { return }
+        lastMilestone = signal.milestone
+        if signal.shouldClear {
+            coins.removeAll()
+        }
+    }
+
+    private func reconcile(_ signal: HomeCoinSignal) {
+        if signal.shouldClear {
+            coins.removeAll()
+            lastMilestone = signal.milestone
+            return
+        }
+
+        guard signal.canEmit else {
+            lastMilestone = signal.milestone
+            return
+        }
+
+        guard let previousMilestone = lastMilestone else {
+            lastMilestone = signal.milestone
+            return
+        }
+
+        guard signal.milestone > previousMilestone else {
+            lastMilestone = signal.milestone
+            return
+        }
+
+        let spawnCount = min(signal.milestone - previousMilestone, Self.maxCatchUpCoins)
+        lastMilestone = signal.milestone
+        emitCoins(count: spawnCount)
+    }
+
+    private func emitCoins(count: Int) {
+        guard count > 0, ctaFrame.width > 0, pageSize.height > 0 else { return }
+
+        for burstIndex in 0..<count {
+            let coin = HomeFallingCoin(sequence: emissionIndex, burstIndex: burstIndex)
+            emissionIndex += 1
+            coins.append(coin)
+            scheduleRemoval(for: coin)
+        }
+    }
+
+    private func scheduleRemoval(for coin: HomeFallingCoin) {
+        let lifetimeNanoseconds = UInt64((2.2 + coin.delay) * 1_000_000_000)
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: lifetimeNanoseconds)
+            coins.removeAll { $0.id == coin.id }
+        }
+    }
+}
+
+private struct HomeCoinSignal: Equatable {
+    var milestone: Int
+    var canEmit: Bool
+    var shouldClear: Bool
+}
+
+private struct HomeFallingCoin: Identifiable, Equatable {
+    let id = UUID()
+    var sequence: Int
+    var lane: Int
+    var size: CGFloat
+    var delay: Double
+    var drift: CGFloat
+    var rotation: Double
+    var bounceHeight: CGFloat
+
+    init(sequence: Int, burstIndex: Int) {
+        self.sequence = sequence
+        lane = sequence % 5
+        size = CGFloat(22 + (sequence % 4) * 3)
+        delay = Double(burstIndex) * 0.08
+
+        let driftDirection: CGFloat = sequence.isMultiple(of: 2) ? -1 : 1
+        drift = driftDirection * CGFloat(18 + (sequence % 3) * 10)
+
+        let rotationDirection = sequence.isMultiple(of: 2) ? -1.0 : 1.0
+        rotation = rotationDirection * Double(155 + (sequence % 5) * 26)
+        bounceHeight = CGFloat(22 + (sequence % 4) * 8)
+    }
+}
+
+private struct HomeDroppingCoin: View {
+    var coin: HomeFallingCoin
+    var ctaFrame: CGRect
+    var collisionY: CGFloat
+    var pageWidth: CGFloat
+    var reduceMotion: Bool
+
+    @State private var phase = CoinDropPhase.waiting
+
+    private static let laneFractions: [CGFloat] = [0.30, 0.42, 0.55, 0.68, 0.78]
+
+    var body: some View {
+        YenCoin(size: coin.size)
+            .scaleEffect(x: scale.width, y: scale.height, anchor: .bottom)
+            .rotationEffect(.degrees(rotation))
+            .opacity(opacity)
+            .position(position)
+            .onAppear(perform: startAnimation)
+    }
+
+    private var position: CGPoint {
+        if reduceMotion {
+            return reducedMotionPosition
+        }
+
+        switch phase {
+        case .waiting:
+            return CGPoint(x: startX, y: insideCardY)
+        case .emerged:
+            return CGPoint(x: startX + coin.drift * 0.08, y: cardMouthY)
+        case .falling:
+            return CGPoint(x: startX + coin.drift, y: impactCenterY)
+        case .bounced:
+            return CGPoint(x: startX + coin.drift * 1.08, y: bouncedY)
+        case .finished:
+            return CGPoint(x: startX + coin.drift * 1.16, y: impactCenterY + 3)
+        }
+    }
+
+    private var reducedMotionPosition: CGPoint {
+        switch phase {
+        case .waiting:
+            return CGPoint(x: startX, y: insideCardY)
+        case .emerged, .falling, .bounced:
+            return CGPoint(x: startX, y: cardMouthY - 8)
+        case .finished:
+            return CGPoint(x: startX, y: cardMouthY - 14)
+        }
+    }
+
+    private var scale: CGSize {
+        switch phase {
+        case .waiting:
+            return CGSize(width: 0.42, height: 0.42)
+        case .emerged:
+            return CGSize(width: 1.08, height: 1.08)
+        case .falling:
+            return reduceMotion ? CGSize(width: 1, height: 1) : CGSize(width: 1.16, height: 0.74)
+        case .bounced:
+            return CGSize(width: 0.92, height: 1.12)
+        case .finished:
+            return CGSize(width: 0.76, height: 0.76)
+        }
+    }
+
+    private var rotation: Double {
+        switch phase {
+        case .waiting:
+            return -8
+        case .emerged:
+            return coin.rotation * 0.08
+        case .falling:
+            return reduceMotion ? coin.rotation * 0.08 : coin.rotation
+        case .bounced:
+            return coin.rotation * 1.12
+        case .finished:
+            return coin.rotation * 1.22
+        }
+    }
+
+    private var opacity: Double {
+        switch phase {
+        case .waiting:
+            return 0
+        case .emerged, .falling:
+            return 1
+        case .bounced:
+            return 0.92
+        case .finished:
+            return 0
+        }
+    }
+
+    private var startX: CGFloat {
+        let laneFraction = Self.laneFractions[coin.lane % Self.laneFractions.count]
+        let rawX = ctaFrame.minX + ctaFrame.width * laneFraction
+        let inset = coin.size / 2 + 12
+        return min(max(inset, rawX), max(inset, pageWidth - inset))
+    }
+
+    private var insideCardY: CGFloat {
+        ctaFrame.maxY - max(18, min(30, ctaFrame.height * 0.24))
+    }
+
+    private var cardMouthY: CGFloat {
+        ctaFrame.maxY - 6
+    }
+
+    private var impactCenterY: CGFloat {
+        max(ctaFrame.maxY + 72, collisionY - coin.size / 2)
+    }
+
+    private var bouncedY: CGFloat {
+        max(ctaFrame.maxY + 40, impactCenterY - coin.bounceHeight)
+    }
+
+    private func startAnimation() {
+        guard phase == .waiting else { return }
+
+        if reduceMotion {
+            withAnimation(.snappy(duration: 0.16).delay(coin.delay)) {
+                phase = .emerged
+            } completion: {
+                withAnimation(.easeOut(duration: 0.28)) {
+                    phase = .finished
+                }
+            }
+            return
+        }
+
+        withAnimation(.spring(response: 0.22, dampingFraction: 0.72).delay(coin.delay)) {
+            phase = .emerged
+        } completion: {
+            withAnimation(.easeIn(duration: 0.58)) {
+                phase = .falling
+            } completion: {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.56)) {
+                    phase = .bounced
+                } completion: {
+                    withAnimation(.easeOut(duration: 0.24)) {
+                        phase = .finished
+                    }
+                }
+            }
+        }
+    }
+}
+
+private enum CoinDropPhase {
+    case waiting
+    case emerged
+    case falling
+    case bounced
+    case finished
 }
 
 private struct YenCoin: View {

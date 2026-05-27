@@ -161,10 +161,10 @@ private struct WNFWidgetView: View {
 
     private var inlineText: String {
         if entry.isPreview {
-            return "窝囊费 ¥888.88 Premium"
+            return "窝囊费 ¥888.88 王牌打工人"
         }
         guard entry.snapshot.isPremiumUnlocked else {
-            return "窝囊费 Premium 专属"
+            return "窝囊费 · 王牌打工人专属"
         }
         guard entry.snapshot.lockScreenShowsAmount else {
             return "窝囊费 \(entry.snapshot.statusLabel)"
@@ -174,7 +174,7 @@ private struct WNFWidgetView: View {
 
     private var rectangularLockScreen: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(entry.snapshot.isPremiumUnlocked || entry.isPreview ? "今日窝囊费" : "Premium 专属")
+            Text(entry.snapshot.isPremiumUnlocked || entry.isPreview ? "今日窝囊费" : "王牌打工人专属")
                 .font(.caption2.weight(.heavy))
             Text(lockScreenAmountText)
                 .font(.headline.weight(.black))
@@ -188,7 +188,7 @@ private struct WNFWidgetView: View {
         VStack(alignment: .leading, spacing: 10) {
             widgetHeader
             Spacer(minLength: 0)
-            Text(entry.snapshot.isPremiumUnlocked || entry.isPreview ? money(entry.snapshot.earnedToday) : "Premium")
+            Text(entry.snapshot.isPremiumUnlocked || entry.isPreview ? money(entry.snapshot.earnedToday) : "王牌打工人")
                 .font(.system(size: 28, weight: .black, design: .rounded))
                 .foregroundStyle(palette.ink)
                 .minimumScaleFactor(0.65)
@@ -203,7 +203,7 @@ private struct WNFWidgetView: View {
         HStack(spacing: 14) {
             VStack(alignment: .leading, spacing: 8) {
                 widgetHeader
-                Text(entry.snapshot.isPremiumUnlocked || entry.isPreview ? money(entry.snapshot.earnedToday) : "Premium 专属")
+                Text(entry.snapshot.isPremiumUnlocked || entry.isPreview ? money(entry.snapshot.earnedToday) : "王牌打工人专属")
                     .font(.system(size: 34, weight: .black, design: .rounded))
                     .foregroundStyle(palette.ink)
                     .minimumScaleFactor(0.62)
@@ -232,7 +232,7 @@ private struct WNFWidgetView: View {
                 .font(.caption.weight(.black))
                 .foregroundStyle(palette.ink)
             if entry.isPreview || !entry.snapshot.isPremiumUnlocked {
-                Text("Premium")
+                Text("王牌打工人")
                     .font(.caption2.weight(.black))
                     .foregroundStyle(palette.ink)
                     .padding(.horizontal, 6)

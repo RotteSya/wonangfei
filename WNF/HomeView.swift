@@ -41,6 +41,7 @@ struct HomeView: View {
 
 private struct HeroHomePage: View {
     @EnvironmentObject private var state: WageState
+    @Environment(\.tabBarFloorHeight) private var tabBarFloorHeight: CGFloat
     var day: WageDay
     var onShare: () -> Void
     var onClockOut: () -> Void
@@ -51,6 +52,26 @@ private struct HeroHomePage: View {
 
     private var statusChipLabel: String {
         state.isTodaySettled ? "今日已结算 · 个人时间" : statusPresentation.label
+    }
+
+    /// Height of the transparent margin baked into the bottom of the home
+    /// mascot video asset (the cow art does not reach the frame's bottom edge).
+    /// This is a property of the asset, not the device. Measured precisely by
+    /// walking the alpha channel up from the bottom of a sampled 1080×1080
+    /// frame: both `home-typing.mov` and `home-bored.mov` have a 77 px
+    /// transparent bottom margin → 77 × (285 / 1080) ≈ 20pt when aspect-fit
+    /// into the 285pt mascot stage. If the assets change, re-measure and update.
+    private static let mascotAssetBottomInset: CGFloat = 20
+
+    /// Padding that plants the cow's visible feet exactly on the tab bar's top
+    /// edge, regardless of device. `tabBarFloorHeight` is measured at runtime
+    /// through `TabBarFloorHeightKey`, so the math works on any iPhone where
+    /// the tab bar geometry differs (older devices, accessibility text sizes,
+    /// orientation changes, etc.). When the preference hasn't reported a value
+    /// yet, fall back to zero padding so the mascot still appears.
+    private var mascotBottomPadding: CGFloat {
+        guard tabBarFloorHeight > 0 else { return 0 }
+        return max(0, tabBarFloorHeight - Self.mascotAssetBottomInset)
     }
 
     var body: some View {
@@ -93,7 +114,7 @@ private struct HeroHomePage: View {
             Spacer(minLength: 16)
 
             HomeMascotStage(quote: statusPresentation.quote)
-                .padding(.bottom, 145)
+                .padding(.bottom, mascotBottomPadding)
         }
     }
 }

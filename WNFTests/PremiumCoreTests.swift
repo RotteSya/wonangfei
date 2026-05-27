@@ -263,7 +263,7 @@ struct PremiumEntitlementTests {
         } else {
             Issue.record("Expected unavailable product state")
         }
-        #expect(store.statusMessage == "Premium 即将开放")
+        #expect(store.statusMessage == "王牌打工人 · 即将开放")
     }
 
     @MainActor
@@ -445,7 +445,7 @@ struct PremiumSettingsPresentationTests {
         )
 
         #expect(presentation.isPending)
-        #expect(presentation.inlineMessage == "等待 Apple ID 批准购买。批准后 Premium 会自动解锁。")
+        #expect(presentation.inlineMessage == "等待 Apple ID 批准购买。批准后王牌打工人会自动解锁。")
     }
 
     @Test("Refund message uses injected date formatter")
@@ -490,7 +490,7 @@ struct PremiumSettingsPresentationTests {
         #expect(!classic.isSelected)
         #expect(mint.isLocked)
         #expect(mint.isSelected)
-        #expect(mint.accessibilityLabel == "薄荷小票，Premium 专属，可预览")
+        #expect(mint.accessibilityLabel == "薄荷小票，王牌打工人专属，可预览")
 
         let unlocked = PremiumSettingsCardPresentation(
             accessState: .unlocked,

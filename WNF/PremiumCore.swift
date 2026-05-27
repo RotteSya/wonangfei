@@ -152,8 +152,8 @@ enum PremiumNoticeKind: String, Identifiable {
 
     var title: String {
         switch self {
-        case .purchaseCompleted: "Premium 已解锁"
-        case .purchaseRevoked: "Premium 已恢复锁定"
+        case .purchaseCompleted: "王牌打工人 · 已解锁"
+        case .purchaseRevoked: "王牌打工人 · 已恢复锁定"
         case .restoreEmpty: "未找到可恢复的购买"
         case .refundSubmitted: "退款请求已提交"
         case .refundCancelled: "未提交退款请求"
@@ -164,9 +164,9 @@ enum PremiumNoticeKind: String, Identifiable {
     var message: String {
         switch self {
         case .purchaseCompleted:
-            "购买已完成，Premium 功能已经解锁。"
+            "购买已完成，王牌打工人功能已经解锁。"
         case .purchaseRevoked:
-            "购买已退款或撤销，Premium 功能已恢复锁定。"
+            "购买已退款或撤销，王牌打工人功能已恢复锁定。"
         case .restoreEmpty:
             "请确认使用的是购买时的 Apple ID。"
         case .refundSubmitted:
@@ -221,7 +221,7 @@ struct PremiumSettingsCardPresentation: Equatable {
         var id: PremiumThemeID { theme }
 
         var accessibilityLabel: String {
-            isLocked ? "\(title)，Premium 专属，可预览" : title
+            isLocked ? "\(title)，王牌打工人专属，可预览" : title
         }
     }
 
@@ -262,7 +262,7 @@ struct PremiumSettingsCardPresentation: Equatable {
         exportTrailingSymbol = isUnlocked ? "arrow.right" : "lock.fill"
 
         if isPending {
-            inlineMessage = "等待 Apple ID 批准购买。批准后 Premium 会自动解锁。"
+            inlineMessage = "等待 Apple ID 批准购买。批准后王牌打工人会自动解锁。"
         } else if let refundRequestedAt {
             inlineMessage = "退款审核中（提交于 \(refundDateFormatter(refundRequestedAt))）。"
         } else if let statusMessage {

@@ -99,6 +99,14 @@ final class WageState: ObservableObject {
     var dailyRecordStorageMode: DailyRecordStorageMode
     private var dayBoundaryTimer: Timer?
 
+    /// Cached result of the most recent `calculation(at:)` call. Keyed by the
+    /// settings fingerprint (everything `WageCalculator` reads from `self`) and
+    /// the second-precision bucket of the input date. Repeated reads from
+    /// SettingsView, RecordsView, widget snapshot, etc. within the same second
+    /// hit this cache instead of re-running the calendar component extraction
+    /// and the compute step.
+    private var calculationCache: (fingerprint: CalculationFingerprint, secondBucket: Int, day: WageDay)?
+
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
 
@@ -139,8 +147,16 @@ final class WageState: ObservableObject {
     }
 
     func calculation(at date: Date) -> WageDay {
+        let secondBucket = Int(date.timeIntervalSinceReferenceDate)
+        let fingerprint = calculationFingerprint
+        if let cache = calculationCache,
+           cache.secondBucket == secondBucket,
+           cache.fingerprint == fingerprint {
+            return cache.day
+        }
+
         let currentTime = DateComponents.calendar.dateComponents([.hour, .minute, .second], from: date)
-        return WageCalculator.compute(
+        let day = WageCalculator.compute(
             monthlySalary: monthlySalary,
             workdaysPerMonth: workdaysPerMonth,
             workStart: workStart,
@@ -150,6 +166,21 @@ final class WageState: ObservableObject {
             hasLunchBreak: hasLunchBreak,
             includeOvertime: includeOvertime,
             now: currentTime
+        )
+        calculationCache = (fingerprint, secondBucket, day)
+        return day
+    }
+
+    private var calculationFingerprint: CalculationFingerprint {
+        CalculationFingerprint(
+            monthlySalary: monthlySalary,
+            workdaysPerMonth: workdaysPerMonth,
+            workStartMinute: workStart.minutesInDay,
+            workEndMinute: workEnd.minutesInDay,
+            lunchStartMinute: lunchStart.minutesInDay,
+            lunchEndMinute: lunchEnd.minutesInDay,
+            hasLunchBreak: hasLunchBreak,
+            includeOvertime: includeOvertime
         )
     }
 
@@ -408,6 +439,17 @@ final class WageState: ObservableObject {
         let weekday = DateComponents.calendar.component(.weekday, from: date)
         return (weekday + 5) % 7
     }
+}
+
+private struct CalculationFingerprint: Equatable {
+    let monthlySalary: Double
+    let workdaysPerMonth: Int
+    let workStartMinute: Int
+    let workEndMinute: Int
+    let lunchStartMinute: Int
+    let lunchEndMinute: Int
+    let hasLunchBreak: Bool
+    let includeOvertime: Bool
 }
 
 private enum Default {

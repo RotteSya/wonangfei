@@ -53,6 +53,21 @@ struct WNFWidgetSnapshot: Codable, Equatable {
         case hidesSensitiveInfo
     }
 
+    /// `Equatable` includes `capturedAt`, so a strict `==` between successive
+    /// writes always differs even when nothing meaningful changed. This helper
+    /// compares only the fields the widget actually renders — the gate used
+    /// by `WNFWidgetSnapshotWriter.write` to suppress redundant disk writes
+    /// + timeline reloads.
+    func hasSameContent(as other: WNFWidgetSnapshot) -> Bool {
+        schemaVersion == other.schemaVersion
+            && earnedToday == other.earnedToday
+            && elapsedPaidMinutes == other.elapsedPaidMinutes
+            && workStartMinute == other.workStartMinute
+            && workEndMinute == other.workEndMinute
+            && statusLabel == other.statusLabel
+            && hidesSensitiveInfo == other.hidesSensitiveInfo
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
@@ -67,14 +82,19 @@ struct WNFWidgetSnapshot: Codable, Equatable {
 }
 
 enum WNFWidgetSnapshotWriter {
+    /// Returns `true` when a new snapshot was actually persisted. The caller
+    /// uses this to decide whether to schedule a widget timeline reload —
+    /// rapid privacy toggles or fg/bg swaps would otherwise re-encode the
+    /// same content multiple times per second.
+    @discardableResult
     static func write(
         day: WageDay,
         workStartMinute: Int,
         workEndMinute: Int,
         statusLabel: String,
         hidesSensitiveInfo: Bool
-    ) {
-        guard let userDefaults = UserDefaults(suiteName: WNFShared.appGroupID) else { return }
+    ) -> Bool {
+        guard let userDefaults = UserDefaults(suiteName: WNFShared.appGroupID) else { return false }
         let snapshot = WNFWidgetSnapshot(
             capturedAt: Date(),
             earnedToday: day.earnedToday,
@@ -84,9 +104,16 @@ enum WNFWidgetSnapshotWriter {
             statusLabel: statusLabel,
             hidesSensitiveInfo: hidesSensitiveInfo
         )
-        if let data = try? JSONEncoder().encode(snapshot) {
-            userDefaults.set(data, forKey: WNFShared.widgetSnapshotKey)
+
+        if let existingData = userDefaults.data(forKey: WNFShared.widgetSnapshotKey),
+           let existing = try? JSONDecoder().decode(WNFWidgetSnapshot.self, from: existingData),
+           existing.hasSameContent(as: snapshot) {
+            return false
         }
+
+        guard let data = try? JSONEncoder().encode(snapshot) else { return false }
+        userDefaults.set(data, forKey: WNFShared.widgetSnapshotKey)
+        return true
     }
 }
 

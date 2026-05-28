@@ -130,6 +130,11 @@ final class BubbleQuoteEngine: ObservableObject {
     private func prefetchAIQuotes() {
         #if canImport(FoundationModels)
         guard #available(iOS 26.0, *) else { return }
+        // The on-device LLM is cheap by cloud standards but still measurable
+        // thermals/power. Honor Low Power Mode by leaning entirely on the
+        // static quote pool until the user toggles it off — the next call
+        // (status change or aiPool drain) will resume generation.
+        guard !ProcessInfo.processInfo.isLowPowerModeEnabled else { return }
         guard generationTask == nil || generationTask?.isCancelled == true else { return }
         let capturedStatus = status
         // Top up toward the ceiling, but cap per-batch generation cost at aiBatchSize.

@@ -12,7 +12,6 @@ struct WNFApp: App {
                 .onChange(of: scenePhase) { _, newPhase in
                     if newPhase == .active {
                         state.resumeCalendarDayTimer()
-                        state.autoSettleTodayIfNeeded()
                         writeWidgetSnapshot()
                         state.reconcileClockOutReminder()
                     } else {
@@ -22,7 +21,9 @@ struct WNFApp: App {
                     }
                 }
                 .onAppear {
-                    state.autoSettleTodayIfNeeded()
+                    writeWidgetSnapshot()
+                }
+                .onChange(of: state.privacyMode) { _, _ in
                     writeWidgetSnapshot()
                 }
         }
@@ -35,7 +36,8 @@ struct WNFApp: App {
             day: day,
             workStartMinute: state.workStart.minutesInDay,
             workEndMinute: state.workEnd.minutesInDay,
-            statusLabel: presentation.label
+            statusLabel: presentation.label,
+            hidesSensitiveInfo: state.privacyMode
         )
         WNFWidgetReloader.scheduleReload()
     }

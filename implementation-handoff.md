@@ -88,7 +88,7 @@ Daily record history lifecycle is owned by `WageState`; storage encoding, migrat
 - If the app was not opened for multiple calendar days, `WageState` first closes the last observed day, then backfills every date from `lastObservedDate + 1 day` through the calendar day before `now`. Observed closures and backfilled records both use the same `selectedWeekdays` check: selected days receive a complete standard workday snapshot, while unselected days receive zero-yuan, zero-elapsed records with their original `source`.
 - `WNFApp` asks `WageState` to persist the current-day snapshot when the scene leaves `.active`, so a day can still appear in records even if the app is not open at midnight.
 - `HomeView` owns the one-second `TimelineView` used by the large live money number and passes the derived `WageDay` into the home hero. Other tabs do not subscribe to that tick.
-- `RecordsView` builds a memoized aggregation snapshot from `(currentDateKey, recordsRevision, dailyRecords payload, live-day settings)`. Cache equality compares the scalar `recordsRevision` instead of the full `[dateKey: DailyWageRecord]` dictionary, so week/month/year bars reuse the snapshot across body updates and only rebuild when the date key, stored-record revision, or wage settings change.
+- `RecordsView` builds a memoized aggregation snapshot through internal `RecordAggregator` from `(currentDateKey, recordsRevision, dailyRecords payload, live-day settings, includeOvertime, selectedWeekdays)`. Cache equality compares the scalar `recordsRevision` instead of the full `[dateKey: DailyWageRecord]` dictionary, so week/month/year bars reuse the snapshot across body updates and only rebuild when the date key, stored-record revision, or wage settings change. The live today record returns zero amount / zero elapsed when `currentDateKey` is not in `selectedWeekdays`.
 
 ## Widget
 
@@ -97,7 +97,7 @@ Daily record history lifecycle is owned by `WageState`; storage encoding, migrat
 - v1 uses an empty `AppIntentConfiguration` stub so v1.x can add per-widget settings without replacing the configuration model.
 - Every Widget view uses `containerBackground(for: .widget)` for iOS 17 rendering.
 - Timeline policy: working hours schedule `.after(now + 60s)`; non-working hours schedule `.after(next expected work start)`. Setting and daily-record changes trigger debounced `WidgetCenter.shared.reloadAllTimelines()` via `WNFWidgetReloader`.
-- Widget wage display reads `wnf.widget.wage.snapshot.v1`; gallery and placeholder paths never read real wage data.
+- Widget wage display reads `wnf.widget.wage.snapshot.v1`; gallery and placeholder paths never read real wage data. The snapshot includes `hidesSensitiveInfo`, and all widget families render `¥•••.••` when App privacy mode is on. `WNFApp` rewrites the snapshot when `privacyMode` changes.
 - Terms and Privacy links open remote URLs first and fall back to bundled `terms.html` / `privacy.html` through the local legal document viewer.
 
 Default app state lives in `窝囊费.html` under `TWEAK_DEFAULTS`:
@@ -162,7 +162,7 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
   - share button enters a loading/disabled state and waits one frame so the spinner can render; this is a UX/perceptual-feedback fix, not a concurrency fix, because SwiftUI `ImageRenderer.render(rasterizationScale:)` and the explicit `UIGraphicsImageRenderer` context are still main-thread bound. Export uses the current `UIWindowScene.screen.scale`, then presents iOS `UIActivityViewController` from an attached presenter view with `popoverPresentationController.sourceView` configured for iPad / Mac Catalyst;
   - x button closes the card.
 - Tapping outside the card closes the card. While the card is open, bottom tab bar interaction is disabled.
-- 首页 progress track 下方常驻一个「下班结算」CTA 按钮 (`ClockOutCTA`)，文案随 `WageDay.status` 切换：尚未开工时为「提前结算今日」，上午 / 下午为「提前下班结算」，午休为「中场结算一下」，已通关为「我下班了」。点击触发 `RootView.presentSettlement()`，与右上角分享互相独立。
+- 首页 progress track 下方的「下班结算」CTA 按钮 (`ClockOutCTA`) 是仪式入口，不是数据保存入口：下班前隐藏；下班后未结算时 title 为「下班！领今天的窝囊费」；用户点过「存入资产」后切到 settled 回看文案。点击触发 `RootView.presentSettlement()`，与右上角分享互相独立。不要自动弹窗、红点追赶或循环催促。
 
 ### 下班结算
 
@@ -170,7 +170,7 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 - `DailySettlement.derive(from:dailyRecords:at:)` 从当前 `WageDay` 与 `dailyRecords` 派生快照：金额、已忍时长、进度、忍耐指数 (`SettlementSentiment` 1-5 星，按 `progress` 落档并把 `.done && progress >= 1.0` 视为 heavy)、连续打工天数 (从今天向前回溯，遇到 `earnedToday > 0` 即继续，遇到 0 即停止，最多回溯 60 天)、动态 headline / subCopy（按情绪等级 + 连续天数动态拼接）、随机选中的今日最佳忍耐时刻文案。派生过程是纯函数，不修改任何持久化路径。
 - 全屏 overlay 有三个阶段：`prep`（背景刚淡入） → `burst`（中心金币雨向外扩散，触发 heavy 触感反馈） → `reveal`（金币消散后结算卡 spring-in，数字 0 → 今日金额线性 ease-out 滚动，底部「存入资产 / 分享卡片」action 行延后 0.18s ease-in）。整个动画 < 2s，右上角始终有「跳过」按钮可立即完成 burst 跳到 reveal 态。`burst` 期间 settlement card 和 action row 通过 `allowsHitTesting(...)` 屏蔽 hit-test，避免透明态被误触。
 - 结算卡的背景与 `WonangfeiShareCard` 保持一致的奶油白；header 同时提供眼睛（敏感信息打码）/ 分享 / 关闭按钮，与分享卡操作保持一致。
-- 「存入资产」调用 `state.persistCurrentDaySnapshot()` 写回当前快照并发出 `UINotificationFeedbackGenerator(.success)`，然后关闭 overlay。
+- 「存入资产」调用 `state.persistCurrentDaySnapshot()` + `state.markTodaySettled()` 写回当前快照并发出 `UINotificationFeedbackGenerator(.success)`，然后关闭 overlay。每日记录仍由场景切换、跨日补记等现有路径自动持久化；用户不点「存入资产」也不会丢数据。App 启动、回到前台、普通打开结算卡、关闭或跳过 overlay 都不会自动标记 settled。
 - 「分享卡片」走与首页分享相同的渲染管线：`renderAndPresentSettlementShare` 同步生成 `DailySettlementShareCard` 的 `UIImage`（main-thread bound 的 `ImageRenderer.render(rasterizationScale:)`，使用 `windowSceneScale`，宽度固定 360pt），失败时退化到包含金额、已忍时长、连续打工天数的 fallback 文本。复用现有 `ActivityView` 和 `ActivityPresenterViewController`，避免 iPad / Mac Catalyst 弹窗崩溃。
 - 共用一份 `isPreparingShareActivity` 标志：因为 settlement overlay 与原 share card 不会同时呈现，所以共用同一份「正在生成分享图」状态不冲突。
 - 结算 overlay 打开时，bottom tab bar 同样被 opacity / hit-testing 屏蔽（与原 share card 行为对齐）。
@@ -183,8 +183,8 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 - 持久化：`wnf.settlement.lastCompletedDateKey`（`UserDefaults` String，可为空）。
 - 状态：`WageState.isTodaySettled` 计算属性 = (lastSettlementDateKey == currentDateKey)。跨日时 `currentDateKey` 自然推进，旧值不再相等，状态自动回归。
 - 首页响应：
-  - `StatusChip` label 改为「今日已结算 · 个人时间」（替代 `WorkStatusPresentation.label`）。
-  - `ClockOutCTA` title / subtitle / icon 切到 settled 文案（「今日已结算 · 再看一眼」/「进入个人时间，钱已经稳了」/ `checkmark.circle.fill`）。点击仍打开 overlay，让用户回看结算卡。
+  - `StatusChip` label 改为「今日已下班 · 个人时间」（替代 `WorkStatusPresentation.label`）。
+  - `ClockOutCTA` title / subtitle / icon 切到 settled 文案（「今日已下班 · 再看一眼」/「今日窝囊费已入账，剩下都是你的时间」/ `checkmark.circle.fill`）。点击仍打开 overlay，让用户回看结算卡。
 - 不影响：金额、进度条、已忍/离下班时长、吉祥物视频、share card — 实时数据保持同步，避免遮蔽今天还在涨的窝囊费。
 - 仅 `存入资产` 触发 settled 状态；X / 屏外 tap dismiss / 跳过 都不算 "完成"，避免误触。
 

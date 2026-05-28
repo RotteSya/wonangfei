@@ -15,6 +15,7 @@ private struct WidgetSnapshot: Codable {
     var workStartMinute: Int
     var workEndMinute: Int
     var statusLabel: String
+    var hidesSensitiveInfo: Bool
 
     static let sample = WidgetSnapshot(
         schemaVersion: 1,
@@ -23,8 +24,52 @@ private struct WidgetSnapshot: Codable {
         elapsedPaidMinutes: 188,
         workStartMinute: 9 * 60 + 30,
         workEndMinute: 18 * 60 + 30,
-        statusLabel: "正在搬砖"
+        statusLabel: "正在搬砖",
+        hidesSensitiveInfo: false
     )
+
+    init(
+        schemaVersion: Int,
+        capturedAt: Date,
+        earnedToday: Double,
+        elapsedPaidMinutes: Int,
+        workStartMinute: Int,
+        workEndMinute: Int,
+        statusLabel: String,
+        hidesSensitiveInfo: Bool = false
+    ) {
+        self.schemaVersion = schemaVersion
+        self.capturedAt = capturedAt
+        self.earnedToday = earnedToday
+        self.elapsedPaidMinutes = elapsedPaidMinutes
+        self.workStartMinute = workStartMinute
+        self.workEndMinute = workEndMinute
+        self.statusLabel = statusLabel
+        self.hidesSensitiveInfo = hidesSensitiveInfo
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case capturedAt
+        case earnedToday
+        case elapsedPaidMinutes
+        case workStartMinute
+        case workEndMinute
+        case statusLabel
+        case hidesSensitiveInfo
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        capturedAt = try container.decode(Date.self, forKey: .capturedAt)
+        earnedToday = try container.decode(Double.self, forKey: .earnedToday)
+        elapsedPaidMinutes = try container.decode(Int.self, forKey: .elapsedPaidMinutes)
+        workStartMinute = try container.decode(Int.self, forKey: .workStartMinute)
+        workEndMinute = try container.decode(Int.self, forKey: .workEndMinute)
+        statusLabel = try container.decode(String.self, forKey: .statusLabel)
+        hidesSensitiveInfo = try container.decodeIfPresent(Bool.self, forKey: .hidesSensitiveInfo) ?? false
+    }
 }
 
 private struct WidgetPalette {
@@ -117,14 +162,14 @@ private struct WNFWidgetView: View {
     }
 
     private var inlineText: String {
-        "窝囊费 \(money(entry.snapshot.earnedToday))"
+        "窝囊费 \(moneyText)"
     }
 
     private var rectangularView: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("今日窝囊费")
                 .font(.caption2.weight(.heavy))
-            Text(money(entry.snapshot.earnedToday))
+            Text(moneyText)
                 .font(.headline.weight(.black))
                 .minimumScaleFactor(0.75)
             Text(entry.snapshot.statusLabel)
@@ -136,7 +181,7 @@ private struct WNFWidgetView: View {
         VStack(alignment: .leading, spacing: 10) {
             widgetHeader
             Spacer(minLength: 0)
-            Text(money(entry.snapshot.earnedToday))
+            Text(moneyText)
                 .font(.system(size: 28, weight: .black, design: .rounded))
                 .foregroundStyle(WidgetPalette.ink)
                 .minimumScaleFactor(0.65)
@@ -151,7 +196,7 @@ private struct WNFWidgetView: View {
         HStack(spacing: 14) {
             VStack(alignment: .leading, spacing: 8) {
                 widgetHeader
-                Text(money(entry.snapshot.earnedToday))
+                Text(moneyText)
                     .font(.system(size: 34, weight: .black, design: .rounded))
                     .foregroundStyle(WidgetPalette.ink)
                     .minimumScaleFactor(0.62)
@@ -180,6 +225,10 @@ private struct WNFWidgetView: View {
                 .font(.caption.weight(.black))
                 .foregroundStyle(WidgetPalette.ink)
         }
+    }
+
+    private var moneyText: String {
+        entry.snapshot.hidesSensitiveInfo ? "¥•••.••" : money(entry.snapshot.earnedToday)
     }
 
     private func money(_ value: Double) -> String {

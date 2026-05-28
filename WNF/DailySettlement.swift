@@ -1231,7 +1231,7 @@ struct ClockOutCTA: View {
         if isSettled { return "今日已下班 · 再看一眼" }
         switch status {
         case .before, .morning, .afternoon, .lunch: return "查看今天挣多少"
-        case .done: return "下班！"
+        case .done: return "下班！领今天的窝囊费"
         }
     }
 
@@ -1242,7 +1242,7 @@ struct ClockOutCTA: View {
         case .morning: return "已经熬过早上的两小时最值钱"
         case .lunch: return "午休回血中，要不要看看今天挣多少"
         case .afternoon: return "再忍忍，也可以提前看看战绩"
-        case .done: return "今日通关，看看今天的窝囊费"
+        case .done: return "数据已自动保存，想收工时再点"
         }
     }
 

@@ -47,7 +47,7 @@
 ## Current Product Surfaces
 
 - 首页：一个核心数字，不再提供上下分页或明细下页；右上角为分享入口，弹出今日窝囊战报卡片。
-- 记录页：周 / 月 / 年分段控件、按本机每日记录聚合的可点柱状图、成就卡、徽章区；记录聚合读取本机每日记录 payload，但缓存 key 使用日期键、`recordsRevision` 和 live-day 设置，避免每次 body 重算都比较整份记录字典，也不订阅首页的秒级刷新。
+- 记录页：周 / 月 / 年分段控件、按本机每日记录聚合的可点柱状图、成就卡、徽章区；记录聚合读取本机每日记录 payload，但缓存 key 使用日期键、`recordsRevision` 和 live-day 设置，避免每次 body 重算都比较整份记录字典，也不订阅首页的秒级刷新；非选中工作日的今日 live record 记为 0。
 - 我的页：月薪编辑、每月工作日编辑、周工作日选择、上下班时间、午休开关、加班开关。
 
 ## iOS App
@@ -67,15 +67,15 @@ XcodeBuildMCP 已在 `.xcodebuildmcp/config.yaml` 持久化默认值：project `
 - 首页工资实时计算、隐私打码、进度条。
 - 首页吉祥物位使用透明循环视频序列：`home-typing.mov` 和 `home-bored.mov` 每轮随机排序后连续播放；视频控制器由 `HomeMascotVideoSessionCoordinator` 稳定持有，`RootView` 只转发 scene phase 和 tab 切换事件；切换 tab 或进入短暂 inactive 时只暂停/恢复，不重建 AVQueuePlayer 队列；进入后台或收到内存警告时才会清空队列，回到首页活跃态再重新装载。
 - 首页分享卡片：背景虚化、今日窝囊费/上班时长、卡片内隐藏敏感信息、系统分享和退出；系统分享渲图期间分享按钮会显示 loading 并防重复点击。该处理是 UX/感知反馈修复，不减少主线程栅格化开销：渲图前会先让出一帧刷新 UI，再用当前 `UIWindowScene.screen.scale` 驱动 SwiftUI `ImageRenderer.render(rasterizationScale:)` 输出系统分享图；`UIActivityViewController` 由根视图背景中的 presenter 呈现，并配置 popover source view，避免 iPad / Mac Catalyst 分享弹窗崩溃；分享卡组件集中在 `WNF/ShareCard.swift`。
-- 下班结算：首页 progress track 下方常驻「下班结算」CTA，文案随 `WageDay.status` 切换（尚未开工 / 上午 / 下午 / 午休 / 已通关）；点击进入全屏 settlement overlay，三阶段动画 — 中心金币雨爆开（heavy 触感）→ 结算卡 spring-in、金额从 0 滚到今日金额 → 「存入资产 / 分享卡片」action 行 ease-in；可随时跳过。卡片含金额、忍耐指数（1-4 星）、已忍时长、连续打工天数（封顶 60）、动态文案、今日最佳忍耐时刻、累积窝囊费总额。「今日最佳忍耐时刻」quote 卡支持长按 0.4s 撕碎换文案（rigid 触感 + id-driven transition）。「存入资产」走 `WageState.persistCurrentDaySnapshot()` + `markTodaySettled()` 并触发成功触感；「分享卡片」复用已有 `ImageRenderer` 管线，输出 `DailySettlementShareCard` 系统分享图。结算文件集中在 `WNF/DailySettlement.swift`。
-- 个人时间模式：用户完成「存入资产」后当天首页切换为个人时间态 — StatusChip 文案改为「今日已结算 · 个人时间」，CTA 改为「今日已结算 · 再看一眼 / 进入个人时间，钱已经稳了」（带 ✓ 图标）；其它数字（金额 / 进度 / 时长）保持实时同步。状态来自 `WageState.isTodaySettled`，跨日自动重置。持久化键 `wnf.settlement.lastCompletedDateKey`。
+- 下班结算：产品语义是“数据自动保存，仪式手动触发”。下班前首页不显示结算 CTA；下班后未结算时，progress track 下方显示「下班！领今天的窝囊费」，但不自动弹窗、不红点追赶、不连续催。点击进入全屏 settlement overlay，三阶段动画 — 中心金币雨爆开（heavy 触感）→ 结算卡 spring-in、金额从 0 滚到今日金额 → 「存入资产 / 分享卡片」action 行 ease-in；可随时跳过。卡片含金额、忍耐指数（1-4 星）、已忍时长、连续打工天数（封顶 60）、动态文案、今日最佳忍耐时刻、累积窝囊费总额。「今日最佳忍耐时刻」quote 卡支持长按 0.4s 撕碎换文案（rigid 触感 + id-driven transition）。每日记录会照常自动持久化；只有「存入资产」会额外执行 `markTodaySettled()` 并触发个人时间状态。App 启动或回到前台不会自动结算；用户不点也不会丢当天数据。「分享卡片」复用已有 `ImageRenderer` 管线，输出 `DailySettlementShareCard` 系统分享图。结算文件集中在 `WNF/DailySettlement.swift`。
+- 个人时间模式：用户完成「存入资产」后当天首页切换为个人时间态 — StatusChip 文案改为「今日已下班 · 个人时间」，CTA 改为「今日已下班 · 再看一眼 / 今日窝囊费已入账，剩下都是你的时间」（带 ✓ 图标）；其它数字（金额 / 进度 / 时长）保持实时同步。状态来自 `WageState.isTodaySettled`，跨日自动重置。持久化键 `wnf.settlement.lastCompletedDateKey`。
 - 下班结算提醒（可选 / 默认关闭）：「我的」页 `提醒` section 提供开关；开启后 `ClockOutReminderService` 会按选中工作日 + 下班时间调度 `UNCalendarNotificationTrigger` 本地通知；权限被系统拒绝时 Settings 内会展示打开系统通知设置的引导。提醒文件集中在 `WNF/ClockOutReminder.swift`。
 - 底部 tab 切换：页面内容按 tab 顺序横向滑入/滑出，并与胶囊选中态同步过渡。
 - 首次启动引导：4 屏 SwiftUI onboarding、第一页参考大图优先的 intro 布局、跳过/返回/分页控制、月薪/作息/午休设置和最终确认。
 - 记录页周 / 月 / 年切换、柱状图选中态、成就和徽章模块；金额来自 `WageState` 暴露的 `wnf.records.daily` 每日快照，今日金额按记录页聚合快照计入，跨日或 App 离开活跃前台时写回本机，并暂停跨日计时器；回到活跃前台会刷新日期并重建计时器，多天未打开时会补齐中间日期。
 - 我的页月薪和每月工作日支持 `- / +` 微调，也支持点中间数字弹出快速输入框；时间、午休和加班状态可编辑。
-- Widget：`WNFWidget` 支持 `.systemSmall`、`.systemMedium`、`.accessoryRectangular`、`.accessoryInline`，使用空 stub `AppIntentConfiguration` 预留后续 per-widget 配置；gallery/placeholder 使用固定示例值，不读取真实工资；真实 timeline 只读 App Group snapshot。
-- `WNF/WageState.swift` 保留共享 `ObservableObject`、设置读写、跨日快照、记录变更 `recordsRevision` 和补记生命周期；`WNF/DailyRecordStorage.swift` 承载 `StorageKey`、`DailyWageRecord`、schema envelope、旧格式迁移、recovery-key 写入保护和加锁复用的 JSON coder；`WNF/WageCalculator.swift` 承载 `WageDay` / `WorkStatus` / 纯工资计算和时间组件工具；`WNF/WorkStatusPresentation.swift` 承载状态展示文案和吉祥物资源名；`WNF/WageFormatting.swift` 承载金额与时长格式化。每日记录以带 `schemaVersion` 的 JSON envelope 存入 `wnf.records.daily`，内部仍按日期键保存 `DailyWageRecord`，并用 `source` 区分 observed / backfilled；旧版裸字典会在读取时迁移并保留 raw backup，解码/编码失败会写系统日志，且失败后的写入会转到持久化的 recovery key，后续启动会优先读回该 recovery key，避免覆盖主 raw payload 或丢失恢复期新增记录；秒级金额刷新限制在首页本地 `TimelineView`，共享状态只在日期键跨日、记录或设置变化时发布；首次引导完成状态继续使用 `wnf.onboarding.completed`。
+- Widget：`WNFWidget` 支持 `.systemSmall`、`.systemMedium`、`.accessoryRectangular`、`.accessoryInline`，使用空 stub `AppIntentConfiguration` 预留后续 per-widget 配置；gallery/placeholder 使用固定示例值，不读取真实工资；真实 timeline 只读 App Group snapshot，并尊重 App 隐私模式把金额显示为 `¥•••.••`。
+- `WNF/WageState.swift` 保留共享 `ObservableObject`、设置读写、跨日快照、记录变更 `recordsRevision` 和补记生命周期；`WNF/DailyRecordStorage.swift` 承载 `StorageKey`、`DailyWageRecord`、schema envelope、旧格式迁移、recovery-key 写入保护和加锁复用的 JSON coder；`WNF/WageCalculator.swift` 承载 `WageDay` / `WorkStatus` / 纯工资计算和时间组件工具，`includeOvertime` 只影响下班后的实时金额是否继续增长，标准日目标和进度仍按正常工作日封顶；`WNF/WorkStatusPresentation.swift` 承载状态展示文案和吉祥物资源名；`WNF/WageFormatting.swift` 承载金额与时长格式化。每日记录以带 `schemaVersion` 的 JSON envelope 存入 `wnf.records.daily`，内部仍按日期键保存 `DailyWageRecord`，并用 `source` 区分 observed / backfilled；旧版裸字典会在读取时迁移并保留 raw backup，解码/编码失败会写系统日志，且失败后的写入会转到持久化的 recovery key，后续启动会优先读回该 recovery key，避免覆盖主 raw payload 或丢失恢复期新增记录；秒级金额刷新限制在首页本地 `TimelineView`，共享状态只在日期键跨日、记录或设置变化时发布；首次引导完成状态继续使用 `wnf.onboarding.completed`。
 - `assets/mascot` 中的主吉祥物和 Cow pose 已接入 `WNF/Assets.xcassets`。
 - 首页视频源来自 `/Users/shelingzhao/Documents/窝囊费素材/精灵图/打电脑透明.mov` 和 `/Users/shelingzhao/Documents/窝囊费素材/精灵图/无聊透明.mov`，当前以 `WNF/home-typing.mov`、`WNF/home-bored.mov` 打包进 app resources。
 

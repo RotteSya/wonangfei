@@ -35,13 +35,13 @@ struct RecordBar: Identifiable {
     var isToday = false
 }
 
-private struct RecordSummary {
+struct RecordSummary {
     var amount: Double = 0
     var recordedDays: Int = 0
     var elapsedPaidSeconds: Int = 0
 }
 
-private struct RecordAggregationInput: Equatable {
+struct RecordAggregationInput: Equatable {
     var currentDateKey: String
     var recordsRevision: Int
     var dailyRecords: [String: DailyWageRecord]
@@ -52,6 +52,36 @@ private struct RecordAggregationInput: Equatable {
     var lunchStartMinute: Int
     var lunchEndMinute: Int
     var hasLunchBreak: Bool
+    var includeOvertime: Bool
+    var selectedWeekdays: Set<Int>
+
+    init(
+        currentDateKey: String,
+        recordsRevision: Int,
+        dailyRecords: [String: DailyWageRecord],
+        monthlySalary: Double,
+        workdaysPerMonth: Int,
+        workStartMinute: Int,
+        workEndMinute: Int,
+        lunchStartMinute: Int,
+        lunchEndMinute: Int,
+        hasLunchBreak: Bool,
+        includeOvertime: Bool,
+        selectedWeekdays: Set<Int>
+    ) {
+        self.currentDateKey = currentDateKey
+        self.recordsRevision = recordsRevision
+        self.dailyRecords = dailyRecords
+        self.monthlySalary = monthlySalary
+        self.workdaysPerMonth = workdaysPerMonth
+        self.workStartMinute = workStartMinute
+        self.workEndMinute = workEndMinute
+        self.lunchStartMinute = lunchStartMinute
+        self.lunchEndMinute = lunchEndMinute
+        self.hasLunchBreak = hasLunchBreak
+        self.includeOvertime = includeOvertime
+        self.selectedWeekdays = selectedWeekdays
+    }
 
     init(state: WageState) {
         currentDateKey = state.currentDateKey
@@ -64,6 +94,8 @@ private struct RecordAggregationInput: Equatable {
         lunchStartMinute = state.lunchStart.minutesInDay
         lunchEndMinute = state.lunchEnd.minutesInDay
         hasLunchBreak = state.hasLunchBreak
+        includeOvertime = state.includeOvertime
+        selectedWeekdays = state.selectedWeekdays
     }
 
     static func == (lhs: RecordAggregationInput, rhs: RecordAggregationInput) -> Bool {
@@ -76,10 +108,22 @@ private struct RecordAggregationInput: Equatable {
             && lhs.lunchStartMinute == rhs.lunchStartMinute
             && lhs.lunchEndMinute == rhs.lunchEndMinute
             && lhs.hasLunchBreak == rhs.hasLunchBreak
+            && lhs.includeOvertime == rhs.includeOvertime
+            && lhs.selectedWeekdays == rhs.selectedWeekdays
     }
 }
 
-private struct RecordAggregationSnapshot {
+enum RecordAggregator {
+    static func make(input: RecordAggregationInput, now: Date = Date()) -> RecordAggregationSnapshot {
+        RecordAggregationSnapshot.make(input: input, now: now)
+    }
+
+    static func liveTodayRecord(input: RecordAggregationInput, now: Date) -> DailyWageRecord {
+        RecordAggregationSnapshot.liveTodayRecord(input: input, now: now)
+    }
+}
+
+struct RecordAggregationSnapshot {
     static let empty = RecordAggregationSnapshot(
         weekBars: [],
         monthBars: [],
@@ -107,10 +151,10 @@ private struct RecordAggregationSnapshot {
         }
     }
 
-    static func make(input: RecordAggregationInput) -> RecordAggregationSnapshot {
+    fileprivate static func make(input: RecordAggregationInput, now: Date) -> RecordAggregationSnapshot {
         let calendar = DateComponents.calendar
-        let currentDayStart = WageState.date(fromDateKey: input.currentDateKey) ?? calendar.startOfDay(for: Date())
-        let liveToday = liveTodayRecord(input: input, now: Date())
+        let currentDayStart = WageState.date(fromDateKey: input.currentDateKey) ?? calendar.startOfDay(for: now)
+        let liveToday = liveTodayRecord(input: input, now: now)
         let daysInCurrentMonth = calendar.range(of: .day, in: .month, for: currentDayStart)?.count ?? 31
 
         func record(for date: Date) -> DailyWageRecord? {
@@ -207,7 +251,7 @@ private struct RecordAggregationSnapshot {
         )
     }
 
-    private static func liveTodayRecord(input: RecordAggregationInput, now: Date) -> DailyWageRecord {
+    fileprivate static func liveTodayRecord(input: RecordAggregationInput, now: Date) -> DailyWageRecord {
         let currentTime = DateComponents.calendar.dateComponents([.hour, .minute, .second], from: now)
         let day = WageCalculator.compute(
             monthlySalary: input.monthlySalary,
@@ -217,8 +261,25 @@ private struct RecordAggregationSnapshot {
             lunchStart: .minuteInDay(input.lunchStartMinute),
             lunchEnd: .minuteInDay(input.lunchEndMinute),
             hasLunchBreak: input.hasLunchBreak,
+            includeOvertime: input.includeOvertime,
             now: currentTime
         )
+        let currentDayStart = WageState.date(fromDateKey: input.currentDateKey)
+            ?? DateComponents.calendar.startOfDay(for: now)
+        guard input.selectedWeekdays.contains(weekdayIndex(for: currentDayStart, calendar: DateComponents.calendar)) else {
+            return DailyWageRecord(
+                dateKey: input.currentDateKey,
+                earnedToday: 0,
+                targetToday: 0,
+                elapsedPaidSeconds: 0,
+                workdayMinutes: day.workdayMinutes,
+                hourlyRate: day.hourlyRate,
+                monthlySalary: input.monthlySalary,
+                workdaysPerMonth: input.workdaysPerMonth,
+                capturedAt: now,
+                source: .observed
+            )
+        }
         return DailyWageRecord(
             dateKey: input.currentDateKey,
             earnedToday: day.earnedToday,
@@ -231,6 +292,11 @@ private struct RecordAggregationSnapshot {
             capturedAt: now,
             source: .observed
         )
+    }
+
+    private static func weekdayIndex(for date: Date, calendar: Calendar) -> Int {
+        let weekday = calendar.component(.weekday, from: date)
+        return (weekday + 5) % 7
     }
 
     private static func weekStart(containing date: Date, calendar: Calendar) -> Date {
@@ -260,7 +326,7 @@ private final class RecordAggregationStore: ObservableObject {
             return cachedSnapshot
         }
 
-        let snapshot = RecordAggregationSnapshot.make(input: input)
+        let snapshot = RecordAggregator.make(input: input)
         cachedInput = input
         cachedSnapshot = snapshot
         return snapshot

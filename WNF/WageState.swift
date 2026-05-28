@@ -148,6 +148,7 @@ final class WageState: ObservableObject {
             lunchStart: lunchStart,
             lunchEnd: lunchEnd,
             hasLunchBreak: hasLunchBreak,
+            includeOvertime: includeOvertime,
             now: currentTime
         )
     }
@@ -363,20 +364,6 @@ final class WageState: ObservableObject {
         userDefaults.set(privacyMode, forKey: StorageKey.privacyMode)
         userDefaults.set(selectedWeekdays.sorted(), forKey: StorageKey.selectedWeekdays)
         userDefaults.set(clockOutReminderEnabled, forKey: StorageKey.clockOutReminderEnabled)
-    }
-
-    /// Once the workday ends on a paid weekday, silently switch Home into "personal time" mode by
-    /// persisting today's snapshot and stamping the settlement marker. Runs unconditionally — there is
-    /// no opt-out, because the daily record is always backfilled at the day boundary regardless.
-    @discardableResult
-    func autoSettleTodayIfNeeded(now: Date = Date()) -> Bool {
-        guard !isTodaySettled else { return false }
-        guard isPaidWorkday(now) else { return false }
-        guard calculation(at: now).status == .done else { return false }
-
-        persistCurrentDaySnapshot()
-        markTodaySettled()
-        return true
     }
 
     func reconcileClockOutReminder() {

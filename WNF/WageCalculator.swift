@@ -38,6 +38,7 @@ enum WageCalculator {
         lunchStart: DateComponents,
         lunchEnd: DateComponents,
         hasLunchBreak: Bool,
+        includeOvertime: Bool,
         now: DateComponents
     ) -> WageDay {
         let startMinute = workStart.minutesInDay
@@ -58,8 +59,9 @@ enum WageCalculator {
 
         var elapsedSeconds = 0
         if nowSecond > startSecond {
-            elapsedSeconds = min(nowSecond, endSecond) - startSecond
-            let lunchOverlap = max(0, min(nowSecond, lunchEndSecond) - lunchStartSecond)
+            let paidThroughSecond = includeOvertime ? nowSecond : min(nowSecond, endSecond)
+            elapsedSeconds = paidThroughSecond - startSecond
+            let lunchOverlap = max(0, min(paidThroughSecond, lunchEndSecond) - lunchStartSecond)
             elapsedSeconds = max(0, elapsedSeconds - lunchOverlap)
         }
 

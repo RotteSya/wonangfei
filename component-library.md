@@ -125,16 +125,15 @@
 ### Clock-Out CTA
 
 - Source: `WNF/DailySettlement.swift`.
-- Use on: home page, directly below the progress track.
+- Use on: home page, directly below the progress track; hidden until the workday is done unless today is settled.
 - Container: ink-filled rounded rectangle, radius `18px`, padding `12px 16px`, drop shadow.
 - Leading icon: yellow circle (`36px`) with `tray.and.arrow.down.fill`.
 - Copy adapts to `WorkStatus`:
-  - `.before`: `提前结算今日` / `今天的窝囊费还没开张`
-  - `.morning`, `.afternoon`: `提前下班结算` / 状态对应的提示
-  - `.lunch`: `中场结算一下` / `午休回血中，要不要小结一下`
-  - `.done`: `我下班了` / `今日通关，看看今天的窝囊费`
+  - `.before`, `.morning`, `.lunch`, `.afternoon`: hidden on Home.
+  - `.done`: `下班！领今天的窝囊费` / `数据已自动保存，想收工时再点`
 - Trailing affordance: small `arrow.right` chevron, white at 82%.
 - Tap: opens settlement overlay via `RootView.presentSettlement()`.
+- Product contract: daily records auto-save through state/storage; CTA only starts the optional clock-out ritual and must not be paired with forced popups, red dots, or repeat nagging.
 
 ### Settlement Overlay
 
@@ -234,7 +233,7 @@ The Settings (`我的`) scroll, top to bottom:
 - Gallery/placeholder data: fixed sample amount such as `¥888.88`; never read real App Group wage data in preview mode.
 - Real timeline: reads from the App Group snapshot only.
 - Required rendering wrapper: `containerBackground(for: .widget)` on every widget view.
-- Lock-screen amount visibility follows Settings `锁屏小组件显示金额`.
+- Amount visibility follows App privacy mode through `hidesSensitiveInfo` in the App Group snapshot; masked value is `¥•••.••`.
 
 ### Onboarding Hero Panel
 
@@ -260,7 +259,7 @@ The Settings (`我的`) scroll, top to bottom:
 
 ### BarChart
 
-- Current use: record page weekly/monthly/yearly data derived from a memoized `RecordsView` aggregation snapshot. The snapshot reads stored daily records when rebuilt, but cache equality is keyed by `WageState.currentDateKey`, `WageState.recordsRevision`, and live-day wage settings rather than comparing the full records dictionary.
+- Current use: record page weekly/monthly/yearly data derived from a memoized `RecordsView` aggregation snapshot. The snapshot reads stored daily records when rebuilt, but cache equality is keyed by `WageState.currentDateKey`, `WageState.recordsRevision`, live-day wage settings, `includeOvertime`, and `selectedWeekdays` rather than comparing the full records dictionary.
 - Data contract: `RecordBar.amount` is an already-aggregated currency value; do not use visual-only multipliers for production records.
 - Bars: yellow for completed/current periods until selected, ink only for selected, pale cream for future.
 - Interaction:

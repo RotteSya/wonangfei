@@ -361,7 +361,6 @@ struct DailySettlementOverlay: View {
             backdrop
             content
             burstLayer
-            skipControl
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
@@ -398,30 +397,6 @@ struct DailySettlementOverlay: View {
             .opacity(phase == .burst ? 1 : 0)
             .animation(.easeOut(duration: 0.4), value: phase)
             .ignoresSafeArea()
-    }
-
-    private var skipControl: some View {
-        VStack {
-            HStack {
-                Spacer()
-                if phase != .reveal {
-                    Button(action: completeBurstImmediately) {
-                        Text("跳过")
-                            .font(.system(size: 13, weight: .heavy))
-                            .foregroundStyle(Color.white)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(Color.black.opacity(0.32), in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.trailing, 18)
-                    .padding(.top, 18)
-                    .transition(.opacity)
-                }
-            }
-            Spacer()
-        }
-        .animation(.easeInOut(duration: 0.2), value: phase)
     }
 
     private var content: some View {
@@ -594,21 +569,6 @@ struct DailySettlementOverlay: View {
             withAnimation(.easeOut(duration: 0.32)) {
                 revealActionsVisible = true
             }
-        }
-    }
-
-    private func completeBurstImmediately() {
-        guard phase != .reveal else { return }
-        phase = .reveal
-        withAnimation(.easeInOut(duration: 0.18)) {
-            burstExpanded = true
-        }
-        withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) {
-            revealCardVisible = true
-        }
-        displayedAmount = settlement.earnedToday
-        withAnimation(.easeOut(duration: 0.22)) {
-            revealActionsVisible = true
         }
     }
 

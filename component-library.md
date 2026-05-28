@@ -105,7 +105,6 @@
 - Container: rounded cream card, max width close to `330px` on iPhone 17 portrait.
 - Header: yellow band with compact mascot, `窝囊费`, `今日窝囊战报`, and three icon controls.
 - Copy behavior: `RootView` refreshes the active `ShareCardCopy` from `ShareCardCopy.pool` whenever the home share action opens the card. The current pair is excluded when possible, so consecutive opens do not repeat the same wording.
-- Template behavior: classic is free; Premium templates are visible but locked until entitlement is purchased. Locked taps route through the global Paywall controller.
 - Controls:
   - eye / eye slash masks only the card amount and duration;
   - share shows an inline loading spinner, disables repeat taps while rendering, and exports a control-free card image through iOS system share using the current `UIWindowScene.screen.scale`; the spinner pre-flight is UX/perceptual feedback only because `ImageRenderer.render(rasterizationScale:)` plus `UIGraphicsImageRenderer` remain main-thread bound; the activity presenter must provide a UIKit popover source view for iPad / Mac Catalyst;
@@ -172,8 +171,7 @@
 - Source: `WNF/DailySettlement.swift`.
 - Use on: settlement overlay and the system share image.
 - Container: rounded card, radius `30px`, max width `340pt` in overlay, fixed `360pt` width when exported.
-- Header: yellow band (or white for `quietLedger` template), compact mascot, `窝囊费`, `今日下班结算`, and three icon controls (eye / share / close) when `showsControls == true`.
-- Template background: matches `PremiumShareTemplateID` (classic / overtimeReceipt / survivalBadge / quietLedger).
+- Header: yellow band, compact mascot, `窝囊费`, `今日下班结算`, and three icon controls (eye / share / close) when `showsControls == true`.
 - Body order (top → bottom):
   - Dynamic headline + subcopy from `DailySettlement.headline` / `.subCopy`.
   - Amount panel: `今日窝囊费` label, sentiment badge (emoji + label), large yen-prefixed amount with content-transition driven `displayedAmount` for ticker animation.
@@ -208,95 +206,33 @@
 - Live wage amount, elapsed/remaining time, progress bar, and mascot all stay real-time — settled mode is a tone shift, not a data freeze.
 - Day boundary naturally resets the state when `currentDateKey` advances past the stored date.
 
-### Premium Paywall
-
-- Source: `WNF/PremiumUI.swift`.
-- Presentation: global SwiftUI sheet owned by `PremiumPaywallController`, `.large` detent, close button, and swipe-to-dismiss enabled.
-- Structure: title, unlock feature list, purchase/status panel, Restore, Terms, Privacy.
-- Required actions: Buy, Restore Purchases, Terms of Use, Privacy Policy, Close.
-- State contract:
-  - product loaded: show `Product.displayPrice`;
-  - product unavailable / empty array: show `Premium 即将开放`;
-  - product load thrown or timed out: show retry button;
-  - pending Ask to Buy: show waiting approval copy;
-  - `canMakePayments == false`: disable buy and show account/device restriction copy.
-- Accessibility order: title, feature list, price/status, buy, restore, terms, privacy, close.
-- Motion: avoid essential motion and respect Reduce Motion for decorative transitions.
-
-### Premium Settings Section
-
-> **Brand name:** All user-facing copy says **王牌打工人** (Ace Worker). The code-side identifiers (`PremiumEntitlementStore`, `PremiumFeature`, `com.wonangfei.app.premium.lifetime`, etc.) keep the legacy `Premium` naming so we don't break StoreKit receipts or persisted state. Never introduce the English word `Premium` into user-facing strings, accessibility labels, or marketing copy.
-
-- Source: `WNF/SettingsView.swift` (`premiumSection`, `premiumPrimaryRow`, `premiumRefundRow`).
-- Position: top of Settings, below the profile banner.
-- Always visible so users can discover the offer without first tapping a locked feature.
-- Structure: `SectionCard(title: "王牌打工人")` with one or two rows depending on entitlement.
-- Primary row contract (matches canonical design `ui_kits/app/SettingsScreen.jsx` Premium row, retitled to brand):
-  - 34×34 yellow icon tile, radius `11`, `crown.fill` glyph in ink.
-  - Title `14.5pt heavy` in ink; subtitle `11.5pt semibold` in muted.
-  - Trailing pill is mono `13pt heavy`, padding `4×10pt`, capsule radius.
-- State copy and pill behavior:
-  - `.locked`: title `当个王牌打工人`, subtitle `桌面 / 锁屏 Widget · 主题 · 分享模板 · 导出`, pill `<price> · 买断` on yellow. Loading / failed / unavailable / restricted states swap pill copy to `加载中` / `重试` / `即将开放` / `受限` but keep yellow.
-  - `.pendingApproval`: title `王牌打工人 · 等待批准`, subtitle `等 Apple ID 一下 · 批准后自动解锁`, pill `等待批准` white-on-coral.
-  - `.unlocked`: title `王牌打工人 · 已买断`, subtitle `多谢支持 · 4 件小礼物归你了`, pill yellow `checkmark.seal.fill` + `已买断` (mono 12pt heavy).
-- Tap target: entire primary row opens the global Paywall via `PremiumPaywallController.present(.settings)`. Buy/Restore live inside the Paywall, not the row.
-- Refund row: only rendered when `.unlocked`, separated from primary row by a 0.5pt inset hairline. 34×34 `surfaceSoft` icon tile + `arrow.uturn.backward` glyph, `申请退款` title + `走 Apple 官方退款流程` subtitle, trailing `arrow.up.right`. Calls `PremiumEntitlementStore.requestRefund(in:)`.
-- Inline status panel: rendered as a sibling below the SectionCard (not inside it) using `premiumInlineMessage`. Coral-tinted info row with `info.circle.fill` glyph; appears only when the presentation provides a status, refund-pending, payment-restricted, or pending-approval message.
-
-### Premium Customization Section
-
-- Source: `WNF/SettingsView.swift` (`appearanceSection`).
-- Position: directly below the Premium section. Standard `SectionCard` matching the rest of the page's section grammar.
-- `外观与小组件` (`appearanceSection`):
-  - `主题皮肤` — 2-column `LazyVGrid` of theme chips; chip radius `12`; selected chip flips background to ink + foreground to white; locked chips show `lock.fill` and tap routes to `paywallController.present(.feature(.themeSkins))`.
-  - `默认分享模板` — horizontal scroll of Capsule chips; same lock/selected treatment.
-  - `锁屏小组件显示金额` — inline title/subtitle + `WNFToggle` bound to `PremiumPreferencesStore.lockScreenWidgetShowsAmount`; copy `关掉就只显示状态和图标，别让人偷瞄。`
-  - Header text for each block shows `lock.fill` next to the section title when entitlement is `.locked`/`.pendingApproval`.
-- Theme preview session belongs to the current Settings navigation lifecycle. Entering and closing the Paywall keeps the preview; leaving Settings clears the unsaved preview through `PremiumPreferencesStore.clearPreview()`.
-
 ### Settings Page Order
 
 The Settings (`我的`) scroll, top to bottom:
 
 1. `profileBanner` (ink hero card with mascot)
-2. `premiumSection` (王牌打工人 entry — see above)
-3. `premiumInlineMessage` (only when presentation has a status)
-4. `appearanceSection` (外观与小组件 — see above)
-5. `收入` SectionCard (salary, monthly workdays, hourly rate)
-6. `weekdaysCard` (工作日)
-7. `时间` SectionCard (work-start, work-end, lunch toggle + lunch rows)
-8. `clockOutReminderCard` (提醒 — see below)
-9. `其它` SectionCard (计入加班 toggle + `exportHistoryRow`)
-10. `引导` SectionCard (重新设置工资/时间)
-11. `legalFooter`
-12. `footer` (algorithmic-cynicism note)
+2. `收入` SectionCard (salary, monthly workdays, hourly rate)
+3. `weekdaysCard` (工作日)
+4. `时间` SectionCard (work-start, work-end, lunch toggle + lunch rows)
+5. `clockOutReminderCard` (提醒 — see below)
+6. `其它` SectionCard (计入加班 toggle)
+7. `引导` SectionCard (重新设置工资/时间)
+8. `legalFooter`
+9. `footer` (algorithmic-cynicism note)
 
-`其它` carries the history-export row (`exportHistoryRow`) as its second row, separated from the 计入加班 toggle by the standard SettingsRow 0.5pt hairline. The row has no leading icon tile — title (`导出历史记录 CSV / JSON`, 14.5pt heavy) and subtitle (`含完整金额和工时 · 给会计或自己留一份`, 11.5pt semibold muted) sit flush at the row's leading padding, matching the icon-less rhythm of the 计入加班 toggle row above it. The row body is informational only — it is **not** itself a tap target. The action lives in a trailing ink capsule button (`exportActionButton`) that mirrors the `再走一遍` button pattern from the 引导 section: `13pt black` white-on-ink capsule, `padding 12×8`. Capsule contents flip with entitlement:
-
-- `.unlocked`: `导出` + `arrow.right` glyph → confirmation alert → `HistoryExportService.makeExportItems`.
-- `.locked` / `.pendingApproval`: `lock.fill` + `解锁` → `paywallController.present(.historyExport)`.
-
-### Premium Legal Footer
+### Legal Footer
 
 - Source: `WNF/SettingsView.swift` (`legalFooter`).
 - Position: at the very bottom of the Settings scroll, just above the brand footer.
 - Two text-button links separated by a `·`: `Terms of Use` and `Privacy Policy`, both opening `LegalDocumentView` as a sheet.
 - Style: `11pt heavy` inkSoft, centered.
 
-### Premium Locks
-
-- Use a lock row or disabled option state when a feature can be previewed but not saved.
-- Locked Widget access routes to Paywall; Widget Gallery still shows example content and the 王牌打工人 treatment.
-- Locked history export routes to Paywall; unlocked export shows a confirmation because exported files include complete amount and work-time data.
-- Accessibility labels for locked items use `王牌打工人专属` (never `Premium 专属`).
-
 ### Widget Cards
 
 - Source: `WNFWidget/WNFWidget.swift`.
 - Families: `.systemSmall`, `.systemMedium`, `.accessoryRectangular`, `.accessoryInline`.
 - Gallery/placeholder data: fixed sample amount such as `¥888.88`; never read real App Group wage data in preview mode.
-- Free real timeline: 王牌打工人 upsell prompt (`王牌打工人` / `王牌打工人专属`) with link to `https://wonangfei.app/premium` (URL path stays for routing compatibility).
-- Purchased real timeline: use App Group snapshot only. Main app entitlement must never trust this snapshot.
+- Real timeline: reads from the App Group snapshot only.
 - Required rendering wrapper: `containerBackground(for: .widget)` on every widget view.
 - Lock-screen amount visibility follows Settings `锁屏小组件显示金额`.
 

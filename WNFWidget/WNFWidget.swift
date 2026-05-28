@@ -5,14 +5,6 @@ import WidgetKit
 private enum WNFWidgetShared {
     static let appGroupID = "group.com.wonangfei.app"
     static let widgetSnapshotKey = "wnf.widget.wage.snapshot.v1"
-    static let premiumURL = URL(string: "https://wonangfei.app/premium")!
-}
-
-private enum WidgetThemeID: String, Codable {
-    case classic
-    case nightShift
-    case mintReceipt
-    case punchCard
 }
 
 private struct WidgetSnapshot: Codable {
@@ -23,9 +15,6 @@ private struct WidgetSnapshot: Codable {
     var workStartMinute: Int
     var workEndMinute: Int
     var statusLabel: String
-    var isPremiumUnlocked: Bool
-    var selectedTheme: WidgetThemeID
-    var lockScreenShowsAmount: Bool
 
     static let sample = WidgetSnapshot(
         schemaVersion: 1,
@@ -34,32 +23,16 @@ private struct WidgetSnapshot: Codable {
         elapsedPaidMinutes: 188,
         workStartMinute: 9 * 60 + 30,
         workEndMinute: 18 * 60 + 30,
-        statusLabel: "正在搬砖",
-        isPremiumUnlocked: true,
-        selectedTheme: .classic,
-        lockScreenShowsAmount: true
+        statusLabel: "正在搬砖"
     )
 }
 
 private struct WidgetPalette {
-    var bg: Color
-    var surface: Color
-    var accent: Color
-    var ink: Color
-    var muted: Color
-
-    static func palette(for theme: WidgetThemeID) -> WidgetPalette {
-        switch theme {
-        case .classic:
-            WidgetPalette(bg: Color(red: 1.0, green: 0.9647, blue: 0.8980), surface: .white, accent: Color(red: 1.0, green: 0.7843, blue: 0.2392), ink: .black, muted: Color(red: 0.60, green: 0.58, blue: 0.54))
-        case .nightShift:
-            WidgetPalette(bg: Color(red: 0.12, green: 0.14, blue: 0.19), surface: Color(red: 0.18, green: 0.20, blue: 0.27), accent: Color(red: 0.94, green: 0.78, blue: 0.30), ink: .white, muted: Color.white.opacity(0.68))
-        case .mintReceipt:
-            WidgetPalette(bg: Color(red: 0.94, green: 0.98, blue: 0.94), surface: .white, accent: Color(red: 0.72, green: 0.86, blue: 0.36), ink: Color(red: 0.08, green: 0.16, blue: 0.12), muted: Color(red: 0.48, green: 0.58, blue: 0.50))
-        case .punchCard:
-            WidgetPalette(bg: Color(red: 1.00, green: 0.94, blue: 0.90), surface: .white, accent: Color(red: 1.00, green: 0.70, blue: 0.32), ink: Color(red: 0.12, green: 0.08, blue: 0.08), muted: Color(red: 0.62, green: 0.46, blue: 0.42))
-        }
-    }
+    static let bg = Color(red: 1.0, green: 0.9647, blue: 0.8980)
+    static let surface = Color.white
+    static let accent = Color(red: 1.0, green: 0.7843, blue: 0.2392)
+    static let ink = Color.black
+    static let muted = Color(red: 0.60, green: 0.58, blue: 0.54)
 }
 
 struct WNFWidgetConfigurationIntent: WidgetConfigurationIntent {
@@ -81,13 +54,13 @@ private struct WNFWidgetProvider: AppIntentTimelineProvider {
     func snapshot(for configuration: WNFWidgetConfigurationIntent, in context: Context) async -> WNFWidgetEntry {
         WNFWidgetEntry(
             date: Date(),
-            snapshot: context.isPreview ? .sample : loadSnapshot() ?? lockedSnapshot(),
+            snapshot: context.isPreview ? .sample : loadSnapshot() ?? .sample,
             isPreview: context.isPreview
         )
     }
 
     func timeline(for configuration: WNFWidgetConfigurationIntent, in context: Context) async -> Timeline<WNFWidgetEntry> {
-        let snapshot = context.isPreview ? WidgetSnapshot.sample : loadSnapshot() ?? lockedSnapshot()
+        let snapshot = context.isPreview ? WidgetSnapshot.sample : loadSnapshot() ?? .sample
         let entry = WNFWidgetEntry(date: Date(), snapshot: snapshot, isPreview: context.isPreview)
         return Timeline(entries: [entry], policy: reloadPolicy(for: snapshot, now: Date()))
     }
@@ -99,18 +72,7 @@ private struct WNFWidgetProvider: AppIntentTimelineProvider {
         return try? JSONDecoder().decode(WidgetSnapshot.self, from: data)
     }
 
-    private func lockedSnapshot() -> WidgetSnapshot {
-        var sample = WidgetSnapshot.sample
-        sample.isPremiumUnlocked = false
-        sample.capturedAt = Date()
-        return sample
-    }
-
     private func reloadPolicy(for snapshot: WidgetSnapshot, now: Date) -> TimelineReloadPolicy {
-        guard snapshot.isPremiumUnlocked else {
-            return .after(now.addingTimeInterval(60 * 30))
-        }
-
         let calendar = Calendar.current
         let minute = calendar.component(.hour, from: now) * 60 + calendar.component(.minute, from: now)
         if minute >= snapshot.workStartMinute && minute <= snapshot.workEndMinute {
@@ -133,19 +95,10 @@ private struct WNFWidgetView: View {
     @Environment(\.widgetFamily) private var family
     var entry: WNFWidgetEntry
 
-    private var palette: WidgetPalette {
-        WidgetPalette.palette(for: entry.snapshot.selectedTheme)
-    }
-
-    private var isLocked: Bool {
-        !entry.snapshot.isPremiumUnlocked && !entry.isPreview
-    }
-
     var body: some View {
         content
-            .widgetURL(WNFWidgetShared.premiumURL)
             .containerBackground(for: .widget) {
-                palette.bg
+                WidgetPalette.bg
             }
     }
 
@@ -155,29 +108,23 @@ private struct WNFWidgetView: View {
         case .accessoryInline:
             Text(inlineText)
         case .accessoryRectangular:
-            if isLocked { rectangularLockedView } else { rectangularUnlockedView }
+            rectangularView
         case .systemMedium:
-            if isLocked { mediumLockedView } else { mediumUnlockedView }
+            mediumView
         default:
-            if isLocked { smallLockedView } else { smallUnlockedView }
+            smallView
         }
     }
-
-    // MARK: Unlocked (and preview) views
 
     private var inlineText: String {
-        if isLocked { return "窝囊费 · 王牌打工人专属" }
-        if !entry.snapshot.lockScreenShowsAmount {
-            return "窝囊费 \(entry.snapshot.statusLabel)"
-        }
-        return "窝囊费 \(money(entry.snapshot.earnedToday))"
+        "窝囊费 \(money(entry.snapshot.earnedToday))"
     }
 
-    private var rectangularUnlockedView: some View {
+    private var rectangularView: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("今日窝囊费")
                 .font(.caption2.weight(.heavy))
-            Text(lockScreenAmountText)
+            Text(money(entry.snapshot.earnedToday))
                 .font(.headline.weight(.black))
                 .minimumScaleFactor(0.75)
             Text(entry.snapshot.statusLabel)
@@ -185,130 +132,54 @@ private struct WNFWidgetView: View {
         }
     }
 
-    private var smallUnlockedView: some View {
+    private var smallView: some View {
         VStack(alignment: .leading, spacing: 10) {
-            widgetHeader(showPremiumBadge: entry.isPreview)
+            widgetHeader
             Spacer(minLength: 0)
             Text(money(entry.snapshot.earnedToday))
                 .font(.system(size: 28, weight: .black, design: .rounded))
-                .foregroundStyle(palette.ink)
+                .foregroundStyle(WidgetPalette.ink)
                 .minimumScaleFactor(0.65)
             Text(entry.snapshot.statusLabel)
                 .font(.caption.weight(.heavy))
-                .foregroundStyle(palette.muted)
+                .foregroundStyle(WidgetPalette.muted)
         }
         .padding()
     }
 
-    private var mediumUnlockedView: some View {
+    private var mediumView: some View {
         HStack(spacing: 14) {
             VStack(alignment: .leading, spacing: 8) {
-                widgetHeader(showPremiumBadge: entry.isPreview)
+                widgetHeader
                 Text(money(entry.snapshot.earnedToday))
                     .font(.system(size: 34, weight: .black, design: .rounded))
-                    .foregroundStyle(palette.ink)
+                    .foregroundStyle(WidgetPalette.ink)
                     .minimumScaleFactor(0.62)
                 Text("已忍 \(duration(entry.snapshot.elapsedPaidMinutes))")
                     .font(.caption.weight(.heavy))
-                    .foregroundStyle(palette.muted)
+                    .foregroundStyle(WidgetPalette.muted)
             }
             Spacer()
             Text("¥")
                 .font(.system(size: 54, weight: .black, design: .rounded))
-                .foregroundStyle(palette.accent)
+                .foregroundStyle(WidgetPalette.accent)
                 .frame(width: 78, height: 78)
-                .background(palette.surface, in: RoundedRectangle(cornerRadius: 24))
+                .background(WidgetPalette.surface, in: RoundedRectangle(cornerRadius: 24))
         }
         .padding()
     }
 
-    // MARK: Locked views (王牌打工人专属)
-
-    private var rectangularLockedView: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 4) {
-                Image(systemName: "lock.fill")
-                    .font(.caption2.weight(.black))
-                Text("王牌打工人专属")
-                    .font(.caption2.weight(.heavy))
-            }
-            Text("窝囊费小组件")
-                .font(.headline.weight(.black))
-                .minimumScaleFactor(0.75)
-            Text("点击解锁")
-                .font(.caption2.weight(.semibold))
-        }
-    }
-
-    private var smallLockedView: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            widgetHeader(showPremiumBadge: true)
-            Spacer(minLength: 0)
-            Image(systemName: "lock.fill")
-                .font(.system(size: 22, weight: .black))
-                .foregroundStyle(palette.accent)
-            Text("王牌打工人专属")
-                .font(.system(size: 20, weight: .black, design: .rounded))
-                .foregroundStyle(palette.ink)
-                .minimumScaleFactor(0.65)
-            Text("点击解锁今日窝囊费")
-                .font(.caption.weight(.heavy))
-                .foregroundStyle(palette.muted)
-        }
-        .padding()
-    }
-
-    private var mediumLockedView: some View {
-        HStack(spacing: 14) {
-            VStack(alignment: .leading, spacing: 8) {
-                widgetHeader(showPremiumBadge: true)
-                Text("王牌打工人专属")
-                    .font(.system(size: 26, weight: .black, design: .rounded))
-                    .foregroundStyle(palette.ink)
-                    .minimumScaleFactor(0.62)
-                Text("点击解锁桌面/锁屏小组件")
-                    .font(.caption.weight(.heavy))
-                    .foregroundStyle(palette.muted)
-            }
-            Spacer()
-            ZStack {
-                RoundedRectangle(cornerRadius: 24)
-                    .fill(palette.surface)
-                Image(systemName: "lock.fill")
-                    .font(.system(size: 32, weight: .black))
-                    .foregroundStyle(palette.accent)
-            }
-            .frame(width: 78, height: 78)
-        }
-        .padding()
-    }
-
-    // MARK: Shared chrome
-
-    private func widgetHeader(showPremiumBadge: Bool) -> some View {
+    private var widgetHeader: some View {
         HStack(spacing: 6) {
             Text("¥")
                 .font(.caption.weight(.black))
                 .foregroundStyle(.white)
                 .frame(width: 18, height: 18)
-                .background(palette.accent, in: RoundedRectangle(cornerRadius: 5))
+                .background(WidgetPalette.accent, in: RoundedRectangle(cornerRadius: 5))
             Text("窝囊费")
                 .font(.caption.weight(.black))
-                .foregroundStyle(palette.ink)
-            if showPremiumBadge {
-                Text("王牌")
-                    .font(.caption2.weight(.black))
-                    .foregroundStyle(palette.ink)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(palette.accent, in: Capsule())
-            }
+                .foregroundStyle(WidgetPalette.ink)
         }
-    }
-
-    private var lockScreenAmountText: String {
-        if !entry.snapshot.lockScreenShowsAmount { return "¥•••.••" }
-        return money(entry.snapshot.earnedToday)
     }
 
     private func money(_ value: Double) -> String {

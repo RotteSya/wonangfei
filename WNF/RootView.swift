@@ -64,9 +64,6 @@ struct RootView: View {
     @Environment(\.displayScale) private var displayScale
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var state: WageState
-    @EnvironmentObject private var premium: PremiumEntitlementStore
-    @EnvironmentObject private var premiumPreferences: PremiumPreferencesStore
-    @EnvironmentObject private var paywallController: PremiumPaywallController
     @StateObject private var homeMascotVideoSession = HomeMascotVideoSessionCoordinator()
     @State private var selectedTab: AppTab = .home
     @State private var tabTransitionDirection = 1
@@ -171,26 +168,6 @@ struct RootView: View {
                 isHomeSessionVisible: isHomeMascotSessionVisible
             )
         }
-        .sheet(isPresented: $paywallController.isPresented) {
-            PremiumPaywallView()
-                .environmentObject(premium)
-                .environmentObject(paywallController)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-        }
-        .alert(item: $premium.activeNotice) { notice in
-            Alert(
-                title: Text(notice.title),
-                message: Text(notice.message),
-                dismissButton: .default(Text("知道了"))
-            )
-        }
-        .onOpenURL { url in
-            if PremiumDeepLink.isPremiumRoute(url) {
-                selectedTab = .settings
-                paywallController.present(.deepLink)
-            }
-        }
     }
 
     private func startHomeEntrance() {
@@ -257,14 +234,8 @@ struct RootView: View {
                 ShareCardOverlay(
                     day: day,
                     copy: shareCardCopy,
-                    selectedTemplate: premiumPreferences.selectedShareTemplate,
-                    canUsePremiumTemplates: premium.isPremiumUnlocked,
                     hidesSensitiveInfo: $shareCardHidesSensitiveInfo,
                     isPreparingShare: isPreparingShareActivity,
-                    onSelectTemplate: selectShareTemplate,
-                    onLockedTemplate: { template in
-                        paywallController.present(.shareTemplate(template))
-                    },
                     onShare: presentSystemShare,
                     onDismiss: dismissShareCard
                 )
@@ -277,7 +248,6 @@ struct RootView: View {
             if settlementPresented, let snapshot = settlementSnapshot {
                 DailySettlementOverlay(
                     settlement: snapshot,
-                    template: premiumPreferences.selectedShareTemplate,
                     hidesSensitiveInfo: $settlementHidesSensitiveInfo,
                     isPreparingShare: isPreparingShareActivity,
                     onShare: presentSettlementSystemShare,
@@ -390,12 +360,6 @@ struct RootView: View {
         dismissSettlement()
     }
 
-    private func selectShareTemplate(_ template: PremiumShareTemplateID) {
-        if !premiumPreferences.selectShareTemplate(template, isPremiumUnlocked: premium.isPremiumUnlocked) {
-            paywallController.present(.shareTemplate(template))
-        }
-    }
-
     private func dismissShareCard() {
         isPreparingShareActivity = false
         withAnimation(.easeOut(duration: 0.2)) {
@@ -433,7 +397,6 @@ struct RootView: View {
         let exportCard = WonangfeiShareCard(
             day: day,
             copy: copy,
-            template: premiumPreferences.selectedShareTemplate,
             hidesSensitiveInfo: hidesSensitiveInfo,
             showsControls: false,
             onTogglePrivacy: {},
@@ -477,7 +440,6 @@ struct RootView: View {
     private func renderAndPresentSettlementShare(settlement: DailySettlement, hidesSensitiveInfo: Bool) {
         let exportCard = DailySettlementShareCard(
             settlement: settlement,
-            template: premiumPreferences.selectedShareTemplate,
             displayedAmount: settlement.earnedToday,
             hidesSensitiveInfo: hidesSensitiveInfo,
             showsControls: false
@@ -725,7 +687,4 @@ private struct EntranceCoin: View {
 #Preview {
     RootView()
         .environmentObject(WageState())
-        .environmentObject(PremiumEntitlementStore())
-        .environmentObject(PremiumPreferencesStore())
-        .environmentObject(PremiumPaywallController())
 }

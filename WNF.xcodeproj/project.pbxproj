@@ -25,17 +25,16 @@
 		100000000000000000000116 /* ShareCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000216 /* ShareCard.swift */; };
 		100000000000000000000117 /* HomeMascotVideoSessionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000217 /* HomeMascotVideoSessionCoordinator.swift */; };
 		100000000000000000000118 /* WorkStatusPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000218 /* WorkStatusPresentation.swift */; };
-		100000000000000000000119 /* PremiumCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000219 /* PremiumCore.swift */; };
-		100000000000000000000120 /* PremiumStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000220 /* PremiumStore.swift */; };
-		100000000000000000000121 /* PremiumUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000221 /* PremiumUI.swift */; };
+		100000000000000000000119 /* WidgetShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000219 /* WidgetShared.swift */; };
 		100000000000000000000122 /* terms.html in Resources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000224 /* terms.html */; };
 		100000000000000000000123 /* privacy.html in Resources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000225 /* privacy.html */; };
 		100000000000000000000124 /* WNFWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000230 /* WNFWidget.swift */; };
-		100000000000000000000125 /* PremiumCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000234 /* PremiumCoreTests.swift */; };
 		100000000000000000000126 /* WNFWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 100000000000000000000233 /* WNFWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, CodeSignOnCopy, ); }; };
 		100000000000000000000127 /* DailySettlement.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000236 /* DailySettlement.swift */; };
 		100000000000000000000128 /* ClockOutReminder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000237 /* ClockOutReminder.swift */; };
 		100000000000000000000129 /* BubbleQuoteEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000238 /* BubbleQuoteEngine.swift */; };
+		100000000000000000000125 /* PlaceholderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000234 /* PlaceholderTests.swift */; };
+		100000000000000000000130 /* Legal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000239 /* Legal.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -89,23 +88,21 @@
 		100000000000000000000216 /* ShareCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareCard.swift; sourceTree = "<group>"; };
 		100000000000000000000217 /* HomeMascotVideoSessionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeMascotVideoSessionCoordinator.swift; sourceTree = "<group>"; };
 		100000000000000000000218 /* WorkStatusPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkStatusPresentation.swift; sourceTree = "<group>"; };
-		100000000000000000000219 /* PremiumCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumCore.swift; sourceTree = "<group>"; };
-		100000000000000000000220 /* PremiumStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumStore.swift; sourceTree = "<group>"; };
-		100000000000000000000221 /* PremiumUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumUI.swift; sourceTree = "<group>"; };
+		100000000000000000000219 /* WidgetShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetShared.swift; sourceTree = "<group>"; };
 		100000000000000000000222 /* WNF.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WNF.entitlements; sourceTree = "<group>"; };
 		100000000000000000000223 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		100000000000000000000224 /* terms.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = Legal/terms.html; sourceTree = "<group>"; };
 		100000000000000000000225 /* privacy.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = Legal/privacy.html; sourceTree = "<group>"; };
-		100000000000000000000226 /* WNFPremium.storekit */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = WNFPremium.storekit; sourceTree = "<group>"; };
 		100000000000000000000230 /* WNFWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WNFWidget.swift; sourceTree = "<group>"; };
 		100000000000000000000231 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		100000000000000000000232 /* WNFWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WNFWidget.entitlements; sourceTree = "<group>"; };
 		100000000000000000000233 /* WNFWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WNFWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		100000000000000000000234 /* PremiumCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumCoreTests.swift; sourceTree = "<group>"; };
 		100000000000000000000235 /* WNFTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WNFTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		100000000000000000000236 /* DailySettlement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailySettlement.swift; sourceTree = "<group>"; };
 		100000000000000000000237 /* ClockOutReminder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockOutReminder.swift; sourceTree = "<group>"; };
 		100000000000000000000238 /* BubbleQuoteEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BubbleQuoteEngine.swift; sourceTree = "<group>"; };
+		100000000000000000000234 /* PlaceholderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceholderTests.swift; sourceTree = "<group>"; };
+		100000000000000000000239 /* Legal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Legal.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -139,7 +136,6 @@
 				100000000000000000000402 /* WNF */,
 				100000000000000000000404 /* WNFWidget */,
 				100000000000000000000405 /* WNFTests */,
-				100000000000000000000226 /* WNFPremium.storekit */,
 				100000000000000000000403 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -155,9 +151,8 @@
 				100000000000000000000214 /* WageCalculator.swift */,
 				100000000000000000000218 /* WorkStatusPresentation.swift */,
 				100000000000000000000215 /* WageFormatting.swift */,
-				100000000000000000000219 /* PremiumCore.swift */,
-				100000000000000000000220 /* PremiumStore.swift */,
-				100000000000000000000221 /* PremiumUI.swift */,
+				100000000000000000000219 /* WidgetShared.swift */,
+				100000000000000000000239 /* Legal.swift */,
 				100000000000000000000203 /* Theme.swift */,
 				100000000000000000000204 /* RootView.swift */,
 				100000000000000000000205 /* SharedViews.swift */,
@@ -192,7 +187,7 @@
 		100000000000000000000405 /* WNFTests */ = {
 			isa = PBXGroup;
 			children = (
-				100000000000000000000234 /* PremiumCoreTests.swift */,
+				100000000000000000000234 /* PlaceholderTests.swift */,
 			);
 			path = WNFTests;
 			sourceTree = "<group>";
@@ -348,9 +343,8 @@
 				100000000000000000000114 /* WageCalculator.swift in Sources */,
 				100000000000000000000118 /* WorkStatusPresentation.swift in Sources */,
 				100000000000000000000115 /* WageFormatting.swift in Sources */,
-				100000000000000000000119 /* PremiumCore.swift in Sources */,
-				100000000000000000000120 /* PremiumStore.swift in Sources */,
-				100000000000000000000121 /* PremiumUI.swift in Sources */,
+				100000000000000000000119 /* WidgetShared.swift in Sources */,
+				100000000000000000000130 /* Legal.swift in Sources */,
 				100000000000000000000103 /* Theme.swift in Sources */,
 				100000000000000000000104 /* RootView.swift in Sources */,
 				100000000000000000000105 /* SharedViews.swift in Sources */,
@@ -378,7 +372,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				100000000000000000000125 /* PremiumCoreTests.swift in Sources */,
+				100000000000000000000125 /* PlaceholderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

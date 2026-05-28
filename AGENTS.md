@@ -4,8 +4,7 @@
 
 - Native app: `WNF.xcodeproj` / `WNF/`, scheme `WNF`, bundle id `com.wonangfei.app`, iOS deployment target `17.0`.
 - Widget extension: `WNFWidget/`, bundle id `com.wonangfei.app.widget`, App Group `group.com.wonangfei.app`.
-- Unit tests: `WNFTests/`, currently focused on Premium entitlement/preferences behavior.
-- StoreKit local config: `WNFPremium.storekit`, product ID `com.wonangfei.app.premium.lifetime`.
+- Unit tests: `WNFTests/`.
 - Browser/design handoff: `index.html`, `assets/source/*.jsx`, `brand-tokens.css`, `design-tokens.json`.
 - Treat the SwiftUI app as the implementation surface when the task is app behavior, build, or asset-catalog work. Treat the HTML/Open Design files as visual reference unless the task explicitly says prototype/design only.
 
@@ -42,8 +41,7 @@ When XcodeBuildMCP is available, call `session_show_defaults` first, then `build
 - `WNF/HomeView.swift`, `WNF/RecordsView.swift`, and `WNF/SettingsView.swift` consume shared state directly.
 - `WNF/RecordsView.swift` must aggregate week/month/year chart data from the record-backed snapshot (`dailyRecords` payload, `recordsRevision` cache key, and current-day calculation); do not reintroduce hard-coded chart multipliers or full-dictionary cache equality for production records.
 - `WNF/OnboardingView.swift` owns the first-launch onboarding flow and writes through the same `WageState` settings path.
-- `WNF/PremiumStore.swift` owns StoreKit 2 integration, entitlement refresh, restore, refund request, and the long-running `Transaction.updates` listener. Keep `PremiumEntitlementStore` `@MainActor`, start it from `WNFApp.init`, and do not move transaction listening into a view `.task`.
-- `WNF/PremiumCore.swift` owns Premium constants, App Group snapshot schema, preferences, export helpers, and the future verifier seam. Main app unlock state must come from verified StoreKit transactions, never from the App Group mirror.
+- `WNF/WidgetShared.swift` owns the App Group snapshot schema and reload helper shared between the app target and `WNFWidget`.
 - `WNFWidget/WNFWidget.swift` reads only App Group mirrors. Widget preview/gallery paths must use fixed sample values, and all widget views must keep `containerBackground(for: .widget)`.
 - Share-card export is still main-thread bound on iOS: `ImageRenderer.render(rasterizationScale:)` and the `UIGraphicsImageRenderer` context run synchronously on `MainActor`. The one-frame loading pre-flight in `RootView` is a UX/perceptual-feedback fix, not a real rendering-concurrency or P1 performance fix.
 - `WNF/DailySettlement.swift` owns the下班结算 feature: pure-function snapshot derivation (`DailySettlement.derive`), 爆金币 burst animation, full-screen overlay, settlement share card, and home CTA. `RootView` is the only owner of overlay presentation state and reuses the existing share-render / `ActivityView` pipeline for system share. The settlement flow must not be triggered from anywhere other than the home Clock-Out CTA, and must not introduce new persistence keys — `存入资产` reuses `WageState.persistCurrentDaySnapshot()`, plus sets `WageState.lastSettlementDateKey` via `markTodaySettled()`. Personal-time mode keys off `WageState.isTodaySettled` (`lastSettlementDateKey == currentDateKey`); the only persistence key it adds is `wnf.settlement.lastCompletedDateKey`. Long-press tear on the two quote cards swaps content via `DailySettlement.alternate*` static helpers — pool entries are static data, no persistence.

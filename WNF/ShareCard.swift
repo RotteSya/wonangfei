@@ -62,12 +62,8 @@ struct ShareCardBackdrop: View {
 struct ShareCardOverlay: View {
     var day: WageDay
     var copy: ShareCardCopy
-    var selectedTemplate: PremiumShareTemplateID
-    var canUsePremiumTemplates: Bool
     @Binding var hidesSensitiveInfo: Bool
     var isPreparingShare: Bool
-    var onSelectTemplate: (PremiumShareTemplateID) -> Void
-    var onLockedTemplate: (PremiumShareTemplateID) -> Void
     var onShare: () -> Void
     var onDismiss: () -> Void
 
@@ -76,18 +72,14 @@ struct ShareCardOverlay: View {
             WonangfeiShareCard(
                 day: day,
                 copy: copy,
-                template: selectedTemplate,
                 hidesSensitiveInfo: hidesSensitiveInfo,
                 showsControls: true,
                 isPreparingShare: isPreparingShare,
-                canUsePremiumTemplates: canUsePremiumTemplates,
                 onTogglePrivacy: {
                     withAnimation(.snappy(duration: 0.18)) {
                         hidesSensitiveInfo.toggle()
                     }
                 },
-                onSelectTemplate: onSelectTemplate,
-                onLockedTemplate: onLockedTemplate,
                 onShare: onShare,
                 onDismiss: onDismiss
             )
@@ -104,14 +96,10 @@ struct ShareCardOverlay: View {
 struct WonangfeiShareCard: View {
     var day: WageDay
     var copy: ShareCardCopy = .default
-    var template: PremiumShareTemplateID = .classic
     var hidesSensitiveInfo: Bool
     var showsControls: Bool
     var isPreparingShare: Bool = false
-    var canUsePremiumTemplates: Bool = false
     var onTogglePrivacy: () -> Void
-    var onSelectTemplate: (PremiumShareTemplateID) -> Void = { _ in }
-    var onLockedTemplate: (PremiumShareTemplateID) -> Void = { _ in }
     var onShare: () -> Void
     var onDismiss: () -> Void
 
@@ -124,31 +112,9 @@ struct WonangfeiShareCard: View {
             header
             bodyContent
         }
-        .background(templateBackground, in: RoundedRectangle(cornerRadius: 29, style: .continuous))
+        .background(WNFTheme.bg, in: RoundedRectangle(cornerRadius: 29, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 29, style: .continuous).stroke(Color.white.opacity(0.72), lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: 29, style: .continuous))
-    }
-
-    private var effectiveCopy: ShareCardCopy {
-        switch template {
-        case .classic:
-            copy
-        case .overtimeReceipt:
-            ShareCardCopy(title: "今日加班小票，\n老板请查收。", subtitle: "每一分钟都算数，每一分窝囊都入账。")
-        case .survivalBadge:
-            ShareCardCopy(title: "今天存活认证，\n工资已盖章。", subtitle: "没赢过工作，但也没有白熬。")
-        case .quietLedger:
-            ShareCardCopy(title: "低调记一笔，\n今天也到账。", subtitle: "数字不大声，但很诚实。")
-        }
-    }
-
-    private var templateBackground: Color {
-        switch template {
-        case .classic: WNFTheme.bg
-        case .overtimeReceipt: WNFTheme.surfaceSoft
-        case .survivalBadge: WNFTheme.coralSoft
-        case .quietLedger: Color.white
-        }
     }
 
     private var header: some View {
@@ -197,7 +163,7 @@ struct WonangfeiShareCard: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 13)
-        .background(template == .quietLedger ? Color.white : WNFTheme.gold)
+        .background(WNFTheme.gold)
     }
 
     private var bodyContent: some View {
@@ -214,7 +180,7 @@ struct WonangfeiShareCard: View {
 
             HStack(alignment: .top, spacing: 10) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(effectiveCopy.title)
+                    Text(copy.title)
                         .font(.system(size: 27, weight: .black, design: .rounded))
                         .foregroundStyle(WNFTheme.ink)
                         .lineSpacing(-2)
@@ -222,7 +188,7 @@ struct WonangfeiShareCard: View {
                         .minimumScaleFactor(0.82)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Text(effectiveCopy.subtitle)
+                    Text(copy.subtitle)
                         .font(.system(size: 12, weight: .heavy))
                         .foregroundStyle(WNFTheme.inkSoft)
                         .lineLimit(2)
@@ -238,15 +204,6 @@ struct WonangfeiShareCard: View {
             }
 
             statsPanel
-
-            if showsControls {
-                ShareTemplatePicker(
-                    selectedTemplate: template,
-                    canUsePremiumTemplates: canUsePremiumTemplates,
-                    onSelectTemplate: onSelectTemplate,
-                    onLockedTemplate: onLockedTemplate
-                )
-            }
 
             HStack {
                 Text("丧萌有理 · 自嘲无罪")
@@ -319,45 +276,6 @@ struct WonangfeiShareCard: View {
         .padding(8)
         .background(Color.white, in: RoundedRectangle(cornerRadius: 25, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 25, style: .continuous).stroke(WNFTheme.hairline, lineWidth: 0.5))
-    }
-}
-
-private struct ShareTemplatePicker: View {
-    var selectedTemplate: PremiumShareTemplateID
-    var canUsePremiumTemplates: Bool
-    var onSelectTemplate: (PremiumShareTemplateID) -> Void
-    var onLockedTemplate: (PremiumShareTemplateID) -> Void
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(PremiumShareTemplateID.allCases) { template in
-                    let locked = template.isPremium && !canUsePremiumTemplates
-                    Button {
-                        if locked {
-                            onLockedTemplate(template)
-                        } else {
-                            onSelectTemplate(template)
-                        }
-                    } label: {
-                        HStack(spacing: 5) {
-                            if locked {
-                                Image(systemName: "lock.fill")
-                            }
-                            Text(template.title)
-                        }
-                        .font(.system(size: 10, weight: .black))
-                        .foregroundStyle(selectedTemplate == template ? Color.white : WNFTheme.ink)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 7)
-                        .background(selectedTemplate == template ? WNFTheme.ink : Color.white, in: Capsule())
-                        .overlay(Capsule().stroke(WNFTheme.hairline, lineWidth: 0.5))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(locked ? "\(template.title)，王牌打工人专属" : template.title)
-                }
-            }
-        }
     }
 }
 

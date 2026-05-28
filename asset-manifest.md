@@ -73,19 +73,16 @@ These files are copied into the app bundle through the Xcode resources phase and
 
 Both source clips are 1080 x 1080 QuickTime movies, about 15 seconds each, encoded as HEVC with Alpha. The native player mutes them and loops by shuffling the two clips once per cycle.
 
-## Premium And Legal Resources
-
-These files are part of the Premium rollout rather than visual brand assets.
+## Legal Resources
 
 | File | Current role |
 |---|---|
-| `WNFPremium.storekit` | Local StoreKit 2 configuration for `com.wonangfei.app.premium.lifetime` |
 | `WNF/Legal/terms.html` | Bundled Terms fallback shown when the remote URL cannot load |
 | `WNF/Legal/privacy.html` | Bundled Privacy fallback shown when the remote URL cannot load |
 | `legal/terms.html` | Deployable static Terms source for `https://wonangfei.app/terms` |
 | `legal/privacy.html` | Deployable static Privacy source for `https://wonangfei.app/privacy` |
 
-Production hosting still needs the public URLs to return `200` before App Store submission. Universal Links also require `https://wonangfei.app/.well-known/apple-app-site-association` to be deployed before users install the app.
+Production hosting still needs the public URLs to return `200` before App Store submission.
 
 ## Widget Resources
 

@@ -5,9 +5,8 @@
 The runnable entry and live prototype files are:
 
 - `WNF.xcodeproj` / `WNF/`：native SwiftUI iOS implementation of the current app design.
-- `WNFWidget/`：Widget extension for Premium desktop and lock-screen widgets.
-- `WNFTests/`：Swift Testing unit tests for Premium entitlement and preferences behavior.
-- `WNFPremium.storekit`：local StoreKit configuration for `com.wonangfei.app.premium.lifetime`.
+- `WNFWidget/`：Widget extension for desktop and lock-screen widgets.
+- `WNFTests/`：unit tests.
 - `.xcodebuildmcp/config.yaml`：persisted XcodeBuildMCP defaults for the native app, including project, scheme, simulator, and bundle id.
 - `index.html`：implemented static app shell. It renders the actual product screens, keeps the iPhone frame as the primary surface, exposes desktop/mobile control panels, persists local state, and links back to the handoff docs.
 - `窝囊费.html`：entry shell, tweak state, iPhone frame, three core screens and comparison boards.
@@ -21,7 +20,7 @@ The runnable entry and live prototype files are:
 - `design-canvas.jsx`：Open Design preview canvas and artboards.
 - `tweaks-panel.jsx`：internal preview controls.
 
-Current `main` note: Premium now adds a second target, `WNFWidget`, plus the `WNFTests` unit-test target. The wage/settings core remains in the app target; there is still no `WageCore.swift` or `WageDisplayModel.swift` split. Settings and daily-record lifecycle stay in `WNF/WageState.swift`, while daily-record storage, wage calculation, formatting, Premium entitlement, and Widget snapshot writing are split into dedicated Swift files.
+Current `main` note: The app target ships with `WNFWidget` and `WNFTests`. The wage/settings core remains in the app target; there is still no `WageCore.swift` or `WageDisplayModel.swift` split. Settings and daily-record lifecycle stay in `WNF/WageState.swift`, while daily-record storage, wage calculation, formatting, and Widget snapshot writing are split into dedicated Swift files.
 
 ## Native Onboarding
 
@@ -55,13 +54,12 @@ Native sources:
 - `WNF/WageCalculator.swift`: `WageDay`, `WorkStatus`, pure wage calculation, and `DateComponents` minute/clock helpers.
 - `WNF/WorkStatusPresentation.swift`: presentation-only status labels, quotes, and mascot asset names consumed by home/share surfaces.
 - `WNF/WageFormatting.swift`: amount and duration formatting helpers used by home, records, onboarding, and share surfaces.
-- `WNF/ShareCard.swift`: share-card copy pool, Premium template picker, dim backdrop, overlay, card layout, icon controls, and the `UIActivityViewController` wrapper.
+- `WNF/ShareCard.swift`: share-card copy pool, dim backdrop, overlay, card layout, icon controls, and the `UIActivityViewController` wrapper.
 - `WNF/DailySettlement.swift`: 下班结算数据模型 (`DailySettlement` + `SettlementSentiment`), 爆金币动画 (`SettlementCoinBurst`), 全屏结算 overlay (`DailySettlementOverlay`), 结算分享卡 (`DailySettlementShareCard`), 首页 CTA 入口 (`ClockOutCTA`). 数据派生纯函数从 `WageDay` + `dailyRecords` 计算情绪等级和连续打工天数, 不修改任何持久化路径.
 - `WNF/ClockOutReminder.swift`: `ClockOutReminderService` (@MainActor 单例)，封装 `UNUserNotificationCenter` 权限查询/请求和按工作日 + workEnd 时间调度 `UNCalendarNotificationTrigger` 重复本地通知。idempotent `reconcile(enabled:workEnd:selectedWeekdays:)` 先清空 `wnf.clockout.weekday.*` 前缀的现有通知再按需重建；权限非 authorized/provisional/ephemeral 时静默跳过调度。
-- `WNF/PremiumCore.swift`: product constants, entitlement snapshots, Paywall routing, theme/template preferences, App Group snapshot writing, export service, and deep-link parsing.
-- `WNF/PremiumStore.swift`: StoreKit 2 client, entitlement verifier seam, transaction listener, restore, refund request, product loading, and entitlement state.
-- `WNF/PremiumUI.swift`: Paywall, purchase/restore UI states, legal document presentation, and offline legal fallback.
-- `WNFWidget/WNFWidget.swift`: Widget configuration intent stub, App Group reader, timeline provider, system/accessory widget layouts, and premium lock state.
+- `WNF/WidgetShared.swift`: App Group snapshot schema, writer, and widget reload helper shared with `WNFWidget`.
+- `WNF/Legal.swift`: `LegalDocument`, `LegalDocumentView`, and the remote-first / bundled-fallback `WKWebView` integration.
+- `WNFWidget/WNFWidget.swift`: Widget configuration intent stub, App Group reader, timeline provider, and system/accessory widget layouts.
 
 The native app owns editable settings in one shared `WageState` instance injected through `EnvironmentObject`. It initializes from `UserDefaults`, normalizes loaded values into the supported ranges, writes the normalized settings back during initialization, and writes every editable setting back on change:
 
@@ -75,10 +73,6 @@ The native app owns editable settings in one shared `WageState` instance injecte
 - `wnf.settings.includeOvertime`
 - `wnf.settings.privacyMode`
 - `wnf.settings.selectedWeekdays`
-- `wnf.premium.preferences.selectedTheme`
-- `wnf.premium.preferences.selectedShareTemplate`
-- `wnf.premium.preferences.lockScreenWidgetShowsAmount`
-- `wnf.premium.refundRequestedAt`
 
 Times are stored as minutes since midnight and normalize to `0...1439` on load. Selected weekdays are stored as a sorted `[Int]` using the same `0...6` Monday-through-Sunday index contract as the UI. Salary still clamps to `0...100000`; monthly workdays still clamp to `1...31`. First-launch completion remains separate at `wnf.onboarding.completed` via `RootView`.
 
@@ -96,54 +90,14 @@ Daily record history lifecycle is owned by `WageState`; storage encoding, migrat
 - `HomeView` owns the one-second `TimelineView` used by the large live money number and passes the derived `WageDay` into the home hero. Other tabs do not subscribe to that tick.
 - `RecordsView` builds a memoized aggregation snapshot from `(currentDateKey, recordsRevision, dailyRecords payload, live-day settings)`. Cache equality compares the scalar `recordsRevision` instead of the full `[dateKey: DailyWageRecord]` dictionary, so week/month/year bars reuse the snapshot across body updates and only rebuild when the date key, stored-record revision, or wage settings change.
 
-## Premium And StoreKit
-
-Product and pricing contract:
-
-- Non-Consumable product ID: `com.wonangfei.app.premium.lifetime`.
-- v1 product model: Freemium plus one-time lifetime unlock.
-- v1 unlocks: desktop/lock-screen widgets, theme palettes, share-card templates, and history export.
-- Family Sharing is intentionally off for v1. The app treats only `.purchased` ownership as unlockable and records `.familyShared` as diagnostics.
-- ASC pricing remains external: use CNY as the base territory price, prefer CNY ¥18, fall back to ¥19 if ¥18 is unavailable, and pause for custom price approval if ¥17-¥20 are all unavailable.
-
-Runtime architecture:
-
-- `WNFApp.init` creates `PremiumEntitlementStore` as a `@StateObject` and injects it globally. Do not start transaction listening from a view `.task`.
-- `PremiumEntitlementStore` is `@MainActor`; StoreKit event streams hop back to the main actor before touching published UI state.
-- Startup order is fixed: start the long-running `Transaction.updates` listener, drain `Transaction.unfinished`, refresh `Transaction.currentEntitlements`, then load products asynchronously.
-- Verified transactions pass through `EntitlementVerifier` before entitlement mutation. v1 uses `PassThroughEntitlementVerifier`; the protocol is the insertion point for a future App Store Server API / Server Notifications V2 implementation.
-- Any verified transaction delivered by listener or unfinished scan is finished after entitlement handling. Unverified transactions are not finished, so StoreKit can redeliver them for a later verification attempt.
-- Product loading has three UI states: non-empty product array unlocks the buy flow, empty array means the product is not available in the current ASC/storefront configuration and shows `Premium 即将开放`, throws or an 8-second timeout shows a retryable load failure.
-- When the scene returns active, the store reloads products, refreshes current entitlements, and checks `AppStore.canMakePayments` so storefront and account changes are reflected.
-- Restore is user-initiated only: the Restore button enters a spinner state, calls `AppStore.sync()`, then reads current entitlements. Empty restore copy is fixed as `未找到可恢复的购买。请确认使用的是购买时的 Apple ID。`
-- Refund uses the active `UIWindowScene` helper and `Transaction.beginRefundRequest(in:)`. Only `.success` writes `wnf.premium.refundRequestedAt`; `.userCancelled` and `.error` keep the existing entitlement UI state and show readable feedback.
-
-Snapshot and security boundary:
+## Widget
 
 - App Group suite: `group.com.wonangfei.app`.
-- Main app writes entitlement/widget mirror data with `UserDefaults(suiteName:)`. The entitlement snapshot key is `wnf.premium.entitlement.snapshot.v1` and contains `schemaVersion`, `unlocked`, `productID`, `lastVerifiedAt`, `ownershipType`, and optional `revocationReason`.
-- The Widget can only read this mirror. It is acceptable for v1 that local Widget display can be forged on a compromised device; the main App always derives unlock state from verified StoreKit transactions, never from the snapshot.
-- Widget wage display uses `wnf.widget.snapshot.v1`; gallery and placeholder paths never read real wage data.
-
-Paywall and UX:
-
-- `PremiumPaywallController` owns global sheet state. Repeated triggers update/focus the existing sheet instead of stacking multiple sheets.
-- Paywall presentation is a SwiftUI sheet with `.large` detent, a close button, restore button, Terms and Privacy links, and reduced-motion-safe transitions.
-- Purchase result mapping: cancel is silent; pending shows Ask to Buy waiting state; payment-not-allowed disables buying with an account/device restriction message; unavailable product shows unavailable copy; verification failure keeps the feature locked; unknown/network errors prompt retry.
-- Ask to Buy approval that arrives while the app is backgrounded is handled on next startup/foreground via unfinished/current entitlement refresh and shows a one-time Premium unlocked notice.
-- Revoked transactions lock Premium again and show a one-time revocation notice.
-- Theme preview session belongs to the current Settings stack lifecycle. Entering and closing Paywall does not clear preview; leaving Settings or restarting the app reverts to the last saved theme unless purchased and explicitly saved.
-- History export requires Premium and shows a confirmation that the file includes complete amount and work-time data. CSV starts with a UTF-8 BOM; JSON includes stored daily records and live today.
-
-## Widget And Links
-
 - `WNFWidget` supports `.systemSmall`, `.systemMedium`, `.accessoryRectangular`, and `.accessoryInline`.
-- v1 uses an empty `AppIntentConfiguration` stub so v1.x can add per-widget theme/privacy settings without replacing the configuration model.
+- v1 uses an empty `AppIntentConfiguration` stub so v1.x can add per-widget settings without replacing the configuration model.
 - Every Widget view uses `containerBackground(for: .widget)` for iOS 17 rendering.
-- Timeline policy: working hours schedule `.after(now + 60s)`; non-working hours schedule `.after(next expected work start)`. Purchases, theme changes, settings changes, and daily-record changes trigger debounced `WidgetCenter.shared.reloadAllTimelines()`.
-- Lock-screen amount display defaults to visible; Settings exposes `锁屏小组件显示金额`.
-- Free real timelines show the Premium prompt. Preview/gallery timelines use a fixed sample amount such as `¥888.88` and never read the real App Group wage snapshot.
-- Primary link is `https://wonangfei.app/premium`; `wonangfei://premium` remains fallback. Associated Domains and the AASA file must be live before App Store submission, with no redirect/auth and `Content-Type: application/json`.
+- Timeline policy: working hours schedule `.after(now + 60s)`; non-working hours schedule `.after(next expected work start)`. Setting and daily-record changes trigger debounced `WidgetCenter.shared.reloadAllTimelines()` via `WNFWidgetReloader`.
+- Widget wage display reads `wnf.widget.wage.snapshot.v1`; gallery and placeholder paths never read real wage data.
 - Terms and Privacy links open remote URLs first and fall back to bundled `terms.html` / `privacy.html` through the local legal document viewer.
 
 Default app state lives in `窝囊费.html` under `TWEAK_DEFAULTS`:
@@ -203,7 +157,6 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 - Share card presentation uses opacity-only insertion/removal so the card bounds stay fixed throughout the transition.
 - Share card content must include `今日窝囊费` and `上班上了多久`.
 - Share card title/subtitle copy is selected from `ShareCardCopy.pool` every time the home share action opens the card. The picker excludes the currently displayed pair when possible, so repeated opens visibly refresh the wording.
-- Share template picker exposes the classic free template plus Premium templates. Locked template taps open the global Paywall; unlocked template changes persist through `PremiumPreferencesStore`.
 - Share card controls:
   - eye button masks/unmasks card-sensitive values only;
   - share button enters a loading/disabled state and waits one frame so the spinner can render; this is a UX/perceptual-feedback fix, not a concurrency fix, because SwiftUI `ImageRenderer.render(rasterizationScale:)` and the explicit `UIGraphicsImageRenderer` context are still main-thread bound. Export uses the current `UIWindowScene.screen.scale`, then presents iOS `UIActivityViewController` from an attached presenter view with `popoverPresentationController.sourceView` configured for iPad / Mac Catalyst;
@@ -216,7 +169,7 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 - 入口仅在首页 CTA。`RootView` 拥有 `settlementPresented`、`settlementSnapshot`、`settlementHidesSensitiveInfo` 三个状态。
 - `DailySettlement.derive(from:dailyRecords:at:)` 从当前 `WageDay` 与 `dailyRecords` 派生快照：金额、已忍时长、进度、忍耐指数 (`SettlementSentiment` 1-5 星，按 `progress` 落档并把 `.done && progress >= 1.0` 视为 heavy)、连续打工天数 (从今天向前回溯，遇到 `earnedToday > 0` 即继续，遇到 0 即停止，最多回溯 60 天)、动态 headline / subCopy（按情绪等级 + 连续天数动态拼接）、随机选中的今日最佳忍耐时刻文案。派生过程是纯函数，不修改任何持久化路径。
 - 全屏 overlay 有三个阶段：`prep`（背景刚淡入） → `burst`（中心金币雨向外扩散，触发 heavy 触感反馈） → `reveal`（金币消散后结算卡 spring-in，数字 0 → 今日金额线性 ease-out 滚动，底部「存入资产 / 分享卡片」action 行延后 0.18s ease-in）。整个动画 < 2s，右上角始终有「跳过」按钮可立即完成 burst 跳到 reveal 态。`burst` 期间 settlement card 和 action row 通过 `allowsHitTesting(...)` 屏蔽 hit-test，避免透明态被误触。
-- 结算卡复用 `PremiumShareTemplateID` 模板背景色 (classic / overtimeReceipt / survivalBadge / quietLedger)，与现有 `WonangfeiShareCard` 模板色保持一致；header 同时提供眼睛（敏感信息打码）/ 分享 / 关闭按钮，与分享卡操作保持一致。
+- 结算卡的背景与 `WonangfeiShareCard` 保持一致的奶油白；header 同时提供眼睛（敏感信息打码）/ 分享 / 关闭按钮，与分享卡操作保持一致。
 - 「存入资产」调用 `state.persistCurrentDaySnapshot()` 写回当前快照并发出 `UINotificationFeedbackGenerator(.success)`，然后关闭 overlay。
 - 「分享卡片」走与首页分享相同的渲染管线：`renderAndPresentSettlementShare` 同步生成 `DailySettlementShareCard` 的 `UIImage`（main-thread bound 的 `ImageRenderer.render(rasterizationScale:)`，使用 `windowSceneScale`，宽度固定 360pt），失败时退化到包含金额、已忍时长、连续打工天数的 fallback 文本。复用现有 `ActivityView` 和 `ActivityPresenterViewController`，避免 iPad / Mac Catalyst 弹窗崩溃。
 - 共用一份 `isPreparingShareActivity` 标志：因为 settlement overlay 与原 share card 不会同时呈现，所以共用同一份「正在生成分享图」状态不冲突。
@@ -267,9 +220,6 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 - 午休 switch hides/reveals lunch rows and recomputes hourly rate.
 - 计入加班 is the only interactive switch in the 其它 section.
 - All editable settings on this page persist through `WageState` and should survive app relaunch.
-- The Premium card stays visible near the top of Settings. It shows current purchase status, price/loading/unavailable states, Buy/Restore, refund request, feature locks, theme preview, share-template selection, lock-screen Widget privacy, history export, and Terms/Privacy.
-- Restore must stay visible regardless of purchase state because non-consumable IAP review expects a clear restore path.
-- If `AppStore.canMakePayments` is false, the buy action is disabled and Settings/Paywall show an account or device purchase restriction message.
 
 ## Visual Implementation Rules
 
@@ -291,8 +241,7 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 - Native iOS entry: open `WNF.xcodeproj`, scheme `WNF`, bundle id `com.wonangfei.app`, iOS deployment target `17.0`.
 - Current simulator validation uses `iPhone 17` on iOS `26.5`.
 - XcodeBuildMCP defaults are committed under `.xcodebuildmcp/config.yaml`, so agents can call `build_sim`, `build_run_sim`, `snapshot_ui`, `tap`, and `screenshot` without re-entering project defaults.
-- 2026-05-18 Premium implementation validation: XcodeBuildMCP `session_show_defaults` confirmed the persisted project/scheme/simulator defaults; `build_sim` succeeded; `xcodebuild -project WNF.xcodeproj -scheme WNF -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' build -quiet` succeeded; `xcodebuild test -project WNF.xcodeproj -scheme WNF -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -enableCodeCoverage YES -quiet` succeeded after adding Premium unit tests.
-- Coverage goal is `>= 80%` using `xccov` on the generated `.xcresult`. Current focused unit test and SwiftUI render coverage test count is 51/51 passing, and whole app target coverage is `85.12% (7723/9073)`. The remaining low areas are mostly deeper RootView interaction branches and StoreKit live paths that require UI automation or Sandbox/TestFlight validation.
+- Build validation: `xcodebuild -project WNF.xcodeproj -scheme WNF -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' build` must succeed before commit.
 - External release blockers remain outside the repo: App Group/Associated Domains provisioning, AASA deployment, ASC product creation/localization/pricing, Paid Apps Agreement, tax/banking, China备案/软著/ICP/privacy URL/customer support, Sandbox/TestFlight payment QA, and App Review notes.
 - 2026-05-17 onboarding hero replacement validation: five source PNGs from `/Users/shelingzhao/Documents/窝囊费素材/引导/` matched their target asset-catalog SHA-256 hashes, all target files reported `1536 x 1024` and `hasAlpha: yes`, and `build_sim` succeeded.
 - 2026-05-17 home responsive-layout fix: `WNF/HomeView.swift` no longer reads `UIScreen.main.bounds.width` for the mascot-stage coin layout; use simulator rotation or iPad split-view checks when visually validating this area.

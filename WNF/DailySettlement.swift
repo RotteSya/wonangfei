@@ -330,7 +330,6 @@ struct DailySettlementOverlay: View {
     }
 
     var settlement: DailySettlement
-    var template: PremiumShareTemplateID
     @Binding var hidesSensitiveInfo: Bool
     var isPreparingShare: Bool
     var onShare: () -> Void
@@ -405,7 +404,6 @@ struct DailySettlementOverlay: View {
 
             DailySettlementShareCard(
                 settlement: settlement,
-                template: template,
                 displayedAmount: displayedAmount,
                 displayedBestMoment: currentBestMoment.isEmpty ? settlement.bestMoment : currentBestMoment,
                 hidesSensitiveInfo: hidesSensitiveInfo,
@@ -588,7 +586,6 @@ struct DailySettlementOverlay: View {
 
         let snapshotCard = DailySettlementShareCard(
             settlement: settlement,
-            template: template,
             displayedAmount: settlement.earnedToday,
             displayedBestMoment: currentBestMoment.isEmpty ? settlement.bestMoment : currentBestMoment,
             hidesSensitiveInfo: hidesSensitiveInfo,
@@ -781,7 +778,6 @@ private struct TearMask: Shape {
 
 struct DailySettlementShareCard: View {
     var settlement: DailySettlement
-    var template: PremiumShareTemplateID
     var displayedAmount: Double?
     var displayedBestMoment: String?
     var hidesSensitiveInfo: Bool
@@ -805,21 +801,12 @@ struct DailySettlementShareCard: View {
             header
             cardBody
         }
-        .background(templateBackground, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .background(WNFTheme.bg, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 30, style: .continuous)
                 .stroke(Color.white.opacity(0.72), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
-    }
-
-    private var templateBackground: Color {
-        switch template {
-        case .classic: WNFTheme.bg
-        case .overtimeReceipt: WNFTheme.surfaceSoft
-        case .survivalBadge: WNFTheme.coralSoft
-        case .quietLedger: Color.white
-        }
     }
 
     private var header: some View {
@@ -868,7 +855,7 @@ struct DailySettlementShareCard: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 13)
-        .background(template == .quietLedger ? Color.white : WNFTheme.gold)
+        .background(WNFTheme.gold)
     }
 
     private var cardBody: some View {

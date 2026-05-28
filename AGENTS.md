@@ -9,6 +9,18 @@
 - Browser/design handoff: `index.html`, `assets/source/*.jsx`, `brand-tokens.css`, `design-tokens.json`.
 - Treat the SwiftUI app as the implementation surface when the task is app behavior, build, or asset-catalog work. Treat the HTML/Open Design files as visual reference unless the task explicitly says prototype/design only.
 
+## Branch Naming
+
+Use only these branch prefixes:
+
+| Prefix | Use for | Example |
+|---|---|---|
+| `feat/` | New features or behavior changes | `feat/payslip-export` |
+| `fix/` | Bug fixes | `fix/coin-animation-stutter` |
+| `tweak/` | Visual polish, copy, spacing, animation feel, or asset swaps | `tweak/yellow-pill-radius` |
+
+Do not use extra prefixes such as `codex/`, `chore/`, `design/`, or `release/` unless the user explicitly changes this convention.
+
 ## Build Defaults
 
 XcodeBuildMCP defaults are persisted in `.xcodebuildmcp/config.yaml` for project `WNF.xcodeproj`, scheme `WNF`, configuration `Debug`, simulator `iPhone 17`, and bundle id `com.wonangfei.app`.

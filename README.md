@@ -21,6 +21,16 @@
 - `assets/mascot/`：主吉祥物图和 8 个原始 Cow pose。
 - `assets/reference-screens/`：用户提供的整套视觉物料和参考图。
 
+## Branches
+
+本项目只使用三个分支前缀：
+
+- `feat/`：新功能或行为变化，例如 `feat/payslip-export`。
+- `fix/`：bug 修复，例如 `fix/coin-animation-stutter`。
+- `tweak/`：视觉微调、文案、间距、动效手感或素材替换，例如 `tweak/yellow-pill-radius`。
+
+除非项目负责人明确改约定，否则不要使用 `codex/`、`chore/`、`design/`、`release/` 等额外前缀。
+
 ## Brand Summary
 
 窝囊费的视觉关键词是：丧萌、自嘲、金币感、工位回血、黑黄强对比。整体避免高级灰和企业感，用奶油白承托内容，用窝囊黄负责第一视觉锚点，用反思黑承担标题、核心按钮和高权重信息。

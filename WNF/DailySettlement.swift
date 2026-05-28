@@ -1308,20 +1308,20 @@ struct ClockOutCTA: View {
             HStack(spacing: 12) {
                 ZStack {
                     Circle()
-                        .fill(WNFTheme.yellow)
+                        .fill(WNFTheme.ink)
                         .frame(width: 36, height: 36)
                     Image(systemName: iconName)
                         .font(.system(size: 16, weight: .heavy))
-                        .foregroundStyle(WNFTheme.ink)
+                        .foregroundStyle(WNFTheme.yellow)
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(.system(size: 15, weight: .black, design: .rounded))
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(WNFTheme.ink)
                     Text(subtitle)
                         .font(.system(size: 11, weight: .heavy))
-                        .foregroundStyle(Color.white.opacity(0.72))
+                        .foregroundStyle(WNFTheme.inkSoft)
                         .lineLimit(1)
                 }
 
@@ -1329,13 +1329,13 @@ struct ClockOutCTA: View {
 
                 Image(systemName: "arrow.right")
                     .font(.system(size: 13, weight: .heavy))
-                    .foregroundStyle(Color.white.opacity(0.82))
+                    .foregroundStyle(WNFTheme.ink.opacity(0.7))
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity)
-            .background(WNFTheme.ink, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .shadow(color: .black.opacity(0.18), radius: 12, y: 6)
+            .background(WNFTheme.yellow, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .shadow(color: WNFTheme.yellow.opacity(0.4), radius: 14, y: 6)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(title)

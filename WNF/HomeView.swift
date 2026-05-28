@@ -111,13 +111,14 @@ private struct HeroHomePage: View {
 
                     ProgressTrack(day: day, startText: state.workStart.clockText, endText: state.workEnd.clockText)
 
-                    ClockOutCTA(
-                        status: day.status,
-                        isSettled: state.isTodaySettled,
-                        action: onClockOut
-                    )
-                    .anchorPreference(key: ClockOutCTAAnchorKey.self, value: .bounds) { $0 }
-                    .padding(.top, 4)
+                    if state.isTodaySettled || day.status == .done {
+                        ClockOutCTA(
+                            status: day.status,
+                            isSettled: state.isTodaySettled,
+                            action: onClockOut
+                        )
+                        .padding(.top, 4)
+                    }
                 }
                 .padding(.horizontal, 22)
 
@@ -127,12 +128,12 @@ private struct HeroHomePage: View {
                     .padding(.bottom, mascotBottomPadding)
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
-            .overlayPreferenceValue(ClockOutCTAAnchorKey.self) { anchor in
+            .overlayPreferenceValue(CoinSourceAnchorKey.self) { anchor in
                 if let anchor {
                     HomeCoinDropLayer(
                         day: day,
                         isSettled: state.isTodaySettled,
-                        ctaFrame: proxy[anchor],
+                        sourceFrame: proxy[anchor],
                         pageSize: proxy.size,
                         collisionY: coinCollisionY(in: proxy.size)
                     )
@@ -152,7 +153,7 @@ private struct HeroHomePage: View {
     }
 }
 
-private struct ClockOutCTAAnchorKey: PreferenceKey {
+private struct CoinSourceAnchorKey: PreferenceKey {
     static var defaultValue: Anchor<CGRect>?
 
     static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
@@ -421,6 +422,7 @@ private struct ProgressTrack: View {
                 }
             }
             .frame(height: 13)
+            .anchorPreference(key: CoinSourceAnchorKey.self, value: .bounds) { $0 }
 
             HStack {
                 Text(startText)
@@ -439,7 +441,7 @@ private struct HomeCoinDropLayer: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var day: WageDay
     var isSettled: Bool
-    var ctaFrame: CGRect
+    var sourceFrame: CGRect
     var pageSize: CGSize
     var collisionY: CGFloat
 
@@ -468,12 +470,18 @@ private struct HomeCoinDropLayer: View {
         }
     }
 
+    private var filledSourceFrame: CGRect {
+        var f = sourceFrame
+        f.size.width = max(0, sourceFrame.width * CGFloat(day.progress))
+        return f
+    }
+
     var body: some View {
         ZStack(alignment: .topLeading) {
             ForEach(coins) { coin in
                 HomeDroppingCoin(
                     coin: coin,
-                    ctaFrame: ctaFrame,
+                    sourceFrame: filledSourceFrame,
                     collisionY: collisionY,
                     pageWidth: pageSize.width,
                     reduceMotion: reduceMotion
@@ -526,7 +534,7 @@ private struct HomeCoinDropLayer: View {
     }
 
     private func emitCoins(count: Int) {
-        guard count > 0, ctaFrame.width > 0, pageSize.height > 0 else { return }
+        guard count > 0, sourceFrame.width > 0, pageSize.height > 0 else { return }
 
         for burstIndex in 0..<count {
             let coin = HomeFallingCoin(sequence: emissionIndex, burstIndex: burstIndex)
@@ -578,7 +586,7 @@ private struct HomeFallingCoin: Identifiable, Equatable {
 
 private struct HomeDroppingCoin: View {
     var coin: HomeFallingCoin
-    var ctaFrame: CGRect
+    var sourceFrame: CGRect
     var collisionY: CGFloat
     var pageWidth: CGFloat
     var reduceMotion: Bool
@@ -603,9 +611,9 @@ private struct HomeDroppingCoin: View {
 
         switch phase {
         case .waiting:
-            return CGPoint(x: startX, y: insideCardY)
+            return CGPoint(x: startX, y: spawnY)
         case .emerged:
-            return CGPoint(x: startX + coin.drift * 0.08, y: cardMouthY)
+            return CGPoint(x: startX + coin.drift * 0.08, y: emergeY)
         case .falling:
             return CGPoint(x: startX + coin.drift, y: impactCenterY)
         case .bounced:
@@ -618,11 +626,11 @@ private struct HomeDroppingCoin: View {
     private var reducedMotionPosition: CGPoint {
         switch phase {
         case .waiting:
-            return CGPoint(x: startX, y: insideCardY)
+            return CGPoint(x: startX, y: spawnY)
         case .emerged, .falling, .bounced:
-            return CGPoint(x: startX, y: cardMouthY - 8)
+            return CGPoint(x: startX, y: emergeY - 8)
         case .finished:
-            return CGPoint(x: startX, y: cardMouthY - 14)
+            return CGPoint(x: startX, y: emergeY - 14)
         }
     }
 
@@ -671,25 +679,25 @@ private struct HomeDroppingCoin: View {
 
     private var startX: CGFloat {
         let laneFraction = Self.laneFractions[coin.lane % Self.laneFractions.count]
-        let rawX = ctaFrame.minX + ctaFrame.width * laneFraction
+        let rawX = sourceFrame.minX + sourceFrame.width * laneFraction
         let inset = coin.size / 2 + 12
         return min(max(inset, rawX), max(inset, pageWidth - inset))
     }
 
-    private var insideCardY: CGFloat {
-        ctaFrame.maxY - max(18, min(30, ctaFrame.height * 0.24))
+    private var spawnY: CGFloat {
+        sourceFrame.midY
     }
 
-    private var cardMouthY: CGFloat {
-        ctaFrame.maxY - 6
+    private var emergeY: CGFloat {
+        sourceFrame.minY - 4
     }
 
     private var impactCenterY: CGFloat {
-        max(ctaFrame.maxY + 72, collisionY - coin.size / 2)
+        max(sourceFrame.maxY + 72, collisionY - coin.size / 2)
     }
 
     private var bouncedY: CGFloat {
-        max(ctaFrame.maxY + 40, impactCenterY - coin.bounceHeight)
+        max(sourceFrame.maxY + 40, impactCenterY - coin.bounceHeight)
     }
 
     private func startAnimation() {

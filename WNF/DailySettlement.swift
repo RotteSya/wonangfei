@@ -200,8 +200,8 @@ struct DailySettlement: Equatable {
             return CopyPick(
                 headline: "今天全程忍住",
                 subCopy: streakDays > 1
-                    ? "连续 \(streakDays) 天全勤，今日窝囊费已结算。"
-                    : "完整熬完一天，窝囊费已结算。",
+                    ? "连续 \(streakDays) 天全勤，今日窝囊费已收下。"
+                    : "完整熬完一天，窝囊费已收下。",
                 bestMoment: bestMoment
             )
         }
@@ -326,6 +326,7 @@ struct DailySettlementOverlay: View {
         case prep
         case burst
         case reveal
+        case tearing
     }
 
     var settlement: DailySettlement
@@ -342,6 +343,14 @@ struct DailySettlementOverlay: View {
     @State private var revealCardVisible = false
     @State private var revealActionsVisible = false
     @State private var currentBestMoment: String = ""
+    @State private var tearSnapshot: UIImage?
+    @State private var tearNormalizedY: CGFloat = 0.5
+    @State private var tearJitter: [CGFloat] = []
+    @State private var tearWindup: Double = 0
+    @State private var tearSeparation: Double = 0
+    @State private var tearFlight: Double = 0
+    @State private var tearConfettiProgress: Double = 0
+    @State private var tearConfettiSeed: UInt64 = 0
 
     private let burstDuration: TimeInterval = 0.85
     private let amountRampDuration: TimeInterval = 0.7
@@ -436,20 +445,24 @@ struct DailySettlementOverlay: View {
                 onShare: onShare,
                 onDismiss: onDismiss
             )
+            .scaleEffect(revealCardVisible ? 1 : 0.86)
+            .opacity(phase == .tearing ? 0 : (revealCardVisible ? 1 : 0))
+            .allowsHitTesting(revealCardVisible && phase != .tearing)
+            .shadow(color: .black.opacity(0.32), radius: 28, y: 18)
+            .overlay {
+                if phase == .tearing, let snapshot = tearSnapshot {
+                    tearLayer(snapshot: snapshot)
+                }
+            }
             .frame(maxWidth: 340)
             .padding(.horizontal, 28)
-            .scaleEffect(revealCardVisible ? 1 : 0.86)
-            .opacity(revealCardVisible ? 1 : 0)
-            // SwiftUI hit-testing still applies at opacity 0; block taps until reveal.
-            .allowsHitTesting(revealCardVisible)
-            .shadow(color: .black.opacity(0.32), radius: 28, y: 18)
 
             Spacer(minLength: 12)
 
             actionRow
-                .opacity(revealActionsVisible ? 1 : 0)
+                .opacity(revealActionsVisible && phase != .tearing ? 1 : 0)
                 .offset(y: revealActionsVisible ? 0 : 14)
-                .allowsHitTesting(revealActionsVisible)
+                .allowsHitTesting(revealActionsVisible && phase != .tearing)
 
             Spacer(minLength: 16)
         }
@@ -458,14 +471,57 @@ struct DailySettlementOverlay: View {
         .animation(.easeOut(duration: 0.32).delay(0.18), value: revealActionsVisible)
     }
 
+    private func tearLayer(snapshot: UIImage) -> some View {
+        // The top half is the dramatic piece — it gets yanked up and off-screen. The bottom half
+        // stays roughly put (only a sliver of drift) so the receipt visually feels "torn off in
+        // your hand," not "the whole card slides down."
+        let snapTopOffset: CGFloat = -36 * tearSeparation
+        let snapBottomOffset: CGFloat = 4 * tearSeparation
+        let flyTopOffset: CGFloat = -480 * tearFlight
+        let flyBottomOffset: CGFloat = 70 * tearFlight
+        let topOffsetY = snapTopOffset + flyTopOffset
+        let bottomOffsetY = snapBottomOffset + flyBottomOffset
+        let topRotation = -3 * tearSeparation - 8 * tearFlight
+        let bottomRotation = 0.6 * tearSeparation + 2 * tearFlight
+        let windupScale = 1 - CGFloat(tearWindup) * 0.035
+        let opacity = 1 - tearFlight
+
+        return ZStack {
+            Image(uiImage: snapshot)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .mask(TearMask(tearNormalizedY: tearNormalizedY, jitter: tearJitter, side: .bottom))
+                .offset(y: bottomOffsetY)
+                .rotationEffect(.degrees(bottomRotation), anchor: .top)
+                .opacity(opacity)
+
+            Image(uiImage: snapshot)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .mask(TearMask(tearNormalizedY: tearNormalizedY, jitter: tearJitter, side: .top))
+                .offset(y: topOffsetY)
+                .rotationEffect(.degrees(topRotation), anchor: .bottom)
+                .opacity(opacity)
+
+            TearConfettiBurst(
+                normalizedY: tearNormalizedY,
+                progress: tearConfettiProgress,
+                seed: tearConfettiSeed
+            )
+        }
+        .scaleEffect(windupScale)
+        .shadow(color: .black.opacity(0.32), radius: 28, y: 18)
+        .allowsHitTesting(false)
+    }
+
     private var actionRow: some View {
         HStack(spacing: 12) {
             settlementActionButton(
-                title: "确定下班",
+                title: "下班！",
                 systemImage: "tray.and.arrow.down.fill",
                 style: .primary
             ) {
-                onSaveAsAsset()
+                performClockOutTear()
             }
 
             settlementActionButton(
@@ -565,6 +621,200 @@ struct DailySettlementOverlay: View {
         let nanoseconds = UInt64((max(0, seconds) * 1_000_000_000).rounded())
         try await Task.sleep(nanoseconds: nanoseconds)
     }
+
+    @MainActor
+    private func performClockOutTear() {
+        guard phase == .reveal else { return }
+
+        let snapshotCard = DailySettlementShareCard(
+            settlement: settlement,
+            template: template,
+            displayedAmount: settlement.earnedToday,
+            displayedBestMoment: currentBestMoment.isEmpty ? settlement.bestMoment : currentBestMoment,
+            hidesSensitiveInfo: hidesSensitiveInfo,
+            showsControls: false
+        )
+        .frame(width: 340)
+
+        let renderer = ImageRenderer(content: snapshotCard)
+        renderer.scale = UIScreen.main.scale
+
+        guard let image = renderer.uiImage else {
+            onSaveAsAsset()
+            return
+        }
+
+        tearSnapshot = image
+        tearNormalizedY = CGFloat.random(in: 0.32...0.68)
+        tearJitter = Self.makeTearJitter(count: 18)
+        tearConfettiSeed = UInt64.random(in: 0..<UInt64.max)
+        phase = .tearing
+
+        let prepHaptic = UIImpactFeedbackGenerator(style: .light)
+        let snapHaptic = UIImpactFeedbackGenerator(style: .heavy)
+        prepHaptic.prepare()
+        snapHaptic.prepare()
+
+        // Stage 1: 60ms windup — card briefly compresses, like cocking back before the rip.
+        prepHaptic.impactOccurred(intensity: 0.7)
+        withAnimation(.easeIn(duration: 0.06)) {
+            tearWindup = 1
+        }
+
+        Task { @MainActor in
+            try? await sleep(seconds: 0.07)
+
+            // Stage 2: RIP — heavy haptic, snap apart with overshoot, confetti spreads.
+            snapHaptic.impactOccurred()
+            withAnimation(.spring(response: 0.22, dampingFraction: 0.5)) {
+                tearWindup = 0
+                tearSeparation = 1
+            }
+            withAnimation(.easeOut(duration: 0.55)) {
+                tearConfettiProgress = 1
+            }
+
+            try? await sleep(seconds: 0.14)
+
+            // Stage 3: Fly off-screen with rotation + fade.
+            withAnimation(.timingCurve(0.32, 0.72, 0, 1, duration: 0.42)) {
+                tearFlight = 1
+            }
+
+            try? await sleep(seconds: 0.42)
+            onSaveAsAsset()
+        }
+    }
+
+    private static func makeTearJitter(count: Int) -> [CGFloat] {
+        (0..<count).map { _ in CGFloat.random(in: -8...8) }
+    }
+}
+
+// MARK: - Tear Confetti
+
+private struct TearConfettiBurst: View {
+    var normalizedY: CGFloat
+    var progress: Double
+    var seed: UInt64
+    var particleCount: Int = 12
+
+    var body: some View {
+        GeometryReader { proxy in
+            let baseY = proxy.size.height * normalizedY
+            let width = proxy.size.width
+            ZStack {
+                ForEach(0..<particleCount, id: \.self) { index in
+                    confettiParticle(index: index, baseY: baseY, width: width)
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func confettiParticle(index: Int, baseY: CGFloat, width: CGFloat) -> some View {
+        // Deterministic per-tear, per-particle pseudo-randomness derived from the seed so the
+        // particle paths feel chaotic without re-randomizing on every redraw.
+        let hash = TearConfettiBurst.hash(seed: seed, index: UInt64(index))
+        let lateralFraction = TearConfettiBurst.unitFraction(from: hash, offset: 0)
+        let angleJitter = (TearConfettiBurst.unitFraction(from: hash, offset: 7) - 0.5) * 0.6
+        let distanceJitter = TearConfettiBurst.unitFraction(from: hash, offset: 13)
+        let rotationOffset = TearConfettiBurst.unitFraction(from: hash, offset: 19)
+        let sizeJitter = TearConfettiBurst.unitFraction(from: hash, offset: 23)
+
+        let originX = width * CGFloat(lateralFraction)
+        let goesUp = index % 2 == 0
+        // Half the particles spray up, half down — paper fibers torn from both sides of the rip.
+        let baseAngle: Double = goesUp ? -.pi / 2 : .pi / 2
+        let angle = baseAngle + angleJitter
+        let distance: CGFloat = 70 + CGFloat(distanceJitter) * 70
+        let travelled = CGFloat(progress) * distance
+        let dx = CGFloat(cos(angle)) * travelled
+        let dy = CGFloat(sin(angle)) * travelled
+
+        let particleWidth: CGFloat = 5 + CGFloat(sizeJitter) * 5
+        let particleHeight: CGFloat = 3 + CGFloat(sizeJitter) * 2
+        let particleColor: Color = (index % 3 == 0) ? WNFTheme.yellow : WNFTheme.bg
+        let fade = 1 - progress * progress
+
+        return RoundedRectangle(cornerRadius: 1, style: .continuous)
+            .fill(particleColor)
+            .frame(width: particleWidth, height: particleHeight)
+            .rotationEffect(.degrees(rotationOffset * 360 + progress * 220))
+            .position(x: originX + dx, y: baseY + dy)
+            .opacity(fade)
+    }
+
+    private static func hash(seed: UInt64, index: UInt64) -> UInt64 {
+        // SplitMix64-flavored mix so neighbouring indices produce wildly different bits.
+        var z = seed &+ (index &* 0x9E37_79B9_7F4A_7C15)
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+        return z ^ (z >> 31)
+    }
+
+    private static func unitFraction(from hash: UInt64, offset: UInt64) -> Double {
+        let shifted = (hash &>> offset) & 0xFFFF
+        return Double(shifted) / Double(0xFFFF)
+    }
+}
+
+// MARK: - Tear Mask
+
+private struct TearMask: Shape {
+    enum Side { case top, bottom }
+
+    var tearNormalizedY: CGFloat
+    var jitter: [CGFloat]
+    var side: Side
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let baseY = rect.height * tearNormalizedY
+        let count = jitter.count
+
+        guard count >= 2 else {
+            switch side {
+            case .top:
+                path.addRect(CGRect(x: 0, y: 0, width: rect.width, height: baseY))
+            case .bottom:
+                path.addRect(CGRect(x: 0, y: baseY, width: rect.width, height: rect.height - baseY))
+            }
+            return path
+        }
+
+        let stepX = rect.width / CGFloat(count - 1)
+        let yAt: (Int) -> CGFloat = { i in
+            // Pin both ends to baseY so the tear meets the card edges cleanly.
+            let offset = (i == 0 || i == count - 1) ? 0 : jitter[i]
+            return baseY + offset
+        }
+
+        switch side {
+        case .top:
+            path.move(to: CGPoint(x: 0, y: 0))
+            path.addLine(to: CGPoint(x: rect.maxX, y: 0))
+            for i in stride(from: count - 1, through: 0, by: -1) {
+                path.addLine(to: CGPoint(x: stepX * CGFloat(i), y: yAt(i)))
+            }
+            path.closeSubpath()
+        case .bottom:
+            for i in 0..<count {
+                let point = CGPoint(x: stepX * CGFloat(i), y: yAt(i))
+                if i == 0 {
+                    path.move(to: point)
+                } else {
+                    path.addLine(to: point)
+                }
+            }
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+            path.addLine(to: CGPoint(x: 0, y: rect.maxY))
+            path.closeSubpath()
+        }
+
+        return path
+    }
 }
 
 // MARK: - Settlement Share Card
@@ -626,7 +876,7 @@ struct DailySettlementShareCard: View {
                 Text("窝囊费")
                     .font(.system(size: 20, weight: .black, design: .rounded))
                     .foregroundStyle(WNFTheme.ink)
-                Text("今日下班结算")
+                Text("今日下班战绩")
                     .font(.system(size: 10, weight: .heavy))
                     .tracking(1.2)
                     .foregroundStyle(WNFTheme.inkSoft)
@@ -1031,21 +1281,19 @@ struct ClockOutCTA: View {
     var action: () -> Void
 
     private var title: String {
-        if isSettled { return "今日已结算 · 再看一眼" }
+        if isSettled { return "今日已下班 · 再看一眼" }
         switch status {
-        case .before: return "提前结算今日"
-        case .morning, .afternoon: return "提前下班结算"
-        case .lunch: return "中场结算一下"
-        case .done: return "我下班了"
+        case .before, .morning, .afternoon, .lunch: return "查看今天挣多少"
+        case .done: return "下班！"
         }
     }
 
     private var subtitle: String {
-        if isSettled { return "进入个人时间，钱已经稳了" }
+        if isSettled { return "今日窝囊费已入账，剩下都是你的时间" }
         switch status {
         case .before: return "今天的窝囊费还没开张"
         case .morning: return "已经熬过早上的两小时最值钱"
-        case .lunch: return "午休回血中，要不要小结一下"
+        case .lunch: return "午休回血中，要不要看看今天挣多少"
         case .afternoon: return "再忍忍，也可以提前看看战绩"
         case .done: return "今日通关，看看今天的窝囊费"
         }

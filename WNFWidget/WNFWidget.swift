@@ -137,6 +137,10 @@ private struct WNFWidgetView: View {
         WidgetPalette.palette(for: entry.snapshot.selectedTheme)
     }
 
+    private var isLocked: Bool {
+        !entry.snapshot.isPremiumUnlocked && !entry.isPreview
+    }
+
     var body: some View {
         content
             .widgetURL(WNFWidgetShared.premiumURL)
@@ -151,63 +155,60 @@ private struct WNFWidgetView: View {
         case .accessoryInline:
             Text(inlineText)
         case .accessoryRectangular:
-            rectangularLockScreen
+            if isLocked { rectangularLockedView } else { rectangularUnlockedView }
         case .systemMedium:
-            mediumWidget
+            if isLocked { mediumLockedView } else { mediumUnlockedView }
         default:
-            smallWidget
+            if isLocked { smallLockedView } else { smallUnlockedView }
         }
     }
 
+    // MARK: Unlocked (and preview) views
+
     private var inlineText: String {
-        if entry.isPreview {
-            return "窝囊费 ¥888.88 王牌打工人"
-        }
-        guard entry.snapshot.isPremiumUnlocked else {
-            return "窝囊费 · 王牌打工人专属"
-        }
-        guard entry.snapshot.lockScreenShowsAmount else {
+        if isLocked { return "窝囊费 · 王牌打工人专属" }
+        if !entry.snapshot.lockScreenShowsAmount {
             return "窝囊费 \(entry.snapshot.statusLabel)"
         }
         return "窝囊费 \(money(entry.snapshot.earnedToday))"
     }
 
-    private var rectangularLockScreen: some View {
+    private var rectangularUnlockedView: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(entry.snapshot.isPremiumUnlocked || entry.isPreview ? "今日窝囊费" : "王牌打工人专属")
+            Text("今日窝囊费")
                 .font(.caption2.weight(.heavy))
             Text(lockScreenAmountText)
                 .font(.headline.weight(.black))
                 .minimumScaleFactor(0.75)
-            Text(entry.snapshot.isPremiumUnlocked || entry.isPreview ? entry.snapshot.statusLabel : "解锁后打开")
+            Text(entry.snapshot.statusLabel)
                 .font(.caption2.weight(.semibold))
         }
     }
 
-    private var smallWidget: some View {
+    private var smallUnlockedView: some View {
         VStack(alignment: .leading, spacing: 10) {
-            widgetHeader
+            widgetHeader(showPremiumBadge: entry.isPreview)
             Spacer(minLength: 0)
-            Text(entry.snapshot.isPremiumUnlocked || entry.isPreview ? money(entry.snapshot.earnedToday) : "王牌打工人")
+            Text(money(entry.snapshot.earnedToday))
                 .font(.system(size: 28, weight: .black, design: .rounded))
                 .foregroundStyle(palette.ink)
                 .minimumScaleFactor(0.65)
-            Text(entry.snapshot.isPremiumUnlocked || entry.isPreview ? entry.snapshot.statusLabel : "解锁后查看今天进账")
+            Text(entry.snapshot.statusLabel)
                 .font(.caption.weight(.heavy))
                 .foregroundStyle(palette.muted)
         }
         .padding()
     }
 
-    private var mediumWidget: some View {
+    private var mediumUnlockedView: some View {
         HStack(spacing: 14) {
             VStack(alignment: .leading, spacing: 8) {
-                widgetHeader
-                Text(entry.snapshot.isPremiumUnlocked || entry.isPreview ? money(entry.snapshot.earnedToday) : "王牌打工人专属")
+                widgetHeader(showPremiumBadge: entry.isPreview)
+                Text(money(entry.snapshot.earnedToday))
                     .font(.system(size: 34, weight: .black, design: .rounded))
                     .foregroundStyle(palette.ink)
                     .minimumScaleFactor(0.62)
-                Text(entry.snapshot.isPremiumUnlocked || entry.isPreview ? "已忍 \(duration(entry.snapshot.elapsedPaidMinutes))" : "打开 App 解锁桌面/锁屏小组件")
+                Text("已忍 \(duration(entry.snapshot.elapsedPaidMinutes))")
                     .font(.caption.weight(.heavy))
                     .foregroundStyle(palette.muted)
             }
@@ -221,7 +222,70 @@ private struct WNFWidgetView: View {
         .padding()
     }
 
-    private var widgetHeader: some View {
+    // MARK: Locked views (王牌打工人专属)
+
+    private var rectangularLockedView: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4) {
+                Image(systemName: "lock.fill")
+                    .font(.caption2.weight(.black))
+                Text("王牌打工人专属")
+                    .font(.caption2.weight(.heavy))
+            }
+            Text("窝囊费小组件")
+                .font(.headline.weight(.black))
+                .minimumScaleFactor(0.75)
+            Text("点击解锁")
+                .font(.caption2.weight(.semibold))
+        }
+    }
+
+    private var smallLockedView: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            widgetHeader(showPremiumBadge: true)
+            Spacer(minLength: 0)
+            Image(systemName: "lock.fill")
+                .font(.system(size: 22, weight: .black))
+                .foregroundStyle(palette.accent)
+            Text("王牌打工人专属")
+                .font(.system(size: 20, weight: .black, design: .rounded))
+                .foregroundStyle(palette.ink)
+                .minimumScaleFactor(0.65)
+            Text("点击解锁今日窝囊费")
+                .font(.caption.weight(.heavy))
+                .foregroundStyle(palette.muted)
+        }
+        .padding()
+    }
+
+    private var mediumLockedView: some View {
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 8) {
+                widgetHeader(showPremiumBadge: true)
+                Text("王牌打工人专属")
+                    .font(.system(size: 26, weight: .black, design: .rounded))
+                    .foregroundStyle(palette.ink)
+                    .minimumScaleFactor(0.62)
+                Text("点击解锁桌面/锁屏小组件")
+                    .font(.caption.weight(.heavy))
+                    .foregroundStyle(palette.muted)
+            }
+            Spacer()
+            ZStack {
+                RoundedRectangle(cornerRadius: 24)
+                    .fill(palette.surface)
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 32, weight: .black))
+                    .foregroundStyle(palette.accent)
+            }
+            .frame(width: 78, height: 78)
+        }
+        .padding()
+    }
+
+    // MARK: Shared chrome
+
+    private func widgetHeader(showPremiumBadge: Bool) -> some View {
         HStack(spacing: 6) {
             Text("¥")
                 .font(.caption.weight(.black))
@@ -231,8 +295,8 @@ private struct WNFWidgetView: View {
             Text("窝囊费")
                 .font(.caption.weight(.black))
                 .foregroundStyle(palette.ink)
-            if entry.isPreview || !entry.snapshot.isPremiumUnlocked {
-                Text("王牌打工人")
+            if showPremiumBadge {
+                Text("王牌")
                     .font(.caption2.weight(.black))
                     .foregroundStyle(palette.ink)
                     .padding(.horizontal, 6)
@@ -243,9 +307,7 @@ private struct WNFWidgetView: View {
     }
 
     private var lockScreenAmountText: String {
-        if entry.isPreview { return "¥888.88" }
-        guard entry.snapshot.isPremiumUnlocked else { return "解锁后查看" }
-        guard entry.snapshot.lockScreenShowsAmount else { return "¥•••.••" }
+        if !entry.snapshot.lockScreenShowsAmount { return "¥•••.••" }
         return money(entry.snapshot.earnedToday)
     }
 

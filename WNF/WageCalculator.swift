@@ -98,9 +98,13 @@ enum WageCalculator {
 }
 
 extension DateComponents {
+    /// Gregorian calendar whose time zone tracks the system's autoupdating
+    /// current time zone — so day boundaries and `dateKey(for:)` follow the
+    /// user across time-zone changes (travel, manual override) instead of
+    /// being frozen to whatever zone the process launched in.
     static let calendar: Calendar = {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .current
+        calendar.timeZone = .autoupdatingCurrent
         return calendar
     }()
 

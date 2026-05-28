@@ -22,13 +22,11 @@ struct HomeView: View {
         ZStack {
             WNFTheme.bg.ignoresSafeArea()
 
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                HeroHomePage(
-                    day: state.calculation(at: context.date),
-                    onShare: onShare,
-                    onClockOut: onClockOut
-                )
-            }
+            HeroHomePage(
+                initialStatus: state.calculation.status,
+                onShare: onShare,
+                onClockOut: onClockOut
+            )
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .blur(radius: isShareCardPresented ? 18 : 0)
             .scaleEffect(isShareCardPresented ? 0.985 : 1)
@@ -43,23 +41,21 @@ private struct HeroHomePage: View {
     @EnvironmentObject private var state: WageState
     @Environment(\.tabBarFloorHeight) private var tabBarFloorHeight: CGFloat
     @StateObject private var quoteEngine: BubbleQuoteEngine
-    var day: WageDay
+    @State private var displayedStatus: WorkStatus
     var onShare: () -> Void
     var onClockOut: () -> Void
 
-    init(day: WageDay, onShare: @escaping () -> Void, onClockOut: @escaping () -> Void) {
-        self.day = day
+    init(initialStatus: WorkStatus, onShare: @escaping () -> Void, onClockOut: @escaping () -> Void) {
         self.onShare = onShare
         self.onClockOut = onClockOut
-        self._quoteEngine = StateObject(wrappedValue: BubbleQuoteEngine(initialStatus: day.status))
-    }
-
-    private var statusPresentation: WorkStatusPresentation {
-        WorkStatusPresentation(status: day.status)
+        self._quoteEngine = StateObject(wrappedValue: BubbleQuoteEngine(initialStatus: initialStatus))
+        self._displayedStatus = State(initialValue: initialStatus)
     }
 
     private var statusChipLabel: String {
-        state.isTodaySettled ? "今日已下班 · 个人时间" : statusPresentation.label
+        state.isTodaySettled
+            ? "今日已下班 · 个人时间"
+            : WorkStatusPresentation(status: displayedStatus).label
     }
 
     /// Height of the transparent margin baked into the bottom of the home
@@ -88,39 +84,38 @@ private struct HeroHomePage: View {
                 TopBar(onShare: onShare)
                     .padding(.top, 2)
 
-                VStack(alignment: .leading, spacing: 14) {
-                    StatusChip(label: statusChipLabel)
-                        .padding(.top, 12)
-
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text("今 日 窝 囊 费")
-                            .font(.system(size: 13, weight: .heavy))
-                            .tracking(5)
-                            .foregroundStyle(WNFTheme.inkSoft)
-
-                        BigMoneyText(value: day.earnedToday, privacy: state.privacyMode)
-                    }
-
-                    HStack(spacing: 18) {
-                        Text("已忍 \(WNFFormat.duration(day.elapsedPaidMinutes))")
-                        Circle().fill(WNFTheme.muted).frame(width: 4, height: 4)
-                        Text("离下班 \(WNFFormat.duration(day.wallToEndMinutes))")
-                    }
-                    .font(.system(size: 13, weight: .heavy))
-                    .foregroundStyle(WNFTheme.inkSoft)
-
-                    ProgressTrack(day: day, startText: state.workStart.clockText, endText: state.workEnd.clockText)
-
-                    if state.isTodaySettled || day.status == .done {
-                        ClockOutCTA(
-                            status: day.status,
-                            isSettled: state.isTodaySettled,
-                            action: onClockOut
-                        )
-                        .padding(.top, 4)
+                // Only the wage readout actually has to refresh per second —
+                // money ticks up, "已忍" / "离下班" advance, and the progress
+                // bar fills. TopBar, ClockOutCTA, and the mascot live outside
+                // so they don't get diffed every tick. The CTA's visibility
+                // still flips at the workEnd boundary because `displayedStatus`
+                // is updated via `.onChange(of: day.status)` below, which
+                // triggers an outer body rebuild.
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    let day = state.calculation(at: context.date)
+                    LiveWageReadout(
+                        day: day,
+                        statusChipLabel: statusChipLabel,
+                        privacyMode: state.privacyMode,
+                        workStartText: state.workStart.clockText,
+                        workEndText: state.workEnd.clockText
+                    )
+                    .onChange(of: day.status) { _, newStatus in
+                        displayedStatus = newStatus
+                        quoteEngine.setStatus(newStatus)
                     }
                 }
                 .padding(.horizontal, 22)
+
+                if state.isTodaySettled || displayedStatus == .done {
+                    ClockOutCTA(
+                        status: displayedStatus,
+                        isSettled: state.isTodaySettled,
+                        action: onClockOut
+                    )
+                    .padding(.top, 4)
+                    .padding(.horizontal, 22)
+                }
 
                 Spacer(minLength: 16)
 
@@ -130,18 +125,18 @@ private struct HeroHomePage: View {
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
             .overlayPreferenceValue(CoinSourceAnchorKey.self) { anchor in
                 if let anchor {
-                    HomeCoinDropLayer(
-                        day: day,
-                        isSettled: state.isTodaySettled,
-                        sourceFrame: proxy[anchor],
-                        pageSize: proxy.size,
-                        collisionY: coinCollisionY(in: proxy.size)
-                    )
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        let day = state.calculation(at: context.date)
+                        HomeCoinDropLayer(
+                            day: day,
+                            isSettled: state.isTodaySettled,
+                            sourceFrame: proxy[anchor],
+                            pageSize: proxy.size,
+                            collisionY: coinCollisionY(in: proxy.size)
+                        )
+                    }
                 }
             }
-        }
-        .onChange(of: day.status) { _, newStatus in
-            quoteEngine.setStatus(newStatus)
         }
     }
 
@@ -150,6 +145,40 @@ private struct HeroHomePage: View {
             return size.height - 72
         }
         return max(0, size.height - tabBarFloorHeight)
+    }
+}
+
+private struct LiveWageReadout: View {
+    var day: WageDay
+    var statusChipLabel: String
+    var privacyMode: Bool
+    var workStartText: String
+    var workEndText: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            StatusChip(label: statusChipLabel)
+                .padding(.top, 12)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("今 日 窝 囊 费")
+                    .font(.system(size: 13, weight: .heavy))
+                    .tracking(5)
+                    .foregroundStyle(WNFTheme.inkSoft)
+
+                BigMoneyText(value: day.earnedToday, privacy: privacyMode)
+            }
+
+            HStack(spacing: 18) {
+                Text("已忍 \(WNFFormat.duration(day.elapsedPaidMinutes))")
+                Circle().fill(WNFTheme.muted).frame(width: 4, height: 4)
+                Text("离下班 \(WNFFormat.duration(day.wallToEndMinutes))")
+            }
+            .font(.system(size: 13, weight: .heavy))
+            .foregroundStyle(WNFTheme.inkSoft)
+
+            ProgressTrack(day: day, startText: workStartText, endText: workEndText)
+        }
     }
 }
 
@@ -451,6 +480,7 @@ private struct HomeCoinDropLayer: View {
 
     private static let coinsPerBurst = 6
     private static let maxCatchUpBursts = 1
+    private static let pruneIntervalNanoseconds: UInt64 = 500_000_000
 
     private var signal: HomeCoinSignal {
         HomeCoinSignal(
@@ -496,6 +526,20 @@ private struct HomeCoinDropLayer: View {
         .onChange(of: signal) { _, newSignal in
             reconcile(newSignal)
         }
+        .task {
+            // Single shared pruning loop. The previous implementation spawned
+            // one `Task { sleep then mutate state }` per coin — six per burst,
+            // every paid second — which left orphan Tasks writing into a
+            // deallocated view's `@State` when navigating away. One loop tied
+            // to `.task`'s lifecycle auto-cancels on disappear and uses each
+            // coin's own `spawnedAt` + `lifetime` to expire it.
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: Self.pruneIntervalNanoseconds)
+                if Task.isCancelled { return }
+                let now = Date()
+                coins.removeAll { now.timeIntervalSince($0.spawnedAt) >= $0.lifetime }
+            }
+        }
     }
 
     private func primeBaseline() {
@@ -536,19 +580,11 @@ private struct HomeCoinDropLayer: View {
     private func emitCoins(count: Int) {
         guard count > 0, sourceFrame.width > 0, pageSize.height > 0 else { return }
 
+        let now = Date()
         for burstIndex in 0..<count {
-            let coin = HomeFallingCoin(sequence: emissionIndex, burstIndex: burstIndex)
+            let coin = HomeFallingCoin(sequence: emissionIndex, burstIndex: burstIndex, spawnedAt: now)
             emissionIndex += 1
             coins.append(coin)
-            scheduleRemoval(for: coin)
-        }
-    }
-
-    private func scheduleRemoval(for coin: HomeFallingCoin) {
-        let lifetimeNanoseconds = UInt64((1.45 + coin.delay) * 1_000_000_000)
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: lifetimeNanoseconds)
-            coins.removeAll { $0.id == coin.id }
         }
     }
 }
@@ -568,8 +604,9 @@ private struct HomeFallingCoin: Identifiable, Equatable {
     var drift: CGFloat
     var rotation: Double
     var bounceHeight: CGFloat
+    var spawnedAt: Date
 
-    init(sequence: Int, burstIndex: Int) {
+    init(sequence: Int, burstIndex: Int, spawnedAt: Date) {
         self.sequence = sequence
         lane = sequence % 5
         size = CGFloat(21 + (sequence % 5) * 3)
@@ -581,7 +618,13 @@ private struct HomeFallingCoin: Identifiable, Equatable {
         let rotationDirection = sequence.isMultiple(of: 2) ? -1.0 : 1.0
         rotation = rotationDirection * Double(210 + (sequence % 6) * 32)
         bounceHeight = CGFloat(26 + (sequence % 4) * 9)
+        self.spawnedAt = spawnedAt
     }
+
+    /// Total time the coin should live in the view tree. Matches the upper
+    /// bound of the multi-stage spring animation (~1.0s) plus a small buffer
+    /// so the final `opacity: 0` phase has time to complete before removal.
+    var lifetime: TimeInterval { 1.45 + delay }
 }
 
 private struct HomeDroppingCoin: View {

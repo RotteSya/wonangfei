@@ -44,6 +44,56 @@ struct ShareCardCopy: Equatable {
     }
 }
 
+/// Every tunable knob of the Dynamic-Island genie emergence. Defaults are the
+/// shipping values; the DEBUG tuner mutates a copy live so the whole animation
+/// can be dialled in without rebuilding.
+struct GenieParams: Equatable {
+    // Timing
+    var duration: Double = 1.5           // emergence (present) seconds
+    var dismissDuration: Double = 0.34   // furl-back (dismiss) seconds
+    // Easing — the two cubic-bézier control points of the present curve.
+    var ease1x: Double = 0.32
+    var ease1y: Double = 0.72
+    var ease2x: Double = 0.0
+    var ease2y: Double = 1.0
+
+    // Genie warp
+    var neckWidth: CGFloat = 65          // width of the island slot the card necks into — funnel TOP (pt)
+    var bottomWidth: CGFloat = 155       // funnel's wide end — the card BOTTOM during the warp (pt)
+    var neckLen: CGFloat = 1.0           // funnel throat length (fraction of the card, 0…1)
+    var unpinchStart: CGFloat = 0.55     // progress at which the neck starts releasing
+    var squish: CGFloat = 1.0            // vertical squeeze into the slot (1 = full genie, 0 = none)
+    var curve: CGFloat = 2.45            // funnel side shape (1 = straight, >1 = curved/concave)
+
+    // Landing
+    var restDrop: CGFloat = 115          // how far below the island the settled card drops (pt)
+
+    // Island capsule
+    var expandedHeight: CGFloat = 41     // how tall the capsule opens (pt)
+    var capsuleRise: CGFloat = 0.18      // it reaches full open over this much progress
+    var capsuleFallStart: CGFloat = 0.60 // …then snaps back to compact from here
+
+    // Card placement
+    var cardWidth: CGFloat = 327         // resting card width (pt, capped to screen)
+    var cardTopGap: CGFloat = 0          // extra gap below the island lip (pt)
+
+    // Shadow
+    var shadowOpacity: Double = 0.22
+    var shadowRadius: CGFloat = 22
+    var shadowY: CGFloat = 14
+    var shadowFadeStart: CGFloat = 0.20  // shadow fades in across this progress window
+    var shadowFadeEnd: CGFloat = 0.85
+
+    var presentAnimation: Animation {
+        .timingCurve(ease1x, ease1y, ease2x, ease2y, duration: duration)
+    }
+    var dismissAnimation: Animation {
+        .timingCurve(ease1x, ease1y, ease2x, ease2y, duration: dismissDuration)
+    }
+
+    static let `default` = GenieParams()
+}
+
 struct ShareCardBackdrop: View {
     var isPresented: Bool
     var onDismiss: () -> Void
@@ -59,37 +109,295 @@ struct ShareCardBackdrop: View {
     }
 }
 
+/// The share card "unfurls" out of the Dynamic Island: a black capsule at the
+/// island position stretches open, the card pours out of its lower edge while a
+/// rounded-rect reveal window grows (height first, then width), and finally the
+/// card detaches downward as the capsule snaps back to its compact shape. On a
+/// real Dynamic Island device the drawn capsule sits exactly over the hardware
+/// island, so the card genuinely appears to be born from it; on notch/older
+/// devices we skip the capsule and unfurl from the top edge instead.
+///
+/// One curve drives everything — the design system's only ease,
+/// cubic-bezier(.32,.72,0,1). All geometry is a pure function of `reveal`
+/// (0 = furled into the island, 1 = resting card), so dismissal reverses for free.
 struct ShareCardOverlay: View {
+    var isPresented: Bool
     var day: WageDay
     var copy: ShareCardCopy
     @Binding var hidesSensitiveInfo: Bool
     var isPreparingShare: Bool
+    var params: GenieParams = .default
     var onShare: () -> Void
     var onDismiss: () -> Void
 
+    @State private var reveal: CGFloat = 0
+    @State private var cardSize: CGSize = .zero
+
+    private var isActive: Bool { isPresented || reveal > 0.001 }
+
     var body: some View {
-        ZStack {
-            WonangfeiShareCard(
-                day: day,
-                copy: copy,
-                hidesSensitiveInfo: hidesSensitiveInfo,
-                showsControls: true,
-                isPreparingShare: isPreparingShare,
-                onTogglePrivacy: {
-                    withAnimation(.snappy(duration: 0.18)) {
-                        hidesSensitiveInfo.toggle()
+        GeometryReader { proxy in
+            let island = IslandMetrics(topInset: proxy.safeAreaInsets.top)
+            let centerX = proxy.size.width / 2
+            let cardWidth = min(proxy.size.width - 24, params.cardWidth)
+            let p = reveal
+
+            ZStack(alignment: .topLeading) {
+                if isActive {
+                    unfurlingCard(p: p, island: island, centerX: centerX, cardWidth: cardWidth)
+                    if island.hasIsland {
+                        islandCapsule(p: p, island: island, centerX: centerX)
                     }
-                },
-                onShare: onShare,
-                onDismiss: onDismiss
-            )
-            .frame(maxWidth: 330)
-            .padding(.horizontal, 41)
-            .shadow(color: .black.opacity(0.24), radius: 24, y: 16)
-            .offset(y: 8)
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .ignoresSafeArea(.container, edges: .all)
+        .allowsHitTesting(isPresented)
+        .onChange(of: isPresented) { _, presented in
+            if presented {
+                // Insert the card sucked into the slot (reveal 0) THIS runloop, then
+                // animate out NEXT runloop — otherwise the freshly-inserted view has
+                // no "from" state and the genie snaps straight to the resting card.
+                reveal = 0
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                DispatchQueue.main.async {
+                    withAnimation(params.presentAnimation) { reveal = 1 }
+                }
+            } else {
+                withAnimation(params.dismissAnimation) { reveal = 0 }
+            }
+        }
+    }
+
+    private func unfurlingCard(p: CGFloat, island: IslandMetrics, centerX: CGFloat, cardWidth: CGFloat) -> some View {
+        let cardH = max(cardSize.height, 1)
+        // The box is pinned flush to the island's lower lip (+ optional gap); the
+        // genie warp does all the motion within it (and is the identity at rest,
+        // so the resting card is crisp and its buttons hit-test).
+        let topY = island.compactBottomY + params.cardTopGap
+
+        return WonangfeiShareCard(
+            day: day,
+            copy: copy,
+            hidesSensitiveInfo: hidesSensitiveInfo,
+            showsControls: true,
+            isPreparingShare: isPreparingShare,
+            onTogglePrivacy: {
+                withAnimation(.snappy(duration: 0.18)) {
+                    hidesSensitiveInfo.toggle()
+                }
+            },
+            onShare: onShare,
+            onDismiss: onDismiss
+        )
+        .frame(width: cardWidth)
+        .background(
+            GeometryReader { geo in
+                Color.clear.preference(key: ShareCardSizeKey.self, value: geo.size)
+            }
+        )
+        // Animatable wrapper: a Shader uniform is NOT animatable, so passing the
+        // distortion progress directly would snap to the final value (no warp).
+        // Driving it through `animatableData` re-evaluates the effect every frame.
+        .modifier(GenieEmergence(progress: p, size: CGSize(width: cardWidth, height: cardH), params: params))
+        .position(x: centerX, y: topY + cardH / 2)
+        .onPreferenceChange(ShareCardSizeKey.self) { cardSize = $0 }
+    }
+
+    private func islandCapsule(p: CGFloat, island: IslandMetrics, centerX: CGFloat) -> some View {
+        // The capsule's size is non-monotonic in progress (open a little, then
+        // snap back), which `withAnimation`'s endpoint interpolation would skip —
+        // so its frame is driven per-frame through an animatable modifier too.
+        Capsule(style: .continuous)
+            .fill(.black)
+            .modifier(IslandCapsuleStretch(
+                progress: p,
+                compact: island.compactSize,
+                topY: island.topY,
+                centerX: centerX,
+                params: params
+            ))
+            .allowsHitTesting(false)
+    }
+}
+
+/// Geometry of the Dynamic Island as the source/anchor of the unfurl. Values are
+/// measured in points from the physical top-left of the screen (the overlay
+/// ignores safe area, so the GeometryReader origin is the true top edge).
+private struct IslandMetrics {
+    var hasIsland: Bool
+    var topY: CGFloat
+    var compactSize: CGSize
+    var expandedSize: CGSize
+    var detachGap: CGFloat
+
+    init(topInset: CGFloat) {
+        // Dynamic Island devices report a ~59pt top inset; notch devices ~44–50pt.
+        let island = topInset >= 51
+        hasIsland = island
+        if island {
+            topY = 11
+            compactSize = CGSize(width: 126, height: 37.33)
+            expandedSize = CGSize(width: 164, height: 41)   // opens just a little
+            detachGap = 18
+        } else {
+            topY = max(8, topInset * 0.4)
+            compactSize = CGSize(width: 96, height: 30)
+            expandedSize = CGSize(width: 150, height: 34)
+            detachGap = 14
+        }
+    }
+
+    var compactBottomY: CGFloat { topY + compactSize.height }
+}
+
+private struct ShareCardSizeKey: PreferenceKey {
+    static var defaultValue: CGSize = .zero
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+        let next = nextValue()
+        if next != .zero { value = next }
+    }
+}
+
+private func lerp(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat {
+    a + (b - a) * t
+}
+
+/// Hermite smoothstep — eases a sub-range of the master `reveal` progress so
+/// individual properties (width, detach, corner) can lead or trail the reveal.
+private func smoothstep(_ edge0: CGFloat, _ edge1: CGFloat, _ x: CGFloat) -> CGFloat {
+    guard edge1 > edge0 else { return x < edge0 ? 0 : 1 }
+    let t = min(max((x - edge0) / (edge1 - edge0), 0), 1)
+    return t * t * (3 - 2 * t)
+}
+
+/// The funnel silhouette the genie-warped card is clipped to — pinched to the
+/// island neck at the top, flaring to full width below, occupying the top
+/// `progress` fraction of the card. Kept in lock-step with the `genie` shader's
+/// `halfWidth`/`vFront` so the warp and the clip share one outline. At progress
+/// 1 it's the full card rectangle (identity), matching the shader.
+private struct GenieFunnelShape: Shape {
+    var progress: CGFloat
+    var neckHalf: CGFloat
+    var neckLen: CGFloat = 1.0
+    var unpinchStart: CGFloat = 0.80
+    var curve: CGFloat = 2.5
+    var bottomHalf: CGFloat = 170
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let p = min(max(progress, 0), 1)
+        if p >= 0.999 {
+            path.addRect(rect)
+            return path
+        }
+
+        let w = rect.width
+        let h = rect.height
+        let center = rect.midX
+        let fullHalf = w / 2
+        let vFront = max(p, 0.001)
+        let steps = 28
+        let unpinch = smoothstep(unpinchStart, 1.0, p)
+
+        func halfWidth(atVis s: CGFloat) -> CGFloat {
+            let t = min(max(s / max(neckLen, 0.001), 0), 1)
+            let funnelT = CGFloat(pow(Double(t), Double(max(curve, 0.05))))
+            let funnel = lerp(neckHalf, bottomHalf, funnelT)
+            return max(lerp(funnel, fullHalf, unpinch), 1)
+        }
+
+        var leftEdge: [CGPoint] = []
+        for i in 0...steps {
+            let v = vFront * CGFloat(i) / CGFloat(steps)   // output v in [0, vFront]
+            let hw = halfWidth(atVis: v / vFront)
+            let y = v * h
+            if i == 0 {
+                path.move(to: CGPoint(x: center + hw, y: y))
+            } else {
+                path.addLine(to: CGPoint(x: center + hw, y: y))
+            }
+            leftEdge.append(CGPoint(x: center - hw, y: y))
+        }
+        for point in leftEdge.reversed() {
+            path.addLine(to: point)
+        }
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// Drives the genie distortion per-frame. A `Shader` argument is not animatable,
+/// so the distortion must be reapplied for each interpolated `progress` — which a
+/// custom `Animatable` modifier does (SwiftUI steps `animatableData` and re-runs
+/// `body` every frame). The funnel mask and shadow ride the same progress so they
+/// stay locked to the warp.
+private struct GenieEmergence: ViewModifier, Animatable {
+    var progress: CGFloat
+    var size: CGSize
+    var params: GenieParams
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        let neckHalf = params.neckWidth / 2
+        let shadowP = smoothstep(params.shadowFadeStart, params.shadowFadeEnd, progress)
+        // The card emerges from the island, then drops to its landing as it settles.
+        let drop = params.restDrop * smoothstep(0.5, 1.0, progress)
+        return content
+            .distortionEffect(
+                ShaderLibrary.genie(
+                    .float2(size.width, size.height),
+                    .float(progress),
+                    .float(neckHalf),
+                    .float(size.width / 2),
+                    .float(params.neckLen),
+                    .float(params.unpinchStart),
+                    .float(params.squish),
+                    .float(params.curve),
+                    .float(params.bottomWidth / 2)
+                ),
+                maxSampleOffset: size
+            )
+            .mask(GenieFunnelShape(progress: progress, neckHalf: neckHalf, neckLen: params.neckLen, unpinchStart: params.unpinchStart, curve: params.curve, bottomHalf: params.bottomWidth / 2))
+            .shadow(color: .black.opacity(params.shadowOpacity * shadowP), radius: params.shadowRadius, y: params.shadowY)
+            .offset(y: drop)
+    }
+}
+
+/// Per-frame stretch of the faux Dynamic Island capsule. Its size rises then
+/// falls across the emergence, so it must be recomputed every frame rather than
+/// interpolated between endpoints.
+private struct IslandCapsuleStretch: ViewModifier, Animatable {
+    var progress: CGFloat
+    var compact: CGSize
+    var topY: CGFloat
+    var centerX: CGFloat
+    var params: GenieParams
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        let rise = min(progress / max(params.capsuleRise, 0.01), 1)
+        let fall = smoothstep(params.capsuleFallStart, 1.0, progress)
+        let stretch = rise * (1 - fall)
+        let w = lerp(compact.width, params.neckWidth, stretch)
+        let h = lerp(compact.height, params.expandedHeight, stretch)
+        return content
+            .frame(width: w, height: h)
+            .position(x: centerX, y: topY + h / 2)
     }
 }
 

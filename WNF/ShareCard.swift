@@ -44,19 +44,46 @@ struct ShareCardCopy: Equatable {
     }
 }
 
-/// Tunable knobs for the Dynamic-Island genie emergence. Defaults are the
-/// shipping values; the DEBUG tuner mutates a copy live so the animation can be
-/// dialled in without rebuilding.
+/// Every tunable knob of the Dynamic-Island genie emergence. Defaults are the
+/// shipping values; the DEBUG tuner mutates a copy live so the whole animation
+/// can be dialled in without rebuilding.
 struct GenieParams: Equatable {
-    /// Emergence duration (seconds).
-    var duration: Double = 0.62
-    /// Width of the island "slot" the card necks into (points).
-    var neckWidth: CGFloat = 164
-    /// Funnel throat length as a fraction of the card (0…1): how much of the card
-    /// tapers into the neck vs. sits at full width.
-    var neckLen: CGFloat = 0.70
-    /// Progress (0…1) at which the neck pinch starts releasing toward the full card.
-    var unpinchStart: CGFloat = 0.78
+    // Timing
+    var duration: Double = 0.62          // emergence (present) seconds
+    var dismissDuration: Double = 0.34   // furl-back (dismiss) seconds
+    // Easing — the two cubic-bézier control points of the present curve.
+    var ease1x: Double = 0.32
+    var ease1y: Double = 0.72
+    var ease2x: Double = 0.0
+    var ease2y: Double = 1.0
+
+    // Genie warp
+    var neckWidth: CGFloat = 164         // width of the island slot the card necks into (pt)
+    var neckLen: CGFloat = 0.70          // funnel throat length (fraction of the card, 0…1)
+    var unpinchStart: CGFloat = 0.78     // progress at which the neck starts releasing
+
+    // Island capsule
+    var expandedHeight: CGFloat = 41     // how tall the capsule opens (pt)
+    var capsuleRise: CGFloat = 0.18      // it reaches full open over this much progress
+    var capsuleFallStart: CGFloat = 0.60 // …then snaps back to compact from here
+
+    // Card placement
+    var cardWidth: CGFloat = 340         // resting card width (pt, capped to screen)
+    var cardTopGap: CGFloat = 0          // extra gap below the island lip (pt)
+
+    // Shadow
+    var shadowOpacity: Double = 0.22
+    var shadowRadius: CGFloat = 22
+    var shadowY: CGFloat = 14
+    var shadowFadeStart: CGFloat = 0.20  // shadow fades in across this progress window
+    var shadowFadeEnd: CGFloat = 0.85
+
+    var presentAnimation: Animation {
+        .timingCurve(ease1x, ease1y, ease2x, ease2y, duration: duration)
+    }
+    var dismissAnimation: Animation {
+        .timingCurve(ease1x, ease1y, ease2x, ease2y, duration: dismissDuration)
+    }
 
     static let `default` = GenieParams()
 }
@@ -103,9 +130,6 @@ struct ShareCardOverlay: View {
     @State private var reveal: CGFloat = 0
     @State private var cardSize: CGSize = .zero
 
-    private var unfurlIn: Animation { .timingCurve(0.32, 0.72, 0, 1, duration: params.duration) }
-    private static let unfurlOut = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.34)
-
     private var displayReveal: CGFloat { scrub ?? reveal }
     private var isActive: Bool { isPresented || reveal > 0.001 || scrub != nil }
 
@@ -113,7 +137,7 @@ struct ShareCardOverlay: View {
         GeometryReader { proxy in
             let island = IslandMetrics(topInset: proxy.safeAreaInsets.top)
             let centerX = proxy.size.width / 2
-            let cardWidth = min(proxy.size.width - 52, 340)
+            let cardWidth = min(proxy.size.width - 24, params.cardWidth)
             let p = displayReveal
 
             ZStack(alignment: .topLeading) {
@@ -136,21 +160,20 @@ struct ShareCardOverlay: View {
                 reveal = 0
                 UIImpactFeedbackGenerator(style: .soft).impactOccurred()
                 DispatchQueue.main.async {
-                    withAnimation(unfurlIn) { reveal = 1 }
+                    withAnimation(params.presentAnimation) { reveal = 1 }
                 }
             } else {
-                withAnimation(Self.unfurlOut) { reveal = 0 }
+                withAnimation(params.dismissAnimation) { reveal = 0 }
             }
         }
     }
 
     private func unfurlingCard(p: CGFloat, island: IslandMetrics, centerX: CGFloat, cardWidth: CGFloat) -> some View {
         let cardH = max(cardSize.height, 1)
-        let neckHalf = params.neckWidth / 2
-        // The box is pinned flush to the island's lower lip; the genie warp does
-        // all the motion within it (and is the identity at rest, so the resting
-        // card is crisp and its buttons hit-test).
-        let topY = island.compactBottomY
+        // The box is pinned flush to the island's lower lip (+ optional gap); the
+        // genie warp does all the motion within it (and is the identity at rest,
+        // so the resting card is crisp and its buttons hit-test).
+        let topY = island.compactBottomY + params.cardTopGap
 
         return WonangfeiShareCard(
             day: day,
@@ -175,13 +198,7 @@ struct ShareCardOverlay: View {
         // Animatable wrapper: a Shader uniform is NOT animatable, so passing the
         // distortion progress directly would snap to the final value (no warp).
         // Driving it through `animatableData` re-evaluates the effect every frame.
-        .modifier(GenieEmergence(
-            progress: p,
-            size: CGSize(width: cardWidth, height: cardH),
-            neckHalf: neckHalf,
-            neckLen: params.neckLen,
-            unpinchStart: params.unpinchStart
-        ))
+        .modifier(GenieEmergence(progress: p, size: CGSize(width: cardWidth, height: cardH), params: params))
         .position(x: centerX, y: topY + cardH / 2)
         .onPreferenceChange(ShareCardSizeKey.self) { cardSize = $0 }
     }
@@ -195,9 +212,9 @@ struct ShareCardOverlay: View {
             .modifier(IslandCapsuleStretch(
                 progress: p,
                 compact: island.compactSize,
-                expanded: CGSize(width: params.neckWidth, height: island.expandedSize.height),
                 topY: island.topY,
-                centerX: centerX
+                centerX: centerX,
+                params: params
             ))
             .allowsHitTesting(false)
     }
@@ -318,9 +335,7 @@ private struct GenieFunnelShape: Shape {
 private struct GenieEmergence: ViewModifier, Animatable {
     var progress: CGFloat
     var size: CGSize
-    var neckHalf: CGFloat
-    var neckLen: CGFloat
-    var unpinchStart: CGFloat
+    var params: GenieParams
 
     var animatableData: CGFloat {
         get { progress }
@@ -328,7 +343,8 @@ private struct GenieEmergence: ViewModifier, Animatable {
     }
 
     func body(content: Content) -> some View {
-        let shadowP = smoothstep(0.2, 0.85, progress)
+        let neckHalf = params.neckWidth / 2
+        let shadowP = smoothstep(params.shadowFadeStart, params.shadowFadeEnd, progress)
         return content
             .distortionEffect(
                 ShaderLibrary.genie(
@@ -336,13 +352,13 @@ private struct GenieEmergence: ViewModifier, Animatable {
                     .float(progress),
                     .float(neckHalf),
                     .float(size.width / 2),
-                    .float(neckLen),
-                    .float(unpinchStart)
+                    .float(params.neckLen),
+                    .float(params.unpinchStart)
                 ),
                 maxSampleOffset: size
             )
-            .mask(GenieFunnelShape(progress: progress, neckHalf: neckHalf, neckLen: neckLen, unpinchStart: unpinchStart))
-            .shadow(color: .black.opacity(0.22 * shadowP), radius: 22, y: 14)
+            .mask(GenieFunnelShape(progress: progress, neckHalf: neckHalf, neckLen: params.neckLen, unpinchStart: params.unpinchStart))
+            .shadow(color: .black.opacity(params.shadowOpacity * shadowP), radius: params.shadowRadius, y: params.shadowY)
     }
 }
 
@@ -352,9 +368,9 @@ private struct GenieEmergence: ViewModifier, Animatable {
 private struct IslandCapsuleStretch: ViewModifier, Animatable {
     var progress: CGFloat
     var compact: CGSize
-    var expanded: CGSize
     var topY: CGFloat
     var centerX: CGFloat
+    var params: GenieParams
 
     var animatableData: CGFloat {
         get { progress }
@@ -362,11 +378,11 @@ private struct IslandCapsuleStretch: ViewModifier, Animatable {
     }
 
     func body(content: Content) -> some View {
-        let rise = min(progress / 0.18, 1)
-        let fall = smoothstep(0.6, 1.0, progress)
+        let rise = min(progress / max(params.capsuleRise, 0.01), 1)
+        let fall = smoothstep(params.capsuleFallStart, 1.0, progress)
         let stretch = rise * (1 - fall)
-        let w = lerp(compact.width, expanded.width, stretch)
-        let h = lerp(compact.height, expanded.height, stretch)
+        let w = lerp(compact.width, params.neckWidth, stretch)
+        let h = lerp(compact.height, params.expandedHeight, stretch)
         return content
             .frame(width: w, height: h)
             .position(x: centerX, y: topY + h / 2)
@@ -416,31 +432,84 @@ struct GenieTunerView: View {
             }
             .controlSize(.small)
 
+            // Scrub stays pinned above the scroll so it's always reachable.
             sliderRow("进度", $scrub, 0...1)
-            sliderRow("时长 s", durationBinding, 0.2...1.5)
-            sliderRow("颈宽 pt", $params.neckWidth, 80...340, "%.0f")
-            sliderRow("喉长", $params.neckLen, 0.1...1.0)
-            sliderRow("松弛点", $params.unpinchStart, 0.4...0.98)
 
-            Text(String(format: "duration %.2f · neckWidth %.0f · neckLen %.2f · unpinchStart %.2f",
-                        params.duration, params.neckWidth, params.neckLen, params.unpinchStart))
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
+                    section("时间")
+                    sliderRow("展开 s", dbl(\.duration), 0.15...1.5)
+                    sliderRow("收起 s", dbl(\.dismissDuration), 0.1...1.0)
+
+                    section("缓动曲线 (cubic-bézier)")
+                    sliderRow("c1x", dbl(\.ease1x), 0...1)
+                    sliderRow("c1y", dbl(\.ease1y), -0.4...1.6)
+                    sliderRow("c2x", dbl(\.ease2x), 0...1)
+                    sliderRow("c2y", dbl(\.ease2y), -0.4...1.6)
+
+                    section("形变")
+                    sliderRow("颈宽 pt", $params.neckWidth, 60...340, "%.0f")
+                    sliderRow("喉长", $params.neckLen, 0.1...1.0)
+                    sliderRow("松弛点", $params.unpinchStart, 0.3...0.98)
+
+                    section("灵动岛")
+                    sliderRow("开高 pt", $params.expandedHeight, 37...90, "%.0f")
+                    sliderRow("张开速度", $params.capsuleRise, 0.05...0.6)
+                    sliderRow("回缩点", $params.capsuleFallStart, 0.3...0.95)
+
+                    section("卡片")
+                    sliderRow("宽度 pt", $params.cardWidth, 240...380, "%.0f")
+                    sliderRow("顶距 pt", $params.cardTopGap, -12...60, "%.0f")
+
+                    section("阴影")
+                    sliderRow("浓度", dbl(\.shadowOpacity), 0...0.5)
+                    sliderRow("半径 pt", $params.shadowRadius, 0...40, "%.0f")
+                    sliderRow("Y 偏移", $params.shadowY, 0...30, "%.0f")
+                    sliderRow("淡入起", $params.shadowFadeStart, 0...0.8)
+                    sliderRow("淡入止", $params.shadowFadeEnd, 0.2...1.0)
+
+                    Text(summary)
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .padding(.top, 6)
+                }
+                .padding(.trailing, 2)
+            }
+            .frame(maxHeight: 280)
         }
         .padding(14)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 10)
         .padding(.bottom, 6)
     }
 
-    private var durationBinding: Binding<CGFloat> {
-        Binding(get: { CGFloat(params.duration) }, set: { params.duration = Double($0) })
+    private var summary: String {
+        String(format: "d=%.2f dis=%.2f ease=(%.2f,%.2f,%.2f,%.2f) neckW=%.0f neckLen=%.2f unpinch=%.2f expH=%.0f rise=%.2f fall=%.2f cardW=%.0f gap=%.0f shadow=(%.2f,%.0f,%.0f,%.2f,%.2f)",
+                     params.duration, params.dismissDuration,
+                     params.ease1x, params.ease1y, params.ease2x, params.ease2y,
+                     params.neckWidth, params.neckLen, params.unpinchStart,
+                     params.expandedHeight, params.capsuleRise, params.capsuleFallStart,
+                     params.cardWidth, params.cardTopGap,
+                     params.shadowOpacity, params.shadowRadius, params.shadowY,
+                     params.shadowFadeStart, params.shadowFadeEnd)
+    }
+
+    private func section(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 11, weight: .heavy))
+            .foregroundStyle(.secondary)
+            .padding(.top, 5)
+    }
+
+    /// Binding adapter for the `Double`-typed params (sliders work in CGFloat).
+    private func dbl(_ kp: WritableKeyPath<GenieParams, Double>) -> Binding<CGFloat> {
+        Binding(get: { CGFloat(params[keyPath: kp]) }, set: { params[keyPath: kp] = Double($0) })
     }
 
     private func sliderRow(_ label: String, _ value: Binding<CGFloat>, _ range: ClosedRange<Double>, _ fmt: String = "%.2f") -> some View {
         HStack(spacing: 10) {
-            Text(label).font(.system(size: 12, weight: .medium)).frame(width: 56, alignment: .leading)
+            Text(label).font(.system(size: 12, weight: .medium)).frame(width: 64, alignment: .leading)
             Slider(value: Binding(get: { Double(value.wrappedValue) }, set: { value.wrappedValue = CGFloat($0) }), in: range)
             Text(String(format: fmt, value.wrappedValue)).font(.system(size: 12, design: .monospaced)).frame(width: 46, alignment: .trailing)
         }
@@ -449,9 +518,7 @@ struct GenieTunerView: View {
     private func play() {
         scrub = 0
         DispatchQueue.main.async {
-            withAnimation(.timingCurve(0.32, 0.72, 0, 1, duration: params.duration)) {
-                scrub = 1
-            }
+            withAnimation(params.presentAnimation) { scrub = 1 }
         }
     }
 }

@@ -109,6 +109,104 @@ struct ShareCardBackdrop: View {
     }
 }
 
+/// Custom bottom share panel that rises from the bottom IN SYNC with the genie
+/// card (same present/dismiss curve as `GenieParams`). Built entirely in SwiftUI
+/// — the system `UIActivityViewController` is slow to spin up, so it is NOT on
+/// the auto-present path; the fast actions (save / copy) are handled directly
+/// and the system sheet is only reached on demand via 更多.
+struct ShareActionPanel: View {
+    var isPresented: Bool
+    var isPreparingShare: Bool
+    var onSaveAlbum: () -> Void
+    var onCopy: () -> Void
+    var onMore: () -> Void
+    var onCancel: () -> Void
+
+    @State private var shown = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            panel
+                .offset(y: shown ? 0 : 420)
+                .opacity(shown ? 1 : 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .ignoresSafeArea(.container, edges: .all)
+        .allowsHitTesting(isPresented)
+        .onChange(of: isPresented) { _, presented in
+            withAnimation(presented ? GenieParams.default.presentAnimation : GenieParams.default.dismissAnimation) {
+                shown = presented
+            }
+        }
+    }
+
+    private var panel: some View {
+        VStack(spacing: 14) {
+            Capsule()
+                .fill(WNFTheme.muted.opacity(0.35))
+                .frame(width: 38, height: 5)
+                .padding(.top, 9)
+
+            HStack(alignment: .top, spacing: 10) {
+                action("保存到相册", systemName: "square.and.arrow.down", action: onSaveAlbum)
+                action("拷贝图片", systemName: "doc.on.doc", action: onCopy)
+                action("更多", systemName: "ellipsis", isLoading: isPreparingShare, action: onMore)
+            }
+
+            Button(action: onCancel) {
+                Text("取消")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(WNFTheme.ink)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(WNFTheme.surfaceSoft, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 30)
+        .background(
+            UnevenRoundedRectangle(topLeadingRadius: 28, topTrailingRadius: 28, style: .continuous)
+                .fill(WNFTheme.bg)
+                .overlay(
+                    UnevenRoundedRectangle(topLeadingRadius: 28, topTrailingRadius: 28, style: .continuous)
+                        .stroke(Color.white.opacity(0.6), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.14), radius: 20, y: -4)
+        )
+        .padding(.horizontal, 8)
+    }
+
+    private func action(_ label: String, systemName: String, isLoading: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 7) {
+                ZStack {
+                    Circle()
+                        .fill(Color.white)
+                        .overlay(Circle().stroke(WNFTheme.hairline, lineWidth: 0.5))
+                        .shadow(color: .black.opacity(0.05), radius: 5, y: 2)
+                    if isLoading {
+                        ProgressView().tint(WNFTheme.ink).scaleEffect(0.78)
+                    } else {
+                        Image(systemName: systemName)
+                            .font(.system(size: 21, weight: .semibold))
+                            .foregroundStyle(WNFTheme.ink)
+                    }
+                }
+                .frame(width: 58, height: 58)
+
+                Text(label)
+                    .font(.system(size: 11, weight: .heavy))
+                    .foregroundStyle(WNFTheme.inkSoft)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+        .disabled(isLoading)
+    }
+}
+
 /// The share card "unfurls" out of the Dynamic Island: a black capsule at the
 /// island position stretches open, the card pours out of its lower edge while a
 /// rounded-rect reveal window grows (height first, then width), and finally the

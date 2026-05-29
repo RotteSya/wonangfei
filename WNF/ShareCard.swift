@@ -82,8 +82,8 @@ struct ShareCardOverlay: View {
     @State private var reveal: CGFloat = 0
     @State private var cardSize: CGSize = .zero
 
-    private static let unfurlIn = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.5)
-    private static let unfurlOut = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.32)
+    private static let unfurlIn = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.62)
+    private static let unfurlOut = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.34)
 
     private var isActive: Bool { isPresented || reveal > 0.001 }
 
@@ -108,8 +108,14 @@ struct ShareCardOverlay: View {
         .allowsHitTesting(isPresented)
         .onChange(of: isPresented) { _, presented in
             if presented {
+                // Insert the card sucked into the slot (reveal 0) THIS runloop, then
+                // animate out NEXT runloop — otherwise the freshly-inserted view has
+                // no "from" state and the genie snaps straight to the resting card.
+                reveal = 0
                 UIImpactFeedbackGenerator(style: .soft).impactOccurred()
-                withAnimation(Self.unfurlIn) { reveal = 1 }
+                DispatchQueue.main.async {
+                    withAnimation(Self.unfurlIn) { reveal = 1 }
+                }
             } else {
                 withAnimation(Self.unfurlOut) { reveal = 0 }
             }
@@ -119,17 +125,10 @@ struct ShareCardOverlay: View {
     private func unfurlingCard(p: CGFloat, island: IslandMetrics, centerX: CGFloat, cardWidth: CGFloat) -> some View {
         let cardH = max(cardSize.height, 1)
         let neckHalf = island.expandedSize.width / 2
-
-        // Genie / Command-M warp. The card is rendered ONCE at full size; the
-        // `genie` Metal distortion then pushes those finished pixels out of the
-        // island slot — pinched into the neck and decompressing downward — exactly
-        // like macOS minimize in reverse. A matching funnel mask supplies the clean
-        // edges so the shader only has to do the deformation. At p == 1 both are
-        // the identity, so the resting card is crisp and its buttons hit-test.
-        let shadowP = smoothstep(0.2, 0.85, p)
-        // Detaches from the island's lip only at the very end, as it settles.
-        let detach = smoothstep(0.72, 1.0, p)
-        let topY = island.compactBottomY + island.detachGap * detach
+        // The box is pinned flush to the island's lower lip; the genie warp does
+        // all the motion within it (and is the identity at rest, so the resting
+        // card is crisp and its buttons hit-test).
+        let topY = island.compactBottomY
 
         return WonangfeiShareCard(
             day: day,
@@ -151,37 +150,27 @@ struct ShareCardOverlay: View {
                 Color.clear.preference(key: ShareCardSizeKey.self, value: geo.size)
             }
         )
-        .distortionEffect(
-            ShaderLibrary.genie(
-                .float2(cardWidth, cardH),
-                .float(p),
-                .float(neckHalf),
-                .float(cardWidth / 2)
-            ),
-            maxSampleOffset: CGSize(width: cardWidth, height: cardH)
-        )
-        .mask(
-            GenieFunnelShape(progress: p, neckHalf: neckHalf)
-                .frame(width: cardWidth, height: cardH)
-        )
-        .shadow(color: .black.opacity(0.22 * shadowP), radius: 22, y: 14)
+        // Animatable wrapper: a Shader uniform is NOT animatable, so passing the
+        // distortion progress directly would snap to the final value (no warp).
+        // Driving it through `animatableData` re-evaluates the effect every frame.
+        .modifier(GenieEmergence(progress: p, size: CGSize(width: cardWidth, height: cardH), neckHalf: neckHalf))
         .position(x: centerX, y: topY + cardH / 2)
         .onPreferenceChange(ShareCardSizeKey.self) { cardSize = $0 }
     }
 
     private func islandCapsule(p: CGFloat, island: IslandMetrics, centerX: CGFloat) -> some View {
-        // The capsule opens just a little as the card is pushed out, then snaps
-        // back to compact — at rest it matches the hardware island exactly.
-        let rise = min(p / 0.18, 1)
-        let fall = smoothstep(0.6, 1.0, p)
-        let stretch = rise * (1 - fall)
-        let w = lerp(island.compactSize.width, island.expandedSize.width, stretch)
-        let h = lerp(island.compactSize.height, island.expandedSize.height, stretch)
-
-        return Capsule(style: .continuous)
+        // The capsule's size is non-monotonic in progress (open a little, then
+        // snap back), which `withAnimation`'s endpoint interpolation would skip —
+        // so its frame is driven per-frame through an animatable modifier too.
+        Capsule(style: .continuous)
             .fill(.black)
-            .frame(width: w, height: h)
-            .position(x: centerX, y: island.topY + h / 2)
+            .modifier(IslandCapsuleStretch(
+                progress: p,
+                compact: island.compactSize,
+                expanded: island.expandedSize,
+                topY: island.topY,
+                centerX: centerX
+            ))
             .allowsHitTesting(false)
     }
 }
@@ -244,7 +233,7 @@ private func smoothstep(_ edge0: CGFloat, _ edge1: CGFloat, _ x: CGFloat) -> CGF
 private struct GenieFunnelShape: Shape {
     var progress: CGFloat
     var neckHalf: CGFloat
-    var neckLen: CGFloat = 0.42
+    var neckLen: CGFloat = 0.70
 
     var animatableData: CGFloat {
         get { progress }
@@ -265,10 +254,11 @@ private struct GenieFunnelShape: Shape {
         let fullHalf = w / 2
         let vFront = max(p, 0.001)
         let steps = 28
+        let unpinch = smoothstep(0.78, 1.0, p)
 
         func halfWidth(atSourceV s: CGFloat) -> CGFloat {
             let funnel = lerp(neckHalf, fullHalf, smoothstep(0, neckLen, s))
-            return max(lerp(funnel, fullHalf, p), 1)
+            return max(lerp(funnel, fullHalf, unpinch), 1)
         }
 
         var leftEdge: [CGPoint] = []
@@ -288,6 +278,65 @@ private struct GenieFunnelShape: Shape {
         }
         path.closeSubpath()
         return path
+    }
+}
+
+/// Drives the genie distortion per-frame. A `Shader` argument is not animatable,
+/// so the distortion must be reapplied for each interpolated `progress` — which a
+/// custom `Animatable` modifier does (SwiftUI steps `animatableData` and re-runs
+/// `body` every frame). The funnel mask and shadow ride the same progress so they
+/// stay locked to the warp.
+private struct GenieEmergence: ViewModifier, Animatable {
+    var progress: CGFloat
+    var size: CGSize
+    var neckHalf: CGFloat
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        let shadowP = smoothstep(0.2, 0.85, progress)
+        return content
+            .distortionEffect(
+                ShaderLibrary.genie(
+                    .float2(size.width, size.height),
+                    .float(progress),
+                    .float(neckHalf),
+                    .float(size.width / 2)
+                ),
+                maxSampleOffset: size
+            )
+            .mask(GenieFunnelShape(progress: progress, neckHalf: neckHalf))
+            .shadow(color: .black.opacity(0.22 * shadowP), radius: 22, y: 14)
+    }
+}
+
+/// Per-frame stretch of the faux Dynamic Island capsule. Its size rises then
+/// falls across the emergence, so it must be recomputed every frame rather than
+/// interpolated between endpoints.
+private struct IslandCapsuleStretch: ViewModifier, Animatable {
+    var progress: CGFloat
+    var compact: CGSize
+    var expanded: CGSize
+    var topY: CGFloat
+    var centerX: CGFloat
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        let rise = min(progress / 0.18, 1)
+        let fall = smoothstep(0.6, 1.0, progress)
+        let stretch = rise * (1 - fall)
+        let w = lerp(compact.width, expanded.width, stretch)
+        let h = lerp(compact.height, expanded.height, stretch)
+        return content
+            .frame(width: w, height: h)
+            .position(x: centerX, y: topY + h / 2)
     }
 }
 

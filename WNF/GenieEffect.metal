@@ -30,9 +30,10 @@ float2 genie(float2 position, float2 size, float progress, float neckHalf, float
     float vFront = max(p, 0.001);             // how far the card has emerged
     float sourceV = v / vFront;               // decompress the emerged band to the full card
 
-    float neckLen = 0.42;                     // length of the funnel throat (normalized)
+    float neckLen = 0.70;                     // long throat: most of the card necks into the slot
     float funnelHalf = mix(neckHalf, w * 0.5, smoothstep(0.0, neckLen, sourceV));
-    float halfWidth = max(mix(funnelHalf, w * 0.5, p), 1.0);  // relax the pinch as it opens
+    float unpinch = smoothstep(0.78, 1.0, p); // hold the neck pinched, release only at the very end
+    float halfWidth = max(mix(funnelHalf, w * 0.5, unpinch), 1.0);
 
     float dx = position.x - neckCenter;
     float sourceX = neckCenter + dx * (w * 0.5) / halfWidth;

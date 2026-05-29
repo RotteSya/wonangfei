@@ -2,89 +2,6 @@ import AppIntents
 import SwiftUI
 import WidgetKit
 
-private enum WNFWidgetShared {
-    static let appGroupID = "group.com.wonangfei.app"
-    static let widgetSnapshotKey = "wnf.widget.wage.snapshot.v1"
-}
-
-private struct WidgetSnapshot: Codable {
-    static let schemaVersion = 1
-
-    var schemaVersion: Int
-    var capturedAt: Date
-    var earnedToday: Double
-    var elapsedPaidMinutes: Int
-    var workStartMinute: Int
-    var workEndMinute: Int
-    var statusLabel: String
-    var hidesSensitiveInfo: Bool
-
-    static let sample = WidgetSnapshot(
-        schemaVersion: schemaVersion,
-        capturedAt: Date(),
-        earnedToday: 888.88,
-        elapsedPaidMinutes: 188,
-        workStartMinute: 9 * 60 + 30,
-        workEndMinute: 18 * 60 + 30,
-        statusLabel: "正在搬砖",
-        hidesSensitiveInfo: false
-    )
-
-    init(
-        schemaVersion: Int,
-        capturedAt: Date,
-        earnedToday: Double,
-        elapsedPaidMinutes: Int,
-        workStartMinute: Int,
-        workEndMinute: Int,
-        statusLabel: String,
-        hidesSensitiveInfo: Bool = false
-    ) {
-        self.schemaVersion = schemaVersion
-        self.capturedAt = capturedAt
-        self.earnedToday = earnedToday
-        self.elapsedPaidMinutes = elapsedPaidMinutes
-        self.workStartMinute = workStartMinute
-        self.workEndMinute = workEndMinute
-        self.statusLabel = statusLabel
-        self.hidesSensitiveInfo = hidesSensitiveInfo
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case schemaVersion
-        case capturedAt
-        case earnedToday
-        case elapsedPaidMinutes
-        case workStartMinute
-        case workEndMinute
-        case statusLabel
-        case hidesSensitiveInfo
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        let decodedSchemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
-        // A snapshot written by a newer app build must not decode into this older
-        // widget's shape; throw so `loadSnapshot` falls back to `.sample` cleanly (E-9).
-        guard decodedSchemaVersion <= Self.schemaVersion else {
-            throw DecodingError.dataCorrupted(
-                DecodingError.Context(
-                    codingPath: [CodingKeys.schemaVersion],
-                    debugDescription: "Unsupported widget snapshot schema version \(decodedSchemaVersion); newest supported is \(Self.schemaVersion)"
-                )
-            )
-        }
-        schemaVersion = decodedSchemaVersion
-        capturedAt = try container.decode(Date.self, forKey: .capturedAt)
-        earnedToday = try container.decode(Double.self, forKey: .earnedToday)
-        elapsedPaidMinutes = try container.decode(Int.self, forKey: .elapsedPaidMinutes)
-        workStartMinute = try container.decode(Int.self, forKey: .workStartMinute)
-        workEndMinute = try container.decode(Int.self, forKey: .workEndMinute)
-        statusLabel = try container.decode(String.self, forKey: .statusLabel)
-        hidesSensitiveInfo = try container.decodeIfPresent(Bool.self, forKey: .hidesSensitiveInfo) ?? false
-    }
-}
-
 private struct WidgetPalette {
     static let bg = Color(red: 1.0, green: 0.9647, blue: 0.8980)
     static let surface = Color.white
@@ -100,7 +17,7 @@ struct WNFWidgetConfigurationIntent: WidgetConfigurationIntent {
 
 private struct WNFWidgetEntry: TimelineEntry {
     var date: Date
-    var snapshot: WidgetSnapshot
+    var snapshot: WNFWidgetSnapshot
     var isPreview: Bool
 }
 
@@ -118,19 +35,19 @@ private struct WNFWidgetProvider: AppIntentTimelineProvider {
     }
 
     func timeline(for configuration: WNFWidgetConfigurationIntent, in context: Context) async -> Timeline<WNFWidgetEntry> {
-        let snapshot = context.isPreview ? WidgetSnapshot.sample : loadSnapshot() ?? .sample
+        let snapshot = context.isPreview ? WNFWidgetSnapshot.sample : loadSnapshot() ?? .sample
         let entry = WNFWidgetEntry(date: Date(), snapshot: snapshot, isPreview: context.isPreview)
         return Timeline(entries: [entry], policy: reloadPolicy(for: snapshot, now: Date()))
     }
 
-    private func loadSnapshot() -> WidgetSnapshot? {
-        guard let data = UserDefaults(suiteName: WNFWidgetShared.appGroupID)?.data(forKey: WNFWidgetShared.widgetSnapshotKey) else {
+    private func loadSnapshot() -> WNFWidgetSnapshot? {
+        guard let data = UserDefaults(suiteName: WNFShared.appGroupID)?.data(forKey: WNFShared.widgetSnapshotKey) else {
             return nil
         }
-        return try? JSONDecoder().decode(WidgetSnapshot.self, from: data)
+        return try? JSONDecoder().decode(WNFWidgetSnapshot.self, from: data)
     }
 
-    private func reloadPolicy(for snapshot: WidgetSnapshot, now: Date) -> TimelineReloadPolicy {
+    private func reloadPolicy(for snapshot: WNFWidgetSnapshot, now: Date) -> TimelineReloadPolicy {
         let calendar = Calendar.current
         let minute = calendar.component(.hour, from: now) * 60 + calendar.component(.minute, from: now)
         if minute >= snapshot.workStartMinute && minute <= snapshot.workEndMinute {
@@ -241,11 +158,7 @@ private struct WNFWidgetView: View {
     }
 
     private var moneyText: String {
-        entry.snapshot.hidesSensitiveInfo ? "¥•••.••" : money(entry.snapshot.earnedToday)
-    }
-
-    private func money(_ value: Double) -> String {
-        String(format: "¥%.2f", value)
+        entry.snapshot.earnedTodayText
     }
 
     private func duration(_ minutes: Int) -> String {

@@ -104,6 +104,7 @@
 - Use on: home page share overlay.
 - Container: rounded cream card, max width close to `330px` on iPhone 17 portrait.
 - Header: yellow band with compact mascot, `窝囊费`, `今日窝囊战报`, and three icon controls.
+- Header icon controls use the shared native `WNFHeaderIconButton` contract: `32 x 32`, white fill, `12px` radius, 0.07 black shadow with radius 5 / y 2.
 - Copy behavior: `RootView` refreshes the active `ShareCardCopy` from `ShareCardCopy.pool` whenever the home share action opens the card. The current pair is excluded when possible, so consecutive opens do not repeat the same wording.
 - Controls:
   - eye / eye slash masks only the card amount and duration;
@@ -124,7 +125,7 @@
 
 ### Clock-Out CTA
 
-- Source: `WNF/DailySettlement.swift`.
+- Source: `WNF/ClockOutCTA.swift`.
 - Use on: home page, directly below the progress track; hidden until the workday is done unless today is settled.
 - Container: ink-filled rounded rectangle, radius `18px`, padding `12px 16px`, drop shadow.
 - Leading icon: yellow circle (`36px`) with `tray.and.arrow.down.fill`.
@@ -137,7 +138,7 @@
 
 ### Settlement Overlay
 
-- Source: `WNF/DailySettlement.swift`.
+- Source: `WNF/DailySettlementOverlay.swift`.
 - Trigger: only from the home Clock-Out CTA.
 - Phases:
   - `prep` → `burst` (≈0.85s, heavy haptic on entry, central yen + radial gradient explode outward into a coin/confetti shower)
@@ -167,10 +168,10 @@
 
 ### Settlement Share Card
 
-- Source: `WNF/DailySettlement.swift`.
+- Source: `WNF/DailySettlementShareCard.swift`.
 - Use on: settlement overlay and the system share image.
 - Container: rounded card, radius `30px`, max width `340pt` in overlay, fixed `360pt` width when exported.
-- Header: yellow band, compact mascot, `窝囊费`, `今日下班结算`, and three icon controls (eye / share / close) when `showsControls == true`.
+- Header: yellow band, compact mascot, `窝囊费`, `今日下班战绩`, and three icon controls (eye / share / close) when `showsControls == true`.
 - Body order (top → bottom):
   - Dynamic headline + subcopy from `DailySettlement.headline` / `.subCopy`.
   - Amount panel: `今日窝囊费` label, sentiment badge (emoji + label), large yen-prefixed amount with content-transition driven `displayedAmount` for ticker animation.
@@ -183,7 +184,7 @@
 
 ### Settlement Quote Card
 
-- Source: `WNF/DailySettlement.swift` (private subview `SettlementQuoteCard`).
+- Source: `WNF/DailySettlementShareCard.swift` (private subview `SettlementQuoteCard`).
 - Use on: inside Settlement Share Card for `今日最佳忍耐时刻`.
 - Container: white-translucent card, radius `16px`, hairline outline.
 - Content: leading SF Symbol glyph + quote text. The text honors an `.id(combined)` modifier so SwiftUI plays insertion/removal transitions when the parent swaps the string.
@@ -195,13 +196,13 @@
 
 ### Personal Time CTA
 
-- Source: `WNF/DailySettlement.swift` (`ClockOutCTA` with `isSettled` flag), driven from `HomeView`.
+- Source: `WNF/ClockOutCTA.swift` (`ClockOutCTA` with `isSettled` flag), driven from `HomeView`.
 - Active when `WageState.isTodaySettled == true` (today's date key matches `lastSettlementDateKey`).
 - Visual differences vs default Clock-Out CTA:
   - Leading icon: `checkmark.circle.fill` (was `tray.and.arrow.down.fill`).
-  - Title: `今日已结算 · 再看一眼`.
-  - Subtitle: `进入个人时间，钱已经稳了`.
-- Status chip on Home also swaps to `今日已结算 · 个人时间` when settled.
+  - Title: `今日已下班 · 再看一眼`.
+  - Subtitle: `今日窝囊费已入账，剩下都是你的时间`.
+- Status chip on Home also swaps to `今日已下班 · 个人时间` when settled.
 - Live wage amount, elapsed/remaining time, progress bar, and mascot all stay real-time — settled mode is a tone shift, not a data freeze.
 - Day boundary naturally resets the state when `currentDateKey` advances past the stored date.
 

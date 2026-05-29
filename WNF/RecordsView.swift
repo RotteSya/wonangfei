@@ -41,6 +41,34 @@ struct RecordSummary {
     var elapsedPaidSeconds: Int = 0
 }
 
+private enum BadgeThreshold {
+    static let hundredHourSeconds = 100 * 60 * 60
+}
+
+private enum BarLayout {
+    static let denseBarCount = 8
+
+    static func isDense(_ count: Int) -> Bool {
+        count > denseBarCount
+    }
+
+    static func spacing(for count: Int) -> CGFloat {
+        isDense(count) ? 4 : 10
+    }
+
+    static func cornerRadius(for count: Int) -> CGFloat {
+        isDense(count) ? 4 : 8
+    }
+
+    static func width(for count: Int) -> CGFloat {
+        isDense(count) ? 16 : 24
+    }
+
+    static func labelFontSize(for count: Int) -> CGFloat {
+        isDense(count) ? 9 : 11
+    }
+}
+
 struct RecordAggregationInput: Equatable {
     var currentDateKey: String
     var recordsRevision: Int
@@ -388,7 +416,7 @@ struct RecordsView: View {
             todayEarned > 0,
             state.hasLunchBreak,
             state.includeOvertime,
-            currentMonthSummary.elapsedPaidSeconds >= 100 * 60 * 60
+            currentMonthSummary.elapsedPaidSeconds >= BadgeThreshold.hundredHourSeconds
         ].filter(\.self).count
     }
 
@@ -534,7 +562,7 @@ struct RecordsView: View {
                 Badge(symbol: "sun.max", label: "今日开张", unlocked: todayEarned > 0)
                 Badge(symbol: "fork.knife", label: "午休大师", unlocked: state.hasLunchBreak)
                 Badge(symbol: "clock", label: "加班 +1", unlocked: state.includeOvertime)
-                Badge(symbol: "yensign.circle", label: "忍 100h", unlocked: currentMonthSummary.elapsedPaidSeconds >= 100 * 60 * 60)
+                Badge(symbol: "yensign.circle", label: "忍 100h", unlocked: currentMonthSummary.elapsedPaidSeconds >= BadgeThreshold.hundredHourSeconds)
             }
         }
         .padding(16)
@@ -557,7 +585,7 @@ private struct BarChart: View {
     }
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: bars.count > 8 ? 4 : 10) {
+        HStack(alignment: .bottom, spacing: BarLayout.spacing(for: bars.count)) {
             ForEach(bars) { bar in
                 let selected = selectedBarID == bar.id
                 Group {
@@ -595,16 +623,16 @@ private struct BarChart: View {
                         .fixedSize()
                 }
 
-                RoundedRectangle(cornerRadius: bars.count > 8 ? 4 : 8)
+                RoundedRectangle(cornerRadius: BarLayout.cornerRadius(for: bars.count))
                     .fill(barColor(bar: bar, selected: selected))
-                    .frame(width: bars.count > 8 ? 16 : 24, height: bar.isFuture ? 6 : max(8, 100 * bar.amount / maxAmount))
+                    .frame(width: BarLayout.width(for: bars.count), height: bar.isFuture ? 6 : max(8, 100 * bar.amount / maxAmount))
                     .offset(y: selected ? -2 : 0)
                     .shadow(color: selected ? .black.opacity(0.24) : .clear, radius: 9, y: 5)
             }
             .frame(height: 130, alignment: .bottom)
 
             Text(bar.key)
-                .font(.system(size: bars.count > 8 ? 9 : 11, weight: bar.isToday || selected ? .heavy : .bold))
+                .font(.system(size: BarLayout.labelFontSize(for: bars.count), weight: bar.isToday || selected ? .heavy : .bold))
                 .foregroundStyle(bar.isToday || selected ? WNFTheme.ink : WNFTheme.muted)
         }
     }

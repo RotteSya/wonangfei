@@ -49,7 +49,7 @@ struct ShareCardCopy: Equatable {
 /// can be dialled in without rebuilding.
 struct GenieParams: Equatable {
     // Timing
-    var duration: Double = 1.5           // emergence (present) seconds
+    var duration: Double = 1.0           // emergence (present) seconds
     var dismissDuration: Double = 0.34   // furl-back (dismiss) seconds
     // Easing — the two cubic-bézier control points of the present curve.
     var ease1x: Double = 0.32
@@ -126,7 +126,7 @@ struct ShareActionPanel: View {
 
     // The panel starts rising at the same moment as the card, but settles faster
     // (the card keeps the slower genie curve); design-system ease.
-    private static let riseIn = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.8)
+    private static let riseIn = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 1.0)
     private static let riseOut = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.34)
 
     var body: some View {

@@ -241,6 +241,16 @@ struct RootView: View {
             )
             .zIndex(3)
 
+            ShareActionPanel(
+                isPresented: homeSharePresented,
+                isPreparingShare: isPreparingShareActivity,
+                onSaveAlbum: saveShareCardToAlbum,
+                onCopy: copyShareCardImage,
+                onMore: presentSystemShare,
+                onCancel: dismissShareCard
+            )
+            .zIndex(4)
+
             if settlementPresented, let snapshot = settlementSnapshot {
                 DailySettlementOverlay(
                     settlement: snapshot,
@@ -409,6 +419,39 @@ struct RootView: View {
         }
         isPreparingShareActivity = false
         isActivityPresented = true
+    }
+
+    // Render the current share card to an image for the custom panel's fast
+    // actions (no UIActivityViewController spin-up).
+    @MainActor
+    private func renderedShareCardImage() -> UIImage? {
+        let card = WonangfeiShareCard(
+            day: day,
+            copy: shareCardCopy,
+            hidesSensitiveInfo: shareCardHidesSensitiveInfo,
+            showsControls: false,
+            onTogglePrivacy: {},
+            onShare: {},
+            onDismiss: {}
+        )
+        .frame(width: Self.shareExportWidth)
+        return renderedShareImage(card, scale: shareRenderScale)
+    }
+
+    @MainActor
+    private func saveShareCardToAlbum() {
+        guard let image = renderedShareCardImage() else { return }
+        UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        dismissShareCard()
+    }
+
+    @MainActor
+    private func copyShareCardImage() {
+        guard let image = renderedShareCardImage() else { return }
+        UIPasteboard.general.image = image
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        dismissShareCard()
     }
 
     @MainActor

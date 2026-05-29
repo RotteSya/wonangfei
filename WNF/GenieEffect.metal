@@ -18,7 +18,8 @@ using namespace metal;
 // Pixels outside the funnel map outside the source box and are clipped by a
 // matching SwiftUI mask, so this function never needs a transparency branch.
 [[ stitchable ]]
-float2 genie(float2 position, float2 size, float progress, float neckHalf, float neckCenter, float neckLen, float unpinchStart) {
+float2 genie(float2 position, float2 size, float progress, float neckHalf, float neckCenter,
+             float neckLen, float unpinchStart, float squish, float curve) {
     float w = size.x;
     float h = size.y;
     float p = clamp(progress, 0.0, 1.0);
@@ -28,9 +29,19 @@ float2 genie(float2 position, float2 size, float progress, float neckHalf, float
 
     float v = position.y / h;                 // 0 at the neck (top) … 1 at the bottom
     float vFront = max(p, 0.001);             // how far the card has emerged
-    float sourceV = v / vFront;               // decompress the emerged band to the full card
+    float vis = clamp(v / vFront, 0.0, 1.0);  // position within the emerged band
 
-    float funnelHalf = mix(neckHalf, w * 0.5, smoothstep(0.0, neckLen, sourceV));
+    // Vertical: how hard the card is squeezed into the slot. 1 = the whole card
+    // compresses into the emerged band (full genie); 0 = no squeeze, the card
+    // just unrolls at its natural height.
+    float span = mix(1.0, vFront, clamp(squish, 0.0, 1.0));
+    float sourceV = clamp(v / span, 0.0, 1.0);
+
+    // Horizontal funnel throat. `curve` shapes the sides: 1 = straight trapezoid,
+    // >1 = stays pinched longer then flares (concave/genie), <1 = flares early.
+    float t = clamp(vis / max(neckLen, 0.001), 0.0, 1.0);
+    float funnelT = pow(t, max(curve, 0.05));
+    float funnelHalf = mix(neckHalf, w * 0.5, funnelT);
     float unpinch = smoothstep(unpinchStart, 1.0, p);  // hold the neck pinched, release at the end
     float halfWidth = max(mix(funnelHalf, w * 0.5, unpinch), 1.0);
 

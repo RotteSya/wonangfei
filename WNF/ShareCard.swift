@@ -61,6 +61,11 @@ struct GenieParams: Equatable {
     var neckWidth: CGFloat = 164         // width of the island slot the card necks into (pt)
     var neckLen: CGFloat = 0.70          // funnel throat length (fraction of the card, 0…1)
     var unpinchStart: CGFloat = 0.78     // progress at which the neck starts releasing
+    var squish: CGFloat = 1.0            // vertical squeeze into the slot (1 = full genie, 0 = none)
+    var curve: CGFloat = 1.4             // funnel side shape (1 = straight, >1 = curved/concave)
+
+    // Landing
+    var restDrop: CGFloat = 0            // how far below the island the settled card drops (pt)
 
     // Island capsule
     var expandedHeight: CGFloat = 41     // how tall the capsule opens (pt)
@@ -280,6 +285,7 @@ private struct GenieFunnelShape: Shape {
     var neckHalf: CGFloat
     var neckLen: CGFloat = 0.70
     var unpinchStart: CGFloat = 0.78
+    var curve: CGFloat = 1.4
 
     var animatableData: CGFloat {
         get { progress }
@@ -302,15 +308,17 @@ private struct GenieFunnelShape: Shape {
         let steps = 28
         let unpinch = smoothstep(unpinchStart, 1.0, p)
 
-        func halfWidth(atSourceV s: CGFloat) -> CGFloat {
-            let funnel = lerp(neckHalf, fullHalf, smoothstep(0, neckLen, s))
+        func halfWidth(atVis s: CGFloat) -> CGFloat {
+            let t = min(max(s / max(neckLen, 0.001), 0), 1)
+            let funnelT = CGFloat(pow(Double(t), Double(max(curve, 0.05))))
+            let funnel = lerp(neckHalf, fullHalf, funnelT)
             return max(lerp(funnel, fullHalf, unpinch), 1)
         }
 
         var leftEdge: [CGPoint] = []
         for i in 0...steps {
             let v = vFront * CGFloat(i) / CGFloat(steps)   // output v in [0, vFront]
-            let hw = halfWidth(atSourceV: v / vFront)
+            let hw = halfWidth(atVis: v / vFront)
             let y = v * h
             if i == 0 {
                 path.move(to: CGPoint(x: center + hw, y: y))
@@ -345,6 +353,8 @@ private struct GenieEmergence: ViewModifier, Animatable {
     func body(content: Content) -> some View {
         let neckHalf = params.neckWidth / 2
         let shadowP = smoothstep(params.shadowFadeStart, params.shadowFadeEnd, progress)
+        // The card emerges from the island, then drops to its landing as it settles.
+        let drop = params.restDrop * smoothstep(0.5, 1.0, progress)
         return content
             .distortionEffect(
                 ShaderLibrary.genie(
@@ -353,12 +363,15 @@ private struct GenieEmergence: ViewModifier, Animatable {
                     .float(neckHalf),
                     .float(size.width / 2),
                     .float(params.neckLen),
-                    .float(params.unpinchStart)
+                    .float(params.unpinchStart),
+                    .float(params.squish),
+                    .float(params.curve)
                 ),
                 maxSampleOffset: size
             )
-            .mask(GenieFunnelShape(progress: progress, neckHalf: neckHalf, neckLen: params.neckLen, unpinchStart: params.unpinchStart))
+            .mask(GenieFunnelShape(progress: progress, neckHalf: neckHalf, neckLen: params.neckLen, unpinchStart: params.unpinchStart, curve: params.curve))
             .shadow(color: .black.opacity(params.shadowOpacity * shadowP), radius: params.shadowRadius, y: params.shadowY)
+            .offset(y: drop)
     }
 }
 
@@ -399,6 +412,9 @@ struct GenieTunerView: View {
 
     @State private var params = GenieParams.default
     @State private var scrub: CGFloat = 1
+    @State private var loop = false
+
+    private let loopTimer = Timer.publish(every: 1.7, on: .main, in: .common).autoconnect()
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -419,6 +435,8 @@ struct GenieTunerView: View {
 
             panel
         }
+        .onReceive(loopTimer) { _ in if loop { play() } }
+        .onChange(of: loop) { _, on in if on { play() } }
     }
 
     private var panel: some View {
@@ -426,47 +444,31 @@ struct GenieTunerView: View {
             HStack(spacing: 8) {
                 Text("Genie 调参").font(.system(size: 15, weight: .bold))
                 Spacer()
+                Toggle("循环", isOn: $loop).toggleStyle(.button)
                 Button("播放") { play() }.buttonStyle(.borderedProminent)
                 Button("重置") { withAnimation { params = .default; scrub = 1 } }
                 Button("关闭", action: onClose)
             }
             .controlSize(.small)
 
-            // Scrub stays pinned above the scroll so it's always reachable.
+            // Drag to inspect any frame by hand; turn on 循环 to watch it play.
             sliderRow("进度", $scrub, 0...1)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 6) {
-                    section("时间")
-                    sliderRow("展开 s", dbl(\.duration), 0.15...1.5)
-                    sliderRow("收起 s", dbl(\.dismissDuration), 0.1...1.0)
-
-                    section("缓动曲线 (cubic-bézier)")
-                    sliderRow("c1x", dbl(\.ease1x), 0...1)
-                    sliderRow("c1y", dbl(\.ease1y), -0.4...1.6)
-                    sliderRow("c2x", dbl(\.ease2x), 0...1)
-                    sliderRow("c2y", dbl(\.ease2y), -0.4...1.6)
-
-                    section("形变")
+                    section("形变长相")
+                    sliderRow("挤压", $params.squish, 0...1)
                     sliderRow("颈宽 pt", $params.neckWidth, 60...340, "%.0f")
                     sliderRow("喉长", $params.neckLen, 0.1...1.0)
-                    sliderRow("松弛点", $params.unpinchStart, 0.3...0.98)
+                    sliderRow("弯曲", $params.curve, 0.4...3.0)
+                    sliderRow("松弛", $params.unpinchStart, 0.3...0.98)
 
-                    section("灵动岛")
-                    sliderRow("开高 pt", $params.expandedHeight, 37...90, "%.0f")
-                    sliderRow("张开速度", $params.capsuleRise, 0.05...0.6)
-                    sliderRow("回缩点", $params.capsuleFallStart, 0.3...0.95)
-
-                    section("卡片")
+                    section("落点与大小")
+                    sliderRow("落点 pt", $params.restDrop, 0...440, "%.0f")
                     sliderRow("宽度 pt", $params.cardWidth, 240...380, "%.0f")
-                    sliderRow("顶距 pt", $params.cardTopGap, -12...60, "%.0f")
 
-                    section("阴影")
-                    sliderRow("浓度", dbl(\.shadowOpacity), 0...0.5)
-                    sliderRow("半径 pt", $params.shadowRadius, 0...40, "%.0f")
-                    sliderRow("Y 偏移", $params.shadowY, 0...30, "%.0f")
-                    sliderRow("淡入起", $params.shadowFadeStart, 0...0.8)
-                    sliderRow("淡入止", $params.shadowFadeEnd, 0.2...1.0)
+                    section("速度")
+                    sliderRow("时长 s", dbl(\.duration), 0.2...1.5)
 
                     Text(summary)
                         .font(.system(size: 9, design: .monospaced))
@@ -476,7 +478,7 @@ struct GenieTunerView: View {
                 }
                 .padding(.trailing, 2)
             }
-            .frame(maxHeight: 280)
+            .frame(maxHeight: 230)
         }
         .padding(14)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -485,14 +487,9 @@ struct GenieTunerView: View {
     }
 
     private var summary: String {
-        String(format: "d=%.2f dis=%.2f ease=(%.2f,%.2f,%.2f,%.2f) neckW=%.0f neckLen=%.2f unpinch=%.2f expH=%.0f rise=%.2f fall=%.2f cardW=%.0f gap=%.0f shadow=(%.2f,%.0f,%.0f,%.2f,%.2f)",
-                     params.duration, params.dismissDuration,
-                     params.ease1x, params.ease1y, params.ease2x, params.ease2y,
-                     params.neckWidth, params.neckLen, params.unpinchStart,
-                     params.expandedHeight, params.capsuleRise, params.capsuleFallStart,
-                     params.cardWidth, params.cardTopGap,
-                     params.shadowOpacity, params.shadowRadius, params.shadowY,
-                     params.shadowFadeStart, params.shadowFadeEnd)
+        String(format: "squish=%.2f neckW=%.0f neckLen=%.2f curve=%.2f unpinch=%.2f restDrop=%.0f cardW=%.0f duration=%.2f",
+                     params.squish, params.neckWidth, params.neckLen, params.curve,
+                     params.unpinchStart, params.restDrop, params.cardWidth, params.duration)
     }
 
     private func section(_ title: String) -> some View {

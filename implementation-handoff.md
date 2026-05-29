@@ -57,7 +57,8 @@ Native sources:
 - `WNF/ShareCard.swift`: share-card copy pool, dim backdrop, overlay, card layout, icon controls, and the `UIActivityViewController` wrapper.
 - `WNF/DailySettlement.swift`: 下班结算数据模型 (`DailySettlement` + `SettlementSentiment`), 爆金币动画 (`SettlementCoinBurst`), 全屏结算 overlay (`DailySettlementOverlay`), 结算分享卡 (`DailySettlementShareCard`), 首页 CTA 入口 (`ClockOutCTA`). 数据派生纯函数从 `WageDay` + `dailyRecords` 计算情绪等级和连续打工天数, 不修改任何持久化路径.
 - `WNF/ClockOutReminder.swift`: `ClockOutReminderService` (@MainActor 单例)，封装 `UNUserNotificationCenter` 权限查询/请求和按工作日 + workEnd 时间调度 `UNCalendarNotificationTrigger` 重复本地通知。idempotent `reconcile(enabled:workEnd:selectedWeekdays:)` 先清空 `wnf.clockout.weekday.*` 前缀的现有通知再按需重建；权限非 authorized/provisional/ephemeral 时静默跳过调度。
-- `WNF/WidgetShared.swift`: App Group snapshot schema, writer, and widget reload helper shared with `WNFWidget`.
+- `WNF/WidgetShared.swift`: App Group key/snapshot schema, fixed sample data, date helpers, projection logic, and capped timeline planning shared with `WNFWidget`.
+- `WNF/WidgetSnapshotWriter.swift`: App-only snapshot writer and debounced WidgetKit reload helper.
 - `WNF/Legal.swift`: `LegalDocument`, `LegalDocumentView`, and the remote-first / bundled-fallback `WKWebView` integration.
 - `WNFWidget/WNFWidget.swift`: Widget configuration intent stub, App Group reader, timeline provider, and system/accessory widget layouts.
 
@@ -99,8 +100,8 @@ Daily record history lifecycle is owned by `WageState`; SQLite storage, legacy d
 - `WNFWidget` supports `.systemSmall`, `.systemMedium`, `.accessoryRectangular`, and `.accessoryInline`.
 - v1 uses an empty `AppIntentConfiguration` stub so v1.x can add per-widget settings without replacing the configuration model.
 - Every Widget view uses `containerBackground(for: .widget)` for iOS 17 rendering.
-- Timeline policy: the provider reads one App Group snapshot and emits minute-level future entries through `workEnd` (or end of day when overtime is enabled), then schedules the next reload for the next selected workday start instead of reloading every 60 seconds.
-- Widget wage display reads `wnf.widget.wage.snapshot.v1`; gallery and placeholder paths never read real wage data. The v2 snapshot includes the capture date key, selected weekdays, work/lunch schedule, overtime flag, workday minutes, per-second rate, and `hidesSensitiveInfo`. Widget projection derives each entry's amount/elapsed/status locally and renders `¥•••.••` when App privacy mode is on. `WNFApp` rewrites the snapshot when privacy or wage/schedule/workday settings change.
+- Timeline policy: the provider reads one App Group snapshot and emits near-term minute-level future entries through `workEnd` (or end of day when overtime is enabled), capped at 240 future entries. If the cap is hit it reloads near the end of that window to refill; otherwise it schedules the next reload for the next selected workday start instead of reloading every 60 seconds.
+- Widget wage display reads `wnf.widget.wage.snapshot.v1`; gallery and placeholder paths use the shared fixed sample and never read real wage data. The v2 snapshot includes the capture date key, selected weekdays, work/lunch schedule, overtime flag, workday minutes, per-second rate, and `hidesSensitiveInfo`. `WNF/WidgetShared.swift` is the single source for the schema/key/sample/projection/timeline pure logic across app and widget targets; decode failures fall back to sample data with a widget log entry. Widget projection derives each entry's amount/elapsed/status locally and renders `¥•••.••` when App privacy mode is on. `WNFApp` rewrites the snapshot when privacy or wage/schedule/workday settings change.
 - Terms and Privacy links open remote URLs first and fall back to bundled `terms.html` / `privacy.html` through the local legal document viewer.
 
 Default app state lives in `窝囊费.html` under `TWEAK_DEFAULTS`:

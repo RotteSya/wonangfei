@@ -447,6 +447,62 @@ struct WidgetProjectionTests {
         #expect(DateComponents.calendar.component(.hour, from: nextStart) == 9)
         #expect(DateComponents.calendar.component(.minute, from: nextStart) == 30)
     }
+
+    @Test("Widget timeline 会封顶较长的加班分钟 entries")
+    func widgetTimelineCapsLongOvertimeWindow() throws {
+        let now = try #require(dateToday(hour: 10, minute: 0))
+        let snapshot = widgetSnapshot(
+            hidesSensitiveInfo: false,
+            capturedAt: now,
+            earningPerSecond: 1,
+            includeOvertime: true
+        )
+
+        let plan = WNFWidgetTimeline.plan(for: snapshot, now: now, isPreview: false)
+
+        #expect(plan.isCapped)
+        #expect(plan.entryDates.count == WNFWidgetTimeline.maxFutureMinuteEntries + 1)
+        #expect(plan.entryDates.count <= 241)
+    }
+
+    @Test("Widget timeline 封顶后会在窗口末尾附近 reload")
+    func cappedWidgetTimelineReloadsNearCapWindowEnd() throws {
+        let now = try #require(dateToday(hour: 10, minute: 0))
+        let snapshot = widgetSnapshot(
+            hidesSensitiveInfo: false,
+            capturedAt: now,
+            earningPerSecond: 1,
+            includeOvertime: true
+        )
+
+        let plan = WNFWidgetTimeline.plan(for: snapshot, now: now, isPreview: false)
+        let lastEntryDate = try #require(plan.entryDates.last)
+
+        #expect(plan.isCapped)
+        #expect(plan.reloadDate > lastEntryDate)
+        #expect(plan.reloadDate <= lastEntryDate.addingTimeInterval(61))
+        #expect(WNFWidgetDate.dateKey(for: plan.reloadDate) == WNFWidgetDate.dateKey(for: now))
+    }
+
+    @Test("Widget timeline 未封顶时仍在下个选中工作日起点 reload")
+    func uncappedWidgetTimelineReloadsAtNextSelectedWorkStart() throws {
+        let now = try #require(dateToday(hour: 17, minute: 0))
+        let snapshot = widgetSnapshot(
+            hidesSensitiveInfo: false,
+            capturedAt: now,
+            earningPerSecond: 1,
+            includeOvertime: false
+        )
+
+        let plan = WNFWidgetTimeline.plan(for: snapshot, now: now, isPreview: false)
+        let nextStart = try #require(snapshot.nextSelectedWorkStart(after: max(now, plan.projectionEndDate)))
+
+        #expect(plan.isCapped == false)
+        #expect(plan.reloadDate == nextStart)
+        #expect(plan.reloadDate > now)
+        #expect(DateComponents.calendar.component(.hour, from: plan.reloadDate) == 9)
+        #expect(DateComponents.calendar.component(.minute, from: plan.reloadDate) == 30)
+    }
 }
 
 struct WidgetSnapshotTests {
@@ -506,10 +562,11 @@ private func aggregationInput(currentDate: Date, selectedWeekdays: Set<Int>) -> 
 private func widgetSnapshot(
     hidesSensitiveInfo: Bool,
     capturedAt: Date = Date(),
-    earningPerSecond: Double = 0
+    earningPerSecond: Double = 0,
+    includeOvertime: Bool = false
 ) -> WNFWidgetSnapshot {
     WNFWidgetSnapshot(
-        dateKey: WageState.dateKey(for: capturedAt),
+        dateKey: WNFWidgetDate.dateKey(for: capturedAt),
         capturedAt: capturedAt,
         earnedToday: 888.88,
         elapsedPaidMinutes: 188,
@@ -518,7 +575,7 @@ private func widgetSnapshot(
         lunchStartMinute: 12 * 60,
         lunchEndMinute: 13 * 60,
         hasLunchBreak: true,
-        includeOvertime: false,
+        includeOvertime: includeOvertime,
         workdayMinutes: 480,
         earningPerSecond: earningPerSecond,
         selectedWeekdays: Array(0...6),

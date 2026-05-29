@@ -35,6 +35,8 @@
 		100000000000000000000129 /* BubbleQuoteEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000238 /* BubbleQuoteEngine.swift */; };
 		100000000000000000000125 /* PlaceholderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000234 /* PlaceholderTests.swift */; };
 		100000000000000000000130 /* Legal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000239 /* Legal.swift */; };
+		100000000000000000000131 /* WidgetShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000219 /* WidgetShared.swift */; };
+		100000000000000000000132 /* WidgetSnapshotWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000240 /* WidgetSnapshotWriter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -103,6 +105,7 @@
 		100000000000000000000238 /* BubbleQuoteEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BubbleQuoteEngine.swift; sourceTree = "<group>"; };
 		100000000000000000000234 /* PlaceholderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceholderTests.swift; sourceTree = "<group>"; };
 		100000000000000000000239 /* Legal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Legal.swift; sourceTree = "<group>"; };
+		100000000000000000000240 /* WidgetSnapshotWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetSnapshotWriter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -152,6 +155,7 @@
 				100000000000000000000218 /* WorkStatusPresentation.swift */,
 				100000000000000000000215 /* WageFormatting.swift */,
 				100000000000000000000219 /* WidgetShared.swift */,
+				100000000000000000000240 /* WidgetSnapshotWriter.swift */,
 				100000000000000000000239 /* Legal.swift */,
 				100000000000000000000203 /* Theme.swift */,
 				100000000000000000000204 /* RootView.swift */,
@@ -344,6 +348,7 @@
 				100000000000000000000118 /* WorkStatusPresentation.swift in Sources */,
 				100000000000000000000115 /* WageFormatting.swift in Sources */,
 				100000000000000000000119 /* WidgetShared.swift in Sources */,
+				100000000000000000000132 /* WidgetSnapshotWriter.swift in Sources */,
 				100000000000000000000130 /* Legal.swift in Sources */,
 				100000000000000000000103 /* Theme.swift in Sources */,
 				100000000000000000000104 /* RootView.swift in Sources */,
@@ -364,6 +369,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				100000000000000000000131 /* WidgetShared.swift in Sources */,
 				100000000000000000000124 /* WNFWidget.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

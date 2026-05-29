@@ -230,8 +230,9 @@ The Settings (`我的`) scroll, top to bottom:
 
 - Source: `WNFWidget/WNFWidget.swift`.
 - Families: `.systemSmall`, `.systemMedium`, `.accessoryRectangular`, `.accessoryInline`.
+- Shared data/projection source: `WNF/WidgetShared.swift` is compiled into both app and widget targets for App Group keys, snapshot schema, fixed sample data, projection, and capped timeline planning.
 - Gallery/placeholder data: fixed sample amount such as `¥888.88`; never read real App Group wage data in preview mode.
-- Real timeline: reads from the App Group snapshot only.
+- Real timeline: reads from the App Group snapshot only, emits capped near-term minute entries, and reloads near the cap window or the next selected workday start.
 - Required rendering wrapper: `containerBackground(for: .widget)` on every widget view.
 - Amount visibility follows App privacy mode through `hidesSensitiveInfo` in the App Group snapshot; masked value is `¥•••.••`.
 

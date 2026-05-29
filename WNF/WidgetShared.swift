@@ -1,13 +1,71 @@
 import Foundation
-import WidgetKit
 
 enum WNFShared {
     static let appGroupID = "group.com.wonangfei.app"
     static let widgetSnapshotKey = "wnf.widget.wage.snapshot.v1"
 }
 
+enum WNFWidgetDate {
+    static let calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .autoupdatingCurrent
+        return calendar
+    }()
+
+    static func dateKey(for date: Date) -> String {
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(
+            format: "%04d-%02d-%02d",
+            components.year ?? 0,
+            components.month ?? 0,
+            components.day ?? 0
+        )
+    }
+
+    static func weekdayIndex(for date: Date) -> Int {
+        let weekday = calendar.component(.weekday, from: date)
+        return (weekday + 5) % 7
+    }
+
+    static func secondsInDay(for date: Date) -> Int {
+        let components = calendar.dateComponents([.hour, .minute, .second], from: date)
+        return ((components.hour ?? 0) * 60 + (components.minute ?? 0)) * 60 + (components.second ?? 0)
+    }
+
+    static func date(on startOfDay: Date, minute: Int) -> Date? {
+        calendar.date(byAdding: .minute, value: max(0, min(24 * 60 - 1, minute)), to: startOfDay)
+    }
+
+    static func nextMinute(after date: Date) -> Date {
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        let floor = calendar.date(from: components) ?? date
+        return calendar.date(byAdding: .minute, value: 1, to: floor) ?? date.addingTimeInterval(60)
+    }
+}
+
 struct WNFWidgetSnapshot: Codable, Equatable {
     static let schemaVersion = 2
+
+    static var sample: WNFWidgetSnapshot {
+        let now = Date()
+        return WNFWidgetSnapshot(
+            dateKey: WNFWidgetDate.dateKey(for: now),
+            capturedAt: now,
+            earnedToday: 888.88,
+            elapsedPaidMinutes: 188,
+            workStartMinute: 9 * 60 + 30,
+            workEndMinute: 18 * 60 + 30,
+            lunchStartMinute: 12 * 60,
+            lunchEndMinute: 13 * 60,
+            hasLunchBreak: true,
+            includeOvertime: false,
+            workdayMinutes: 480,
+            earningPerSecond: 888.88 / Double(188 * 60),
+            selectedWeekdays: Array(0...4),
+            statusLabel: "正在搬砖",
+            hidesSensitiveInfo: false
+        )
+    }
 
     var schemaVersion: Int = Self.schemaVersion
     var dateKey: String
@@ -32,7 +90,7 @@ struct WNFWidgetSnapshot: Codable, Equatable {
 
     init(
         schemaVersion: Int = Self.schemaVersion,
-        dateKey: String = WageState.dateKey(for: Date()),
+        dateKey: String = WNFWidgetDate.dateKey(for: Date()),
         capturedAt: Date,
         earnedToday: Double,
         elapsedPaidMinutes: Int,
@@ -112,7 +170,7 @@ struct WNFWidgetSnapshot: Codable, Equatable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
         capturedAt = try container.decode(Date.self, forKey: .capturedAt)
-        dateKey = try container.decodeIfPresent(String.self, forKey: .dateKey) ?? WageState.dateKey(for: capturedAt)
+        dateKey = try container.decodeIfPresent(String.self, forKey: .dateKey) ?? WNFWidgetDate.dateKey(for: capturedAt)
         earnedToday = try container.decode(Double.self, forKey: .earnedToday)
         elapsedPaidMinutes = try container.decode(Int.self, forKey: .elapsedPaidMinutes)
         workStartMinute = try container.decode(Int.self, forKey: .workStartMinute)
@@ -133,56 +191,6 @@ struct WNFWidgetSnapshot: Codable, Equatable {
             .sorted()
         statusLabel = try container.decode(String.self, forKey: .statusLabel)
         hidesSensitiveInfo = try container.decodeIfPresent(Bool.self, forKey: .hidesSensitiveInfo) ?? false
-    }
-}
-
-enum WNFWidgetSnapshotWriter {
-    /// Returns `true` when a new snapshot was actually persisted. The caller
-    /// uses this to decide whether to schedule a widget timeline reload —
-    /// rapid privacy toggles or fg/bg swaps would otherwise re-encode the
-    /// same content multiple times per second.
-    @discardableResult
-    static func write(
-        day: WageDay,
-        workStartMinute: Int,
-        workEndMinute: Int,
-        lunchStartMinute: Int,
-        lunchEndMinute: Int,
-        hasLunchBreak: Bool,
-        includeOvertime: Bool,
-        selectedWeekdays: Set<Int>,
-        statusLabel: String,
-        hidesSensitiveInfo: Bool
-    ) -> Bool {
-        guard let userDefaults = UserDefaults(suiteName: WNFShared.appGroupID) else { return false }
-        let capturedAt = Date()
-        let snapshot = WNFWidgetSnapshot(
-            dateKey: WageState.dateKey(for: capturedAt),
-            capturedAt: capturedAt,
-            earnedToday: day.earnedToday,
-            elapsedPaidMinutes: day.elapsedPaidMinutes,
-            workStartMinute: workStartMinute,
-            workEndMinute: workEndMinute,
-            lunchStartMinute: lunchStartMinute,
-            lunchEndMinute: lunchEndMinute,
-            hasLunchBreak: hasLunchBreak,
-            includeOvertime: includeOvertime,
-            workdayMinutes: day.workdayMinutes,
-            earningPerSecond: day.hourlyRate / 3600,
-            selectedWeekdays: selectedWeekdays.sorted(),
-            statusLabel: statusLabel,
-            hidesSensitiveInfo: hidesSensitiveInfo
-        )
-
-        if let existingData = userDefaults.data(forKey: WNFShared.widgetSnapshotKey),
-           let existing = try? JSONDecoder().decode(WNFWidgetSnapshot.self, from: existingData),
-           existing.hasSameContent(as: snapshot) {
-            return false
-        }
-
-        guard let data = try? JSONEncoder().encode(snapshot) else { return false }
-        userDefaults.set(data, forKey: WNFShared.widgetSnapshotKey)
-        return true
     }
 }
 
@@ -208,27 +216,27 @@ extension WNFWidgetSnapshot {
     }
 
     func nextSelectedWorkStart(after date: Date) -> Date? {
-        let calendar = DateComponents.calendar
+        let calendar = WNFWidgetDate.calendar
         let selectedWeekdays = Set(selectedWeekdays)
         guard selectedWeekdays.isEmpty == false else { return nil }
 
         let startOfSearchDay = calendar.startOfDay(for: date)
         for offset in 0...14 {
             guard let day = calendar.date(byAdding: .day, value: offset, to: startOfSearchDay),
-                  selectedWeekdays.contains(Self.weekdayIndex(for: day)),
-                  let candidate = Self.date(on: day, minute: workStartMinute)
+                  selectedWeekdays.contains(WNFWidgetDate.weekdayIndex(for: day)),
+                  let candidate = WNFWidgetDate.date(on: day, minute: workStartMinute)
             else { continue }
             if candidate > date { return candidate }
         }
         return nil
     }
 
-    private func isSelectedWorkday(_ date: Date) -> Bool {
-        Set(selectedWeekdays).contains(Self.weekdayIndex(for: date))
+    func isSelectedWorkday(_ date: Date) -> Bool {
+        Set(selectedWeekdays).contains(WNFWidgetDate.weekdayIndex(for: date))
     }
 
     private func projectedElapsedPaidSeconds(at date: Date) -> Int {
-        let nowSecond = Self.secondsInDay(for: date)
+        let nowSecond = WNFWidgetDate.secondsInDay(for: date)
         let startSecond = workStartMinute * 60
         let endSecond = workEndMinute * 60
         guard nowSecond > startSecond else { return 0 }
@@ -245,7 +253,7 @@ extension WNFWidgetSnapshot {
     }
 
     private func projectedStatusLabel(at date: Date) -> String {
-        let nowMinute = Self.secondsInDay(for: date) / 60
+        let nowMinute = WNFWidgetDate.secondsInDay(for: date) / 60
         let rawLunchStart = hasLunchBreak ? min(lunchStartMinute, lunchEndMinute) : workEndMinute
         let rawLunchEnd = hasLunchBreak ? max(lunchStartMinute, lunchEndMinute) : workEndMinute
         let effectiveLunchStart = max(workStartMinute, rawLunchStart)
@@ -268,7 +276,7 @@ extension WNFWidgetSnapshot {
     ) -> WNFWidgetSnapshot {
         WNFWidgetSnapshot(
             schemaVersion: schemaVersion,
-            dateKey: WageState.dateKey(for: date),
+            dateKey: WNFWidgetDate.dateKey(for: date),
             capturedAt: date,
             earnedToday: earnedToday,
             elapsedPaidMinutes: elapsedPaidMinutes,
@@ -285,33 +293,69 @@ extension WNFWidgetSnapshot {
             hidesSensitiveInfo: hidesSensitiveInfo
         )
     }
-
-    private static func secondsInDay(for date: Date) -> Int {
-        let components = DateComponents.calendar.dateComponents([.hour, .minute, .second], from: date)
-        return ((components.hour ?? 0) * 60 + (components.minute ?? 0)) * 60 + (components.second ?? 0)
-    }
-
-    private static func weekdayIndex(for date: Date) -> Int {
-        let weekday = DateComponents.calendar.component(.weekday, from: date)
-        return (weekday + 5) % 7
-    }
-
-    private static func date(on startOfDay: Date, minute: Int) -> Date? {
-        DateComponents.calendar.date(byAdding: .minute, value: max(0, min(24 * 60 - 1, minute)), to: startOfDay)
-    }
 }
 
-@MainActor
-enum WNFWidgetReloader {
-    private static var reloadTask: Task<Void, Never>?
+struct WNFWidgetTimelinePlan {
+    var entryDates: [Date]
+    var reloadDate: Date
+    var projectionEndDate: Date
+    var isCapped: Bool
+}
 
-    static func scheduleReload(after delay: TimeInterval = 0.8) {
-        reloadTask?.cancel()
-        reloadTask = Task { @MainActor in
-            let nanoseconds = UInt64((delay * 1_000_000_000).rounded())
-            try? await Task.sleep(nanoseconds: nanoseconds)
-            guard !Task.isCancelled else { return }
-            WidgetCenter.shared.reloadAllTimelines()
+enum WNFWidgetTimeline {
+    static let maxFutureMinuteEntries = 240
+
+    static func plan(for snapshot: WNFWidgetSnapshot, now: Date, isPreview: Bool) -> WNFWidgetTimelinePlan {
+        guard isPreview == false else {
+            return WNFWidgetTimelinePlan(
+                entryDates: [now],
+                reloadDate: now.addingTimeInterval(60 * 60),
+                projectionEndDate: now,
+                isCapped: false
+            )
         }
+
+        let projectionEndDate = projectionEndDate(for: snapshot, now: now)
+        var entryDates = [now]
+
+        if projectionEndDate > now {
+            var futureEntryCount = 0
+            var cursor = WNFWidgetDate.nextMinute(after: now)
+            while cursor <= projectionEndDate && futureEntryCount < maxFutureMinuteEntries {
+                entryDates.append(cursor)
+                futureEntryCount += 1
+                guard let next = WNFWidgetDate.calendar.date(byAdding: .minute, value: 1, to: cursor) else { break }
+                cursor = next
+            }
+        }
+
+        let lastEntryDate = entryDates.last ?? now
+        let isCapped = lastEntryDate < projectionEndDate
+        let reloadDate = isCapped
+            ? WNFWidgetDate.nextMinute(after: lastEntryDate)
+            : nextWorkdayReloadDate(for: snapshot, now: now, projectionEndDate: projectionEndDate)
+
+        return WNFWidgetTimelinePlan(
+            entryDates: entryDates,
+            reloadDate: reloadDate,
+            projectionEndDate: projectionEndDate,
+            isCapped: isCapped
+        )
+    }
+
+    static func projectionEndDate(for snapshot: WNFWidgetSnapshot, now: Date) -> Date {
+        guard snapshot.isSelectedWorkday(now) else { return now }
+        let startOfDay = WNFWidgetDate.calendar.startOfDay(for: now)
+        let endMinute = snapshot.includeOvertime ? (24 * 60 - 1) : snapshot.workEndMinute
+        return WNFWidgetDate.date(on: startOfDay, minute: endMinute) ?? now
+    }
+
+    private static func nextWorkdayReloadDate(
+        for snapshot: WNFWidgetSnapshot,
+        now: Date,
+        projectionEndDate: Date
+    ) -> Date {
+        snapshot.nextSelectedWorkStart(after: max(now, projectionEndDate))
+            ?? now.addingTimeInterval(6 * 60 * 60)
     }
 }

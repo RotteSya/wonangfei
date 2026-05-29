@@ -70,7 +70,6 @@ struct RootView: View {
     @State private var entryAnimating = false
     @State private var entryExpanded = false
     @State private var homeSharePresented = false
-    @State private var showGenieTuner = false
     @State private var shareCardCopy = ShareCardCopy.default
     @State private var shareCardHidesSensitiveInfo = false
     @State private var activityItems: [Any] = []
@@ -147,28 +146,6 @@ struct RootView: View {
                     .allowsHitTesting(false)
                     .transition(.opacity)
             }
-
-            #if DEBUG
-            if onboardingCompleted, !entryAnimating, !showGenieTuner {
-                Button { showGenieTuner = true } label: {
-                    Image(systemName: "slider.horizontal.3")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(WNFTheme.ink)
-                        .frame(width: 40, height: 40)
-                        .background(.ultraThinMaterial, in: Circle())
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                .padding(.leading, 14)
-                .padding(.bottom, 96)
-                .zIndex(40)
-            }
-            if showGenieTuner {
-                GenieTunerView(day: day) { showGenieTuner = false }
-                    .ignoresSafeArea()
-                    .transition(.opacity)
-                    .zIndex(50)
-            }
-            #endif
         }
         .preferredColorScheme(.light)
         .environment(\.tabBarFloorHeight, tabBarFloorHeight)

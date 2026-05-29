@@ -49,7 +49,7 @@ struct ShareCardCopy: Equatable {
 /// can be dialled in without rebuilding.
 struct GenieParams: Equatable {
     // Timing
-    var duration: Double = 0.75          // emergence (present) seconds
+    var duration: Double = 1.5           // emergence (present) seconds
     var dismissDuration: Double = 0.34   // furl-back (dismiss) seconds
     // Easing — the two cubic-bézier control points of the present curve.
     var ease1x: Double = 0.32
@@ -58,15 +58,15 @@ struct GenieParams: Equatable {
     var ease2y: Double = 1.0
 
     // Genie warp
-    var neckWidth: CGFloat = 70          // width of the island slot the card necks into — funnel TOP (pt)
-    var bottomWidth: CGFloat = 340       // funnel's wide end — the card BOTTOM during the warp (pt)
+    var neckWidth: CGFloat = 65          // width of the island slot the card necks into — funnel TOP (pt)
+    var bottomWidth: CGFloat = 155       // funnel's wide end — the card BOTTOM during the warp (pt)
     var neckLen: CGFloat = 1.0           // funnel throat length (fraction of the card, 0…1)
-    var unpinchStart: CGFloat = 0.80     // progress at which the neck starts releasing
+    var unpinchStart: CGFloat = 0.55     // progress at which the neck starts releasing
     var squish: CGFloat = 1.0            // vertical squeeze into the slot (1 = full genie, 0 = none)
-    var curve: CGFloat = 2.5             // funnel side shape (1 = straight, >1 = curved/concave)
+    var curve: CGFloat = 2.45            // funnel side shape (1 = straight, >1 = curved/concave)
 
     // Landing
-    var restDrop: CGFloat = 85           // how far below the island the settled card drops (pt)
+    var restDrop: CGFloat = 115          // how far below the island the settled card drops (pt)
 
     // Island capsule
     var expandedHeight: CGFloat = 41     // how tall the capsule opens (pt)
@@ -74,7 +74,7 @@ struct GenieParams: Equatable {
     var capsuleFallStart: CGFloat = 0.60 // …then snaps back to compact from here
 
     // Card placement
-    var cardWidth: CGFloat = 340         // resting card width (pt, capped to screen)
+    var cardWidth: CGFloat = 327         // resting card width (pt, capped to screen)
     var cardTopGap: CGFloat = 0          // extra gap below the island lip (pt)
 
     // Shadow
@@ -127,24 +127,20 @@ struct ShareCardOverlay: View {
     @Binding var hidesSensitiveInfo: Bool
     var isPreparingShare: Bool
     var params: GenieParams = .default
-    /// When non-nil, the emergence is pinned to this progress (DEBUG scrub/tuner)
-    /// instead of the internal animated `reveal`.
-    var scrub: CGFloat? = nil
     var onShare: () -> Void
     var onDismiss: () -> Void
 
     @State private var reveal: CGFloat = 0
     @State private var cardSize: CGSize = .zero
 
-    private var displayReveal: CGFloat { scrub ?? reveal }
-    private var isActive: Bool { isPresented || reveal > 0.001 || scrub != nil }
+    private var isActive: Bool { isPresented || reveal > 0.001 }
 
     var body: some View {
         GeometryReader { proxy in
             let island = IslandMetrics(topInset: proxy.safeAreaInsets.top)
             let centerX = proxy.size.width / 2
             let cardWidth = min(proxy.size.width - 24, params.cardWidth)
-            let p = displayReveal
+            let p = reveal
 
             ZStack(alignment: .topLeading) {
                 if isActive {
@@ -404,126 +400,6 @@ private struct IslandCapsuleStretch: ViewModifier, Animatable {
             .position(x: centerX, y: topY + h / 2)
     }
 }
-
-#if DEBUG
-/// DEBUG-only live tuner for the genie emergence. Scrub the progress by hand or
-/// hit Play, and drag the sliders to dial in duration / neck width / throat /
-/// release point — all update the warp in real time. Never shipped.
-struct GenieTunerView: View {
-    var day: WageDay
-    var onClose: () -> Void
-
-    @State private var params = GenieParams.default
-    @State private var scrub: CGFloat = 1
-    @State private var loop = false
-
-    private let loopTimer = Timer.publish(every: 1.7, on: .main, in: .common).autoconnect()
-
-    var body: some View {
-        ZStack(alignment: .bottom) {
-            Color.black.opacity(0.28).ignoresSafeArea()
-
-            ShareCardOverlay(
-                isPresented: true,
-                day: day,
-                copy: .default,
-                hidesSensitiveInfo: .constant(false),
-                isPreparingShare: false,
-                params: params,
-                scrub: scrub,
-                onShare: {},
-                onDismiss: {}
-            )
-            .allowsHitTesting(false)
-
-            panel
-        }
-        .onReceive(loopTimer) { _ in if loop { play() } }
-        .onChange(of: loop) { _, on in if on { play() } }
-    }
-
-    private var panel: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Text("Genie 调参").font(.system(size: 15, weight: .bold))
-                Spacer()
-                Toggle("循环", isOn: $loop).toggleStyle(.button)
-                Button("播放") { play() }.buttonStyle(.borderedProminent)
-                Button("重置") { withAnimation { params = .default; scrub = 1 } }
-                Button("关闭", action: onClose)
-            }
-            .controlSize(.small)
-
-            // Drag to inspect any frame by hand; turn on 循环 to watch it play.
-            sliderRow("进度", $scrub, 0...1)
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 6) {
-                    section("形变长相")
-                    sliderRow("挤压", $params.squish, 0...1)
-                    sliderRow("颈宽 pt", $params.neckWidth, 40...340, "%.0f")
-                    sliderRow("底宽 pt", $params.bottomWidth, 60...380, "%.0f")
-                    sliderRow("喉长", $params.neckLen, 0.1...1.0)
-                    sliderRow("弯曲", $params.curve, 0.4...3.0)
-                    sliderRow("松弛", $params.unpinchStart, 0.3...0.98)
-
-                    section("落点与大小")
-                    sliderRow("落点 pt", $params.restDrop, 0...440, "%.0f")
-                    sliderRow("宽度 pt", $params.cardWidth, 240...380, "%.0f")
-
-                    section("速度")
-                    sliderRow("时长 s", dbl(\.duration), 0.2...1.5)
-
-                    Text(summary)
-                        .font(.system(size: 9, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                        .padding(.top, 6)
-                }
-                .padding(.trailing, 2)
-            }
-            .frame(maxHeight: 230)
-        }
-        .padding(14)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .padding(.horizontal, 10)
-        .padding(.bottom, 6)
-    }
-
-    private var summary: String {
-        String(format: "squish=%.2f neckW=%.0f bottomW=%.0f neckLen=%.2f curve=%.2f unpinch=%.2f restDrop=%.0f cardW=%.0f duration=%.2f",
-                     params.squish, params.neckWidth, params.bottomWidth, params.neckLen, params.curve,
-                     params.unpinchStart, params.restDrop, params.cardWidth, params.duration)
-    }
-
-    private func section(_ title: String) -> some View {
-        Text(title)
-            .font(.system(size: 11, weight: .heavy))
-            .foregroundStyle(.secondary)
-            .padding(.top, 5)
-    }
-
-    /// Binding adapter for the `Double`-typed params (sliders work in CGFloat).
-    private func dbl(_ kp: WritableKeyPath<GenieParams, Double>) -> Binding<CGFloat> {
-        Binding(get: { CGFloat(params[keyPath: kp]) }, set: { params[keyPath: kp] = Double($0) })
-    }
-
-    private func sliderRow(_ label: String, _ value: Binding<CGFloat>, _ range: ClosedRange<Double>, _ fmt: String = "%.2f") -> some View {
-        HStack(spacing: 10) {
-            Text(label).font(.system(size: 12, weight: .medium)).frame(width: 64, alignment: .leading)
-            Slider(value: Binding(get: { Double(value.wrappedValue) }, set: { value.wrappedValue = CGFloat($0) }), in: range)
-            Text(String(format: fmt, value.wrappedValue)).font(.system(size: 12, design: .monospaced)).frame(width: 46, alignment: .trailing)
-        }
-    }
-
-    private func play() {
-        scrub = 0
-        DispatchQueue.main.async {
-            withAnimation(params.presentAnimation) { scrub = 1 }
-        }
-    }
-}
-#endif
 
 struct WonangfeiShareCard: View {
     var day: WageDay

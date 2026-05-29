@@ -55,7 +55,20 @@ struct WNFWidgetSnapshot: Codable, Equatable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        let decodedSchemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        // Refuse to decode a snapshot written by a newer build than this one. Without
+        // this gate a future v2 payload could decode into a v1 shape and silently
+        // drop or misread fields; failing loudly lets the reader fall back to
+        // `.sample` instead (E-9). Mirrors `DailyRecordStorageEnvelope`'s handling.
+        guard decodedSchemaVersion <= Self.schemaVersion else {
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(
+                    codingPath: [CodingKeys.schemaVersion],
+                    debugDescription: "Unsupported widget snapshot schema version \(decodedSchemaVersion); newest supported is \(Self.schemaVersion)"
+                )
+            )
+        }
+        schemaVersion = decodedSchemaVersion
         capturedAt = try container.decode(Date.self, forKey: .capturedAt)
         earnedToday = try container.decode(Double.self, forKey: .earnedToday)
         elapsedPaidMinutes = try container.decode(Int.self, forKey: .elapsedPaidMinutes)

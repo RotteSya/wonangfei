@@ -75,6 +75,7 @@ struct RootView: View {
     @State private var activityItems: [Any] = []
     @State private var isActivityPresented = false
     @State private var isPreparingShareActivity = false
+    @State private var shareActivityWatchdog: Task<Void, Never>?
     @State private var windowSceneScale: CGFloat?
     @State private var settlementPresented = false
     @State private var settlementSnapshot: DailySettlement?
@@ -84,6 +85,7 @@ struct RootView: View {
 
     private static let shareExportWidth: CGFloat = 360
     private static let shareLoadingRefreshDelayNanoseconds: UInt64 = 16_000_000
+    private static let shareActivityTimeoutNanoseconds: UInt64 = 3_000_000_000
 
     private enum EntranceTiming {
         static let shellResponse: TimeInterval = 0.82
@@ -346,6 +348,7 @@ struct RootView: View {
     }
 
     private func dismissSettlement() {
+        endShareActivityWatchdog()
         isPreparingShareActivity = false
         withAnimation(.easeOut(duration: 0.22)) {
             settlementPresented = false
@@ -361,10 +364,33 @@ struct RootView: View {
     }
 
     private func dismissShareCard() {
+        endShareActivityWatchdog()
         isPreparingShareActivity = false
         withAnimation(.easeOut(duration: 0.2)) {
             homeSharePresented = false
         }
+    }
+
+    /// Starts a one-shot watchdog that recovers the share UI if preparation never
+    /// resolves. Share export is synchronous on the main actor, so this can't
+    /// interrupt a hung `ImageRenderer` mid-render — but it does guarantee the
+    /// "渲染中…" button never sticks forever if the async pre-flight stalls or the
+    /// completion path is somehow skipped: after the timeout it clears the flag and
+    /// presents the text fallback instead (E-8). Cancelled by every success/dismiss path.
+    private func beginShareActivityWatchdog(fallbackText: @escaping () -> String) {
+        shareActivityWatchdog?.cancel()
+        shareActivityWatchdog = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: Self.shareActivityTimeoutNanoseconds)
+            guard !Task.isCancelled, isPreparingShareActivity else { return }
+            isPreparingShareActivity = false
+            activityItems = [fallbackText()]
+            isActivityPresented = true
+        }
+    }
+
+    private func endShareActivityWatchdog() {
+        shareActivityWatchdog?.cancel()
+        shareActivityWatchdog = nil
     }
 
     @MainActor
@@ -375,11 +401,15 @@ struct RootView: View {
         let exportDay = day
         let exportCopy = shareCardCopy
         let exportHidesSensitiveInfo = shareCardHidesSensitiveInfo
+        beginShareActivityWatchdog {
+            shareFallbackText(day: exportDay, hidesSensitiveInfo: exportHidesSensitiveInfo)
+        }
 
         Task { @MainActor in
             // ImageRenderer is MainActor-bound; give the loading state one frame before rasterizing.
             try? await Task.sleep(nanoseconds: Self.shareLoadingRefreshDelayNanoseconds)
             guard homeSharePresented else {
+                endShareActivityWatchdog()
                 isPreparingShareActivity = false
                 return
             }
@@ -394,6 +424,10 @@ struct RootView: View {
 
     @MainActor
     private func renderAndPresentSystemShare(day: WageDay, copy: ShareCardCopy, hidesSensitiveInfo: Bool) {
+        // Bail if the watchdog already recovered the UI (and presented the fallback),
+        // so a late-completing render can't double-present a share sheet.
+        guard isPreparingShareActivity else { return }
+        endShareActivityWatchdog()
         let exportCard = WonangfeiShareCard(
             day: day,
             copy: copy,
@@ -421,10 +455,14 @@ struct RootView: View {
         isPreparingShareActivity = true
         let exportSnapshot = snapshot
         let exportHidesSensitiveInfo = settlementHidesSensitiveInfo
+        beginShareActivityWatchdog {
+            settlementFallbackText(settlement: exportSnapshot, hidesSensitiveInfo: exportHidesSensitiveInfo)
+        }
 
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: Self.shareLoadingRefreshDelayNanoseconds)
             guard settlementPresented else {
+                endShareActivityWatchdog()
                 isPreparingShareActivity = false
                 return
             }
@@ -438,6 +476,8 @@ struct RootView: View {
 
     @MainActor
     private func renderAndPresentSettlementShare(settlement: DailySettlement, hidesSensitiveInfo: Bool) {
+        guard isPreparingShareActivity else { return }
+        endShareActivityWatchdog()
         let exportCard = DailySettlementShareCard(
             settlement: settlement,
             displayedAmount: settlement.earnedToday,

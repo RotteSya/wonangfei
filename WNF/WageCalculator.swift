@@ -47,13 +47,20 @@ enum WageCalculator {
         let rawLunchEnd = hasLunchBreak ? lunchEnd.minutesInDay : endMinute
         let lunchStartMinute = min(rawLunchStart, rawLunchEnd)
         let lunchEndMinute = max(rawLunchStart, rawLunchEnd)
-        let lunchLength = max(0, lunchEndMinute - lunchStartMinute)
+        // Clamp the lunch window into the paid work window so a break that sits
+        // partly or wholly outside [start, end] only ever deducts the minutes that
+        // actually overlap the workday (E-1). The end is pinned to be at least the
+        // clamped start so the status branches below stay well-ordered even when
+        // lunch falls entirely outside work hours (the window collapses to zero).
+        let lunchEffectiveStart = min(max(lunchStartMinute, startMinute), endMinute)
+        let lunchEffectiveEnd = min(max(lunchEndMinute, lunchEffectiveStart), endMinute)
+        let lunchLength = max(0, lunchEffectiveEnd - lunchEffectiveStart)
         let workdayMinutes = max(1, endMinute - startMinute - lunchLength)
         let hourlyRate = monthlySalary / (Double(max(1, workdaysPerMonth)) * (Double(workdayMinutes) / 60))
         let startSecond = startMinute * 60
         let endSecond = endMinute * 60
-        let lunchStartSecond = lunchStartMinute * 60
-        let lunchEndSecond = lunchEndMinute * 60
+        let lunchStartSecond = lunchEffectiveStart * 60
+        let lunchEndSecond = lunchEffectiveEnd * 60
         let nowSecond = now.secondsInDay
         let nowMinute = nowSecond / 60
 
@@ -68,9 +75,9 @@ enum WageCalculator {
         let status: WorkStatus
         if nowMinute < startMinute {
             status = .before
-        } else if nowMinute < lunchStartMinute {
+        } else if nowMinute < lunchEffectiveStart {
             status = .morning
-        } else if nowMinute < lunchEndMinute {
+        } else if nowMinute < lunchEffectiveEnd {
             status = .lunch
         } else if nowMinute < endMinute {
             status = .afternoon
@@ -83,8 +90,8 @@ enum WageCalculator {
         return WageDay(
             startMinute: startMinute,
             endMinute: endMinute,
-            lunchStartMinute: lunchStartMinute,
-            lunchEndMinute: lunchEndMinute,
+            lunchStartMinute: lunchEffectiveStart,
+            lunchEndMinute: lunchEffectiveEnd,
             workdayMinutes: workdayMinutes,
             hourlyRate: hourlyRate,
             elapsedPaidMinutes: elapsedSeconds / 60,

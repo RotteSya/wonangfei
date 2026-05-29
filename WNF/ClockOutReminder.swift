@@ -11,6 +11,19 @@ final class ClockOutReminderService {
 
     private let center: UNUserNotificationCenter
 
+    /// The schedule inputs that produced the currently-installed notifications.
+    /// `reconcile` uses it to skip a redundant cancel→add cycle (E-10).
+    private var lastReconciledSignature: ReconcileSignature?
+
+    /// Schedule-affecting inputs, normalized for stable comparison. Authorization
+    /// status is deliberately excluded — see `reconcile`.
+    private struct ReconcileSignature: Equatable {
+        var enabled: Bool
+        var hour: Int
+        var minute: Int
+        var weekdays: [Int]
+    }
+
     private init(center: UNUserNotificationCenter = .current()) {
         self.center = center
     }
@@ -53,20 +66,41 @@ final class ClockOutReminderService {
         workEnd: DateComponents,
         selectedWeekdays: Set<Int>
     ) async {
+        let hour = max(0, min(23, workEnd.hour ?? 18))
+        let minute = max(0, min(59, workEnd.minute ?? 30))
+        let sortedWeekdays = selectedWeekdays.sorted()
+        let signature = ReconcileSignature(
+            enabled: enabled,
+            hour: hour,
+            minute: minute,
+            weekdays: sortedWeekdays
+        )
+
+        // Nothing that affects the schedule changed since the last resolved
+        // reconcile, so skip the whole cancel→add cycle. This runs on every
+        // foreground, so the no-op case is the common one; skipping it also avoids
+        // the tiny window where a clock/timezone change between the cancel and the
+        // re-add could drop one firing (E-10). Authorization status is intentionally
+        // not part of the signature: an unauthorized attempt clears the memo below,
+        // so a later grant with the same inputs still re-runs.
+        if lastReconciledSignature == signature { return }
+
         await cancelAllClockOutNotifications()
 
-        guard enabled, !selectedWeekdays.isEmpty else { return }
+        guard enabled, !selectedWeekdays.isEmpty else {
+            lastReconciledSignature = signature
+            return
+        }
 
         let status = await currentAuthorizationStatus()
         guard status == .authorized || status == .provisional || status == .ephemeral else {
+            lastReconciledSignature = nil
             Self.logger.info("Skipping clock-out reminder scheduling because authorization status is \(String(describing: status), privacy: .public)")
             return
         }
 
-        let hour = max(0, min(23, workEnd.hour ?? 18))
-        let minute = max(0, min(59, workEnd.minute ?? 30))
-
-        for appWeekday in selectedWeekdays.sorted() {
+        var scheduledAll = true
+        for appWeekday in sortedWeekdays {
             guard let iosWeekday = Self.appWeekdayToiOSWeekday(appWeekday) else { continue }
 
             let content = UNMutableNotificationContent()
@@ -86,11 +120,15 @@ final class ClockOutReminderService {
             do {
                 try await center.add(request)
             } catch {
+                scheduledAll = false
                 Self.logger.error("Failed to schedule clock-out reminder \(identifier, privacy: .public): \(String(describing: error), privacy: .public)")
             }
         }
 
-        Self.logger.info("Scheduled clock-out reminders for weekdays=\(selectedWeekdays.sorted(), privacy: .public) at \(hour, privacy: .public):\(minute, privacy: .public)")
+        // Only memoize a clean schedule; a partial failure leaves the memo cleared
+        // so the next reconcile retries the dropped notifications.
+        lastReconciledSignature = scheduledAll ? signature : nil
+        Self.logger.info("Scheduled clock-out reminders for weekdays=\(sortedWeekdays, privacy: .public) at \(hour, privacy: .public):\(minute, privacy: .public)")
     }
 
     private func cancelAllClockOutNotifications() async {

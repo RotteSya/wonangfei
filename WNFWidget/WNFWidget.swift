@@ -8,6 +8,8 @@ private enum WNFWidgetShared {
 }
 
 private struct WidgetSnapshot: Codable {
+    static let schemaVersion = 1
+
     var schemaVersion: Int
     var capturedAt: Date
     var earnedToday: Double
@@ -18,7 +20,7 @@ private struct WidgetSnapshot: Codable {
     var hidesSensitiveInfo: Bool
 
     static let sample = WidgetSnapshot(
-        schemaVersion: 1,
+        schemaVersion: schemaVersion,
         capturedAt: Date(),
         earnedToday: 888.88,
         elapsedPaidMinutes: 188,
@@ -61,7 +63,18 @@ private struct WidgetSnapshot: Codable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        let decodedSchemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        // A snapshot written by a newer app build must not decode into this older
+        // widget's shape; throw so `loadSnapshot` falls back to `.sample` cleanly (E-9).
+        guard decodedSchemaVersion <= Self.schemaVersion else {
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(
+                    codingPath: [CodingKeys.schemaVersion],
+                    debugDescription: "Unsupported widget snapshot schema version \(decodedSchemaVersion); newest supported is \(Self.schemaVersion)"
+                )
+            )
+        }
+        schemaVersion = decodedSchemaVersion
         capturedAt = try container.decode(Date.self, forKey: .capturedAt)
         earnedToday = try container.decode(Double.self, forKey: .earnedToday)
         elapsedPaidMinutes = try container.decode(Int.self, forKey: .elapsedPaidMinutes)

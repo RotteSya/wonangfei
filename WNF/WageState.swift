@@ -15,12 +15,28 @@ final class WageState: ObservableObject {
 
     @Published var workStart: DateComponents {
         didSet {
+            // The app does not model overnight shifts: the workday must be a
+            // forward interval within a single calendar day. Reject a start that
+            // would meet or cross the end and snap back to the last valid value,
+            // otherwise `endMinute - startMinute` goes non-positive and the hourly
+            // rate explodes via the `max(1, …)` floor in WageCalculator (E-2).
+            guard workStart.minutesInDay < workEnd.minutesInDay else {
+                workStart = oldValue
+                return
+            }
             userDefaults.set(workStart.minutesInDay, forKey: StorageKey.workStartMinute)
         }
     }
 
     @Published var workEnd: DateComponents {
         didSet {
+            // Symmetric guard to `workStart`: the end must stay strictly after the
+            // start (no overnight shifts). Roll back an invalid edit before it can
+            // poison the wage calculation (E-2).
+            guard workEnd.minutesInDay > workStart.minutesInDay else {
+                workEnd = oldValue
+                return
+            }
             userDefaults.set(workEnd.minutesInDay, forKey: StorageKey.workEndMinute)
             reconcileClockOutReminder()
         }
@@ -104,14 +120,25 @@ final class WageState: ObservableObject {
 
         monthlySalary = Self.clampedMonthlySalary(userDefaults.doubleValue(forKey: StorageKey.monthlySalary) ?? Default.monthlySalary)
         workdaysPerMonth = Self.clampedWorkdaysPerMonth(userDefaults.integerValue(forKey: StorageKey.workdaysPerMonth) ?? Default.workdaysPerMonth)
-        workStart = DateComponents.minuteInDay(userDefaults.integerValue(forKey: StorageKey.workStartMinute) ?? Default.workStartMinute)
-        workEnd = DateComponents.minuteInDay(userDefaults.integerValue(forKey: StorageKey.workEndMinute) ?? Default.workEndMinute)
+        // Repair any overnight/degenerate window persisted by an older build before
+        // the ordering guards existed; otherwise the bad value survives launch and
+        // the hourly rate stays broken (E-2). Normalizing the loaded minutes keeps
+        // the guards' invariant true from the first frame.
+        let workWindow = Self.normalizedWorkWindow(
+            start: userDefaults.integerValue(forKey: StorageKey.workStartMinute) ?? Default.workStartMinute,
+            end: userDefaults.integerValue(forKey: StorageKey.workEndMinute) ?? Default.workEndMinute
+        )
+        workStart = DateComponents.minuteInDay(workWindow.start)
+        workEnd = DateComponents.minuteInDay(workWindow.end)
         lunchStart = DateComponents.minuteInDay(userDefaults.integerValue(forKey: StorageKey.lunchStartMinute) ?? Default.lunchStartMinute)
         lunchEnd = DateComponents.minuteInDay(userDefaults.integerValue(forKey: StorageKey.lunchEndMinute) ?? Default.lunchEndMinute)
         hasLunchBreak = userDefaults.boolValue(forKey: StorageKey.hasLunchBreak) ?? Default.hasLunchBreak
         includeOvertime = userDefaults.boolValue(forKey: StorageKey.includeOvertime) ?? Default.includeOvertime
         privacyMode = userDefaults.boolValue(forKey: StorageKey.privacyMode) ?? Default.privacyMode
-        selectedWeekdays = userDefaults.weekdaySet(forKey: StorageKey.selectedWeekdays) ?? Default.selectedWeekdays
+        // An empty set would make every day unpaid; treat persisted emptiness (from
+        // data predating the "keep at least one day" guard) as "use the default". (E-3)
+        let loadedWeekdays = userDefaults.weekdaySet(forKey: StorageKey.selectedWeekdays) ?? Default.selectedWeekdays
+        selectedWeekdays = loadedWeekdays.isEmpty ? Default.selectedWeekdays : loadedWeekdays
         clockOutReminderEnabled = userDefaults.boolValue(forKey: StorageKey.clockOutReminderEnabled) ?? Default.clockOutReminderEnabled
         lastSettlementDateKey = userDefaults.string(forKey: StorageKey.lastSettlementDateKey)
         let now = Date()
@@ -222,11 +249,22 @@ final class WageState: ObservableObject {
         guard (0...6).contains(index) else { return }
         var nextWeekdays = selectedWeekdays
         if nextWeekdays.contains(index) {
+            // Always keep at least one workday selected; an empty set makes every
+            // day unpaid and the whole app reads zero (E-3).
+            guard nextWeekdays.count > 1 else { return }
             nextWeekdays.remove(index)
         } else {
             nextWeekdays.insert(index)
         }
         selectedWeekdays = nextWeekdays
+    }
+
+    /// Returns a work window guaranteed to be a forward, same-day interval. A
+    /// non-positive span (overnight or inverted, e.g. start 20:00 / end 08:00)
+    /// is replaced wholesale with the default day rather than partially repaired,
+    /// so the user lands on a sane, obviously-default configuration. (E-2)
+    private static func normalizedWorkWindow(start: Int, end: Int) -> (start: Int, end: Int) {
+        end > start ? (start, end) : (Default.workStartMinute, Default.workEndMinute)
     }
 
     private static func clampedMonthlySalary(_ value: Double) -> Double {
@@ -286,7 +324,17 @@ final class WageState: ObservableObject {
         )
         nextRecords[closedLastObservedRecord.dateKey] = closedLastObservedRecord
 
-        var cursor = calendar.date(byAdding: .day, value: 1, to: lastObservedStart)
+        // Bound how far back we synthesize `.backfilled` records. If the system
+        // clock jumps forward by months or years (debugging, timezone tricks, or a
+        // manual date change), an unbounded loop would insert thousands of records
+        // and force a full-dictionary reserialize on every save (E-4). We only ever
+        // backfill the most recent `maxBackfillDays`; the genuine last-observed day
+        // is still closed above, and older gaps simply stay unrecorded.
+        let maxBackfillDays = 31
+        let earliestBackfillStart = calendar.date(byAdding: .day, value: -maxBackfillDays, to: todayStart) ?? lastObservedStart
+        let backfillFromStart = max(lastObservedStart, earliestBackfillStart)
+
+        var cursor = calendar.date(byAdding: .day, value: 1, to: backfillFromStart)
         while let date = cursor, date < todayStart {
             let dateKey = Self.dateKey(for: date)
             if nextRecords[dateKey] == nil {
@@ -308,11 +356,22 @@ final class WageState: ObservableObject {
         saveDailyRecords()
     }
 
+    /// INVARIANT: this is the only path allowed to mutate `dailyRecords` after the
+    /// initial load in `init`, and it MUST bump `recordsRevision` on every change.
+    /// `RecordAggregationInput.==` intentionally ignores the `dailyRecords` payload
+    /// and keys its cache off `recordsRevision` alone — any write that bypasses this
+    /// method leaves the revision stale and serves the aggregation cache outdated
+    /// data (E-6). The `dailyRecords` setter is `private(set)` to keep this honest;
+    /// do not add a second write path.
     private func replaceDailyRecords(_ records: [String: DailyWageRecord]) {
         dailyRecords = records
         recordsRevision += 1
     }
 
+    /// Synthesizes a record for a day the app never observed live. Note that
+    /// `calculation(at:)` reads the *current* salary settings, so the amount reflects
+    /// today's pay rate applied to that past date — see the capture-semantics note on
+    /// `DailyWageRecord` (E-5).
     private func makeBackfilledDailyRecord(for date: Date, capturedAt: Date) -> DailyWageRecord {
         makeDailyRecord(for: Self.endOfDay(for: date), capturedAt: capturedAt, source: .backfilled)
     }

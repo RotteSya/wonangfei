@@ -144,6 +144,152 @@ struct WidgetSnapshotTests {
     }
 }
 
+struct WageCalculatorEdgeCaseTests {
+    @Test("午休落在工作时段之外时不扣减计薪时长")
+    func lunchOutsideWorkHoursIsNotDeducted() {
+        // 上班 9:30–18:30（540 分钟），午休 20:00–21:00 完全在下班之后。
+        let outsideLunch = edgeDay(
+            now: DateComponents(hour: 18, minute: 30),
+            hasLunchBreak: true,
+            lunchStart: DateComponents(hour: 20, minute: 0),
+            lunchEnd: DateComponents(hour: 21, minute: 0)
+        )
+        let noLunch = edgeDay(
+            now: DateComponents(hour: 18, minute: 30),
+            hasLunchBreak: false,
+            lunchStart: DateComponents(hour: 20, minute: 0),
+            lunchEnd: DateComponents(hour: 21, minute: 0)
+        )
+
+        #expect(outsideLunch.workdayMinutes == 9 * 60)
+        #expect(outsideLunch.workdayMinutes == noLunch.workdayMinutes)
+        #expect(abs(outsideLunch.hourlyRate - noLunch.hourlyRate) < 0.0001)
+        #expect(abs(outsideLunch.earnedToday - outsideLunch.targetToday) < 0.001)
+    }
+
+    @Test("部分重叠的午休只扣减落在工作时段内的部分")
+    func partiallyOverlappingLunchDeductsOnlyOverlap() {
+        // 午休 18:00–19:00，下班 18:30 → 只有 30 分钟与工作时段重叠。
+        let day = edgeDay(
+            now: DateComponents(hour: 18, minute: 30),
+            hasLunchBreak: true,
+            lunchStart: DateComponents(hour: 18, minute: 0),
+            lunchEnd: DateComponents(hour: 19, minute: 0)
+        )
+
+        #expect(day.workdayMinutes == 9 * 60 - 30)
+    }
+
+    private func edgeDay(
+        now: DateComponents,
+        hasLunchBreak: Bool,
+        lunchStart: DateComponents,
+        lunchEnd: DateComponents
+    ) -> WageDay {
+        WageCalculator.compute(
+            monthlySalary: 22_000,
+            workdaysPerMonth: 22,
+            workStart: .minuteInDay(9 * 60 + 30),
+            workEnd: .minuteInDay(18 * 60 + 30),
+            lunchStart: .minuteInDay(lunchStart.minutesInDay),
+            lunchEnd: .minuteInDay(lunchEnd.minutesInDay),
+            hasLunchBreak: hasLunchBreak,
+            includeOvertime: false,
+            now: now
+        )
+    }
+}
+
+struct WageStateWorkWindowTests {
+    @Test("加载倒挂的工作时段时回退到默认值")
+    func invertedPersistedWindowFallsBackToDefault() throws {
+        let (defaults, suiteName) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(20 * 60, forKey: StorageKey.workStartMinute)
+        defaults.set(8 * 60, forKey: StorageKey.workEndMinute)
+
+        let state = WageState(userDefaults: defaults)
+        defer { state.pauseCalendarDayTimer() }
+
+        #expect(state.workStart.minutesInDay == 9 * 60 + 30)
+        #expect(state.workEnd.minutesInDay == 18 * 60 + 30)
+        #expect(state.workEnd.minutesInDay > state.workStart.minutesInDay)
+    }
+
+    @Test("把下班时间设到上班之前会被回滚")
+    func settingEndBeforeStartRollsBack() throws {
+        let (defaults, suiteName) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let state = WageState(userDefaults: defaults)
+        defer { state.pauseCalendarDayTimer() }
+
+        let originalEnd = state.workEnd.minutesInDay
+        state.workEnd = DateComponents(hour: 8, minute: 0)
+
+        #expect(state.workEnd.minutesInDay == originalEnd)
+    }
+
+    @Test("把上班时间设到下班之后会被回滚")
+    func settingStartAfterEndRollsBack() throws {
+        let (defaults, suiteName) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let state = WageState(userDefaults: defaults)
+        defer { state.pauseCalendarDayTimer() }
+
+        let originalStart = state.workStart.minutesInDay
+        state.workStart = DateComponents(hour: 20, minute: 0)
+
+        #expect(state.workStart.minutesInDay == originalStart)
+    }
+}
+
+struct WageStateWeekdayGuardTests {
+    @Test("不能取消最后一个工作日")
+    func cannotDeselectLastWorkday() throws {
+        let (defaults, suiteName) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set([2], forKey: StorageKey.selectedWeekdays)
+
+        let state = WageState(userDefaults: defaults)
+        defer { state.pauseCalendarDayTimer() }
+
+        #expect(state.selectedWeekdays == [2])
+        state.toggleWeekday(2)
+        #expect(state.selectedWeekdays == [2])
+    }
+
+    @Test("加载到空工作日集合时回退到默认值")
+    func emptyPersistedWeekdaysFallBackToDefault() throws {
+        let (defaults, suiteName) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set([Int](), forKey: StorageKey.selectedWeekdays)
+
+        let state = WageState(userDefaults: defaults)
+        defer { state.pauseCalendarDayTimer() }
+
+        #expect(state.selectedWeekdays == [0, 1, 2, 3, 4])
+    }
+}
+
+struct WageStateBackfillBoundTests {
+    @Test("时钟大幅前跳时回填记录数量有上限")
+    func backfillIsBoundedOnLargeClockJump() throws {
+        let (defaults, suiteName) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let state = WageState(userDefaults: defaults)
+        defer { state.pauseCalendarDayTimer() }
+
+        let farFuture = try #require(
+            DateComponents.calendar.date(byAdding: .year, value: 5, to: state.currentDayStart)
+        )
+        state.refreshCalendarDayIfNeeded(now: farFuture)
+
+        // 没有上限时这里会写入约 1826 条记录；上限把它压在 31 天附近。
+        #expect(state.dailyRecords.count > 0)
+        #expect(state.dailyRecords.count <= 32)
+    }
+}
+
 private enum TestSetupError: Error {
     case userDefaultsUnavailable
 }

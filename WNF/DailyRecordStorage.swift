@@ -56,6 +56,19 @@ enum DailyRecordSource: String, Codable, Equatable {
     case backfilled
 }
 
+/// A single day's wage snapshot.
+///
+/// IMPORTANT (E-5): all money fields (`earnedToday`, `targetToday`, `hourlyRate`)
+/// are computed from the salary settings in effect at `capturedAt`, NOT from the
+/// settings that were live on `dateKey`. For `.observed` rows captured on the day
+/// itself the two coincide. For `.backfilled` rows — synthesized when the app
+/// reopens after one or more missed days — they are whatever `monthlySalary` /
+/// `workdaysPerMonth` happened to be at backfill time. A raise therefore retroactively
+/// re-prices any day that was backfilled afterward. This is a deliberate product
+/// compromise (we never stored a per-day salary timeline); the `monthlySalary`,
+/// `workdaysPerMonth`, and `hourlyRate` fields persisted on each record are the audit
+/// trail for the assumptions a given amount was derived under. See
+/// `WageState.makeBackfilledDailyRecord`.
 struct DailyWageRecord: Codable, Equatable, Identifiable {
     var id: String { dateKey }
 

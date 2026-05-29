@@ -252,6 +252,7 @@ struct RootView: View {
                     settlement: snapshot,
                     hidesSensitiveInfo: $settlementHidesSensitiveInfo,
                     isPreparingShare: isPreparingShareActivity,
+                    renderScale: shareRenderScale,
                     onShare: presentSettlementSystemShare,
                     onSaveAsAsset: saveSettlementAsAsset,
                     onDismiss: dismissSettlement

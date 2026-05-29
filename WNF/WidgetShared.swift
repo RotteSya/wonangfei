@@ -8,6 +8,15 @@ enum WNFShared {
 
 struct WNFWidgetSnapshot: Codable, Equatable {
     static let schemaVersion = 1
+    static let sample = WNFWidgetSnapshot(
+        capturedAt: Date(timeIntervalSince1970: 1_725_955_200),
+        earnedToday: 888.88,
+        elapsedPaidMinutes: 188,
+        workStartMinute: 9 * 60 + 30,
+        workEndMinute: 18 * 60 + 30,
+        statusLabel: "正在搬砖",
+        hidesSensitiveInfo: false
+    )
 
     var schemaVersion: Int = Self.schemaVersion
     var capturedAt: Date
@@ -53,6 +62,19 @@ struct WNFWidgetSnapshot: Codable, Equatable {
         case hidesSensitiveInfo
     }
 
+    /// `Equatable` includes `capturedAt`, so a strict `==` between successive
+    /// writes always differs even when nothing meaningful changed. This helper
+    /// compares only the fields the widget actually renders.
+    func hasSameContent(as other: WNFWidgetSnapshot) -> Bool {
+        schemaVersion == other.schemaVersion
+            && earnedToday == other.earnedToday
+            && elapsedPaidMinutes == other.elapsedPaidMinutes
+            && workStartMinute == other.workStartMinute
+            && workEndMinute == other.workEndMinute
+            && statusLabel == other.statusLabel
+            && hidesSensitiveInfo == other.hidesSensitiveInfo
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let decodedSchemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
@@ -80,26 +102,63 @@ struct WNFWidgetSnapshot: Codable, Equatable {
 }
 
 enum WNFWidgetSnapshotWriter {
+    private struct ContentSignature: Equatable {
+        var earnedTodayCents: Int
+        var elapsedPaidMinutes: Int
+        var workStartMinute: Int
+        var workEndMinute: Int
+        var statusLabel: String
+        var hidesSensitiveInfo: Bool
+
+        init(_ snapshot: WNFWidgetSnapshot) {
+            earnedTodayCents = Int((max(0, snapshot.earnedToday) * 100).rounded())
+            elapsedPaidMinutes = snapshot.elapsedPaidMinutes
+            workStartMinute = snapshot.workStartMinute
+            workEndMinute = snapshot.workEndMinute
+            statusLabel = snapshot.statusLabel
+            hidesSensitiveInfo = snapshot.hidesSensitiveInfo
+        }
+    }
+
+    private static var lastContentSignature: ContentSignature?
+
+    /// Returns `true` when a new snapshot was actually persisted. The caller
+    /// uses this to decide whether to schedule a widget timeline reload —
+    /// rapid privacy toggles or fg/bg swaps would otherwise re-encode the
+    /// same content multiple times per second.
+    @discardableResult
     static func write(
-        day: WageDay,
+        earnedToday: Double,
+        elapsedPaidMinutes: Int,
         workStartMinute: Int,
         workEndMinute: Int,
         statusLabel: String,
         hidesSensitiveInfo: Bool
-    ) {
-        guard let userDefaults = UserDefaults(suiteName: WNFShared.appGroupID) else { return }
+    ) -> Bool {
+        guard let userDefaults = UserDefaults(suiteName: WNFShared.appGroupID) else { return false }
         let snapshot = WNFWidgetSnapshot(
             capturedAt: Date(),
-            earnedToday: day.earnedToday,
-            elapsedPaidMinutes: day.elapsedPaidMinutes,
+            earnedToday: earnedToday,
+            elapsedPaidMinutes: elapsedPaidMinutes,
             workStartMinute: workStartMinute,
             workEndMinute: workEndMinute,
             statusLabel: statusLabel,
             hidesSensitiveInfo: hidesSensitiveInfo
         )
-        if let data = try? JSONEncoder().encode(snapshot) {
-            userDefaults.set(data, forKey: WNFShared.widgetSnapshotKey)
+        let signature = ContentSignature(snapshot)
+        guard signature != lastContentSignature else { return false }
+
+        if let existingData = userDefaults.data(forKey: WNFShared.widgetSnapshotKey),
+           let existing = try? JSONDecoder().decode(WNFWidgetSnapshot.self, from: existingData),
+           ContentSignature(existing) == signature {
+            lastContentSignature = signature
+            return false
         }
+
+        guard let data = try? JSONEncoder().encode(snapshot) else { return false }
+        userDefaults.set(data, forKey: WNFShared.widgetSnapshotKey)
+        lastContentSignature = signature
+        return true
     }
 }
 

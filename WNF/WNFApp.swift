@@ -32,13 +32,16 @@ struct WNFApp: App {
     private func writeWidgetSnapshot() {
         let day = state.calculation
         let presentation = WorkStatusPresentation(status: day.status)
-        WNFWidgetSnapshotWriter.write(
-            day: day,
+        let wrote = WNFWidgetSnapshotWriter.write(
+            earnedToday: day.earnedToday,
+            elapsedPaidMinutes: day.elapsedPaidMinutes,
             workStartMinute: state.workStart.minutesInDay,
             workEndMinute: state.workEnd.minutesInDay,
             statusLabel: presentation.label,
             hidesSensitiveInfo: state.privacyMode
         )
-        WNFWidgetReloader.scheduleReload()
+        if wrote {
+            WNFWidgetReloader.scheduleReload()
+        }
     }
 }

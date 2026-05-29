@@ -35,6 +35,12 @@
 		100000000000000000000129 /* BubbleQuoteEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000238 /* BubbleQuoteEngine.swift */; };
 		100000000000000000000125 /* PlaceholderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000234 /* PlaceholderTests.swift */; };
 		100000000000000000000130 /* Legal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000239 /* Legal.swift */; };
+		100000000000000000000131 /* WNFHeaderIconButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000240 /* WNFHeaderIconButton.swift */; };
+		100000000000000000000132 /* DailySettlementOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000241 /* DailySettlementOverlay.swift */; };
+		100000000000000000000133 /* DailySettlementShareCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000242 /* DailySettlementShareCard.swift */; };
+		100000000000000000000134 /* ClockOutCTA.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000243 /* ClockOutCTA.swift */; };
+		100000000000000000000135 /* HomeCoinDrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000244 /* HomeCoinDrop.swift */; };
+		100000000000000000000136 /* WidgetShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000219 /* WidgetShared.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -103,6 +109,11 @@
 		100000000000000000000238 /* BubbleQuoteEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BubbleQuoteEngine.swift; sourceTree = "<group>"; };
 		100000000000000000000234 /* PlaceholderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceholderTests.swift; sourceTree = "<group>"; };
 		100000000000000000000239 /* Legal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Legal.swift; sourceTree = "<group>"; };
+		100000000000000000000240 /* WNFHeaderIconButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WNFHeaderIconButton.swift; sourceTree = "<group>"; };
+		100000000000000000000241 /* DailySettlementOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailySettlementOverlay.swift; sourceTree = "<group>"; };
+		100000000000000000000242 /* DailySettlementShareCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailySettlementShareCard.swift; sourceTree = "<group>"; };
+		100000000000000000000243 /* ClockOutCTA.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockOutCTA.swift; sourceTree = "<group>"; };
+		100000000000000000000244 /* HomeCoinDrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeCoinDrop.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -156,11 +167,16 @@
 				100000000000000000000203 /* Theme.swift */,
 				100000000000000000000204 /* RootView.swift */,
 				100000000000000000000205 /* SharedViews.swift */,
+				100000000000000000000240 /* WNFHeaderIconButton.swift */,
 				100000000000000000000206 /* HomeView.swift */,
+				100000000000000000000244 /* HomeCoinDrop.swift */,
 				100000000000000000000217 /* HomeMascotVideoSessionCoordinator.swift */,
 				100000000000000000000216 /* ShareCard.swift */,
 				100000000000000000000238 /* BubbleQuoteEngine.swift */,
 				100000000000000000000236 /* DailySettlement.swift */,
+				100000000000000000000241 /* DailySettlementOverlay.swift */,
+				100000000000000000000242 /* DailySettlementShareCard.swift */,
+				100000000000000000000243 /* ClockOutCTA.swift */,
 				100000000000000000000237 /* ClockOutReminder.swift */,
 				100000000000000000000207 /* RecordsView.swift */,
 				100000000000000000000208 /* SettingsView.swift */,
@@ -348,11 +364,16 @@
 				100000000000000000000103 /* Theme.swift in Sources */,
 				100000000000000000000104 /* RootView.swift in Sources */,
 				100000000000000000000105 /* SharedViews.swift in Sources */,
+				100000000000000000000131 /* WNFHeaderIconButton.swift in Sources */,
 				100000000000000000000106 /* HomeView.swift in Sources */,
+				100000000000000000000135 /* HomeCoinDrop.swift in Sources */,
 				100000000000000000000117 /* HomeMascotVideoSessionCoordinator.swift in Sources */,
 				100000000000000000000116 /* ShareCard.swift in Sources */,
 				100000000000000000000129 /* BubbleQuoteEngine.swift in Sources */,
 				100000000000000000000127 /* DailySettlement.swift in Sources */,
+				100000000000000000000132 /* DailySettlementOverlay.swift in Sources */,
+				100000000000000000000133 /* DailySettlementShareCard.swift in Sources */,
+				100000000000000000000134 /* ClockOutCTA.swift in Sources */,
 				100000000000000000000128 /* ClockOutReminder.swift in Sources */,
 				100000000000000000000107 /* RecordsView.swift in Sources */,
 				100000000000000000000108 /* SettingsView.swift in Sources */,
@@ -364,6 +385,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				100000000000000000000136 /* WidgetShared.swift in Sources */,
 				100000000000000000000124 /* WNFWidget.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -224,7 +224,7 @@ struct SettingsView: View {
                     .foregroundStyle(Color.white)
                 HStack(spacing: 6) {
                     YenBadge(size: 13)
-                    Text("时薪 \(state.privacyMode ? "¥••" : "¥\(Int(day.hourlyRate))") · \(state.hasLunchBreak ? "已忍 \(Int(Double(day.workdayMinutes) / 60 * 9.4)) 小时" : "不午休")")
+                    Text(profileSubtitle)
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(Color.white.opacity(0.58))
                 }
@@ -242,6 +242,14 @@ struct SettingsView: View {
                 .offset(x: 20, y: -56)
         }
         .clipShape(RoundedRectangle(cornerRadius: 28))
+    }
+
+    private var profileSubtitle: String {
+        let hourlyRateText = state.privacyMode ? "¥••" : "¥\(Int(day.hourlyRate))"
+        let patienceText = state.hasLunchBreak
+            ? "今日已忍 \(WNFFormat.duration(day.elapsedPaidMinutes))"
+            : "不午休"
+        return "时薪 \(hourlyRateText) · \(patienceText)"
     }
 
     private var weekdaysCard: some View {

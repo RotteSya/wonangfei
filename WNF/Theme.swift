@@ -14,8 +14,4 @@ enum WNFTheme {
     static let coral = Color(red: 1.0, green: 0.3608, blue: 0.3412)
     static let coralSoft = Color(red: 1.0, green: 0.8431, blue: 0.8235)
     static let hairline = Color.black.opacity(0.08)
-
-    static let display = Font.custom("ZCOOLQingKeHuangYou-Regular", size: 20)
-    static let body = Font.custom("Nunito", size: 15)
-    static let mono = Font.custom("JetBrainsMono-Regular", size: 15)
 }

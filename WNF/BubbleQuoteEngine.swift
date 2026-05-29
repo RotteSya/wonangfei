@@ -89,11 +89,12 @@ final class BubbleQuoteEngine: ObservableObject {
     }
 
     private func pickNext() -> String {
-        if !aiPool.isEmpty {
-            let aiNext = aiPool.removeFirst()
+        if let aiIndex = aiPool.firstIndex(where: { $0 != currentBase }) {
+            let aiNext = aiPool.remove(at: aiIndex)
             if aiPool.count < 2 { prefetchAIQuotes() }
-            if aiNext != currentBase { return aiNext }
+            return aiNext
         }
+        if aiPool.count < 2 { prefetchAIQuotes() }
         let candidates = staticPool.filter { $0 != currentBase }
         return candidates.randomElement() ?? staticPool.first ?? currentBase
     }

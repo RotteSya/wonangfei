@@ -40,9 +40,10 @@
 - 强对比：反思黑 `#0D0D0D`
 - 背景：奶油白 `#FFF6E5`
 - 辅助：电光青 `#00E5FF`、热辣珊瑚 `#FF5C57`
-- 展示字体：ZCOOL QingKe HuangYou
-- 正文字体：Nunito + PingFang SC
-- 数字字体：JetBrains Mono
+- 原型展示字体：ZCOOL QingKe HuangYou
+- 原型正文字体：Nunito + PingFang SC
+- 原型数字字体：JetBrains Mono
+- 原生 App 当前使用系统 rounded / monospaced 字体；未注册自定义 `UIAppFonts`。
 
 ## Current Product Surfaces
 
@@ -67,7 +68,7 @@ XcodeBuildMCP 已在 `.xcodebuildmcp/config.yaml` 持久化默认值：project `
 - 首页工资实时计算、隐私打码、进度条。
 - 首页吉祥物位使用透明循环视频序列：`home-typing.mov` 和 `home-bored.mov` 每轮随机排序后连续播放；视频控制器由 `HomeMascotVideoSessionCoordinator` 稳定持有，`RootView` 只转发 scene phase 和 tab 切换事件；切换 tab 或进入短暂 inactive 时只暂停/恢复，不重建 AVQueuePlayer 队列；进入后台或收到内存警告时才会清空队列，回到首页活跃态再重新装载。
 - 首页分享卡片：背景虚化、今日窝囊费/上班时长、卡片内隐藏敏感信息、系统分享和退出；系统分享渲图期间分享按钮会显示 loading 并防重复点击。该处理是 UX/感知反馈修复，不减少主线程栅格化开销：渲图前会先让出一帧刷新 UI，再用当前 `UIWindowScene.screen.scale` 驱动 SwiftUI `ImageRenderer.render(rasterizationScale:)` 输出系统分享图；`UIActivityViewController` 由根视图背景中的 presenter 呈现，并配置 popover source view，避免 iPad / Mac Catalyst 分享弹窗崩溃；分享卡组件集中在 `WNF/ShareCard.swift`。
-- 下班结算：产品语义是“数据自动保存，仪式手动触发”。下班前首页不显示结算 CTA；下班后未结算时，progress track 下方显示「下班！领今天的窝囊费」，但不自动弹窗、不红点追赶、不连续催。点击进入全屏 settlement overlay，三阶段动画 — 中心金币雨爆开（heavy 触感）→ 结算卡 spring-in、金额从 0 滚到今日金额 → 「存入资产 / 分享卡片」action 行 ease-in；可随时跳过。卡片含金额、忍耐指数（1-4 星）、已忍时长、连续打工天数（封顶 60）、动态文案、今日最佳忍耐时刻、累积窝囊费总额。「今日最佳忍耐时刻」quote 卡支持长按 0.4s 撕碎换文案（rigid 触感 + id-driven transition）。每日记录会照常自动持久化；只有「存入资产」会额外执行 `markTodaySettled()` 并触发个人时间状态。App 启动或回到前台不会自动结算；用户不点也不会丢当天数据。「分享卡片」复用已有 `ImageRenderer` 管线，输出 `DailySettlementShareCard` 系统分享图。结算文件集中在 `WNF/DailySettlement.swift`。
+- 下班结算：产品语义是“数据自动保存，仪式手动触发”。下班前首页不显示结算 CTA；下班后未结算时，progress track 下方显示「下班！领今天的窝囊费」，但不自动弹窗、不红点追赶、不连续催。点击进入全屏 settlement overlay，三阶段动画 — 中心金币雨爆开（heavy 触感）→ 结算卡 spring-in、金额从 0 滚到今日金额 → 「存入资产 / 分享卡片」action 行 ease-in；可随时跳过。卡片含金额、忍耐指数（1-4 星）、已忍时长、连续打工天数（封顶 60）、动态文案、今日最佳忍耐时刻、累积窝囊费总额。「今日最佳忍耐时刻」quote 卡支持长按 0.4s 撕碎换文案（rigid 触感 + id-driven transition）。每日记录会照常自动持久化；只有「存入资产」会额外执行 `markTodaySettled()` 并触发个人时间状态。App 启动或回到前台不会自动结算；用户不点也不会丢当天数据。「分享卡片」复用已有 `ImageRenderer` 管线，输出 `DailySettlementShareCard` 系统分享图。结算模型/文案在 `WNF/DailySettlement.swift`，展示层拆到 `WNF/DailySettlementOverlay.swift`、`WNF/DailySettlementShareCard.swift` 和 `WNF/ClockOutCTA.swift`。
 - 个人时间模式：用户完成「存入资产」后当天首页切换为个人时间态 — StatusChip 文案改为「今日已下班 · 个人时间」，CTA 改为「今日已下班 · 再看一眼 / 今日窝囊费已入账，剩下都是你的时间」（带 ✓ 图标）；其它数字（金额 / 进度 / 时长）保持实时同步。状态来自 `WageState.isTodaySettled`，跨日自动重置。持久化键 `wnf.settlement.lastCompletedDateKey`。
 - 下班结算提醒（可选 / 默认关闭）：「我的」页 `提醒` section 提供开关；开启后 `ClockOutReminderService` 会按选中工作日 + 下班时间调度 `UNCalendarNotificationTrigger` 本地通知；权限被系统拒绝时 Settings 内会展示打开系统通知设置的引导。提醒文件集中在 `WNF/ClockOutReminder.swift`。
 - 底部 tab 切换：页面内容按 tab 顺序横向滑入/滑出，并与胶囊选中态同步过渡。

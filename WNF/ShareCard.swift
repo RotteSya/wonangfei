@@ -44,6 +44,23 @@ struct ShareCardCopy: Equatable {
     }
 }
 
+/// Tunable knobs for the Dynamic-Island genie emergence. Defaults are the
+/// shipping values; the DEBUG tuner mutates a copy live so the animation can be
+/// dialled in without rebuilding.
+struct GenieParams: Equatable {
+    /// Emergence duration (seconds).
+    var duration: Double = 0.62
+    /// Width of the island "slot" the card necks into (points).
+    var neckWidth: CGFloat = 164
+    /// Funnel throat length as a fraction of the card (0…1): how much of the card
+    /// tapers into the neck vs. sits at full width.
+    var neckLen: CGFloat = 0.70
+    /// Progress (0…1) at which the neck pinch starts releasing toward the full card.
+    var unpinchStart: CGFloat = 0.78
+
+    static let `default` = GenieParams()
+}
+
 struct ShareCardBackdrop: View {
     var isPresented: Bool
     var onDismiss: () -> Void
@@ -76,23 +93,28 @@ struct ShareCardOverlay: View {
     var copy: ShareCardCopy
     @Binding var hidesSensitiveInfo: Bool
     var isPreparingShare: Bool
+    var params: GenieParams = .default
+    /// When non-nil, the emergence is pinned to this progress (DEBUG scrub/tuner)
+    /// instead of the internal animated `reveal`.
+    var scrub: CGFloat? = nil
     var onShare: () -> Void
     var onDismiss: () -> Void
 
     @State private var reveal: CGFloat = 0
     @State private var cardSize: CGSize = .zero
 
-    private static let unfurlIn = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.62)
+    private var unfurlIn: Animation { .timingCurve(0.32, 0.72, 0, 1, duration: params.duration) }
     private static let unfurlOut = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.34)
 
-    private var isActive: Bool { isPresented || reveal > 0.001 }
+    private var displayReveal: CGFloat { scrub ?? reveal }
+    private var isActive: Bool { isPresented || reveal > 0.001 || scrub != nil }
 
     var body: some View {
         GeometryReader { proxy in
             let island = IslandMetrics(topInset: proxy.safeAreaInsets.top)
             let centerX = proxy.size.width / 2
             let cardWidth = min(proxy.size.width - 52, 340)
-            let p = reveal
+            let p = displayReveal
 
             ZStack(alignment: .topLeading) {
                 if isActive {
@@ -114,7 +136,7 @@ struct ShareCardOverlay: View {
                 reveal = 0
                 UIImpactFeedbackGenerator(style: .soft).impactOccurred()
                 DispatchQueue.main.async {
-                    withAnimation(Self.unfurlIn) { reveal = 1 }
+                    withAnimation(unfurlIn) { reveal = 1 }
                 }
             } else {
                 withAnimation(Self.unfurlOut) { reveal = 0 }
@@ -124,7 +146,7 @@ struct ShareCardOverlay: View {
 
     private func unfurlingCard(p: CGFloat, island: IslandMetrics, centerX: CGFloat, cardWidth: CGFloat) -> some View {
         let cardH = max(cardSize.height, 1)
-        let neckHalf = island.expandedSize.width / 2
+        let neckHalf = params.neckWidth / 2
         // The box is pinned flush to the island's lower lip; the genie warp does
         // all the motion within it (and is the identity at rest, so the resting
         // card is crisp and its buttons hit-test).
@@ -153,7 +175,13 @@ struct ShareCardOverlay: View {
         // Animatable wrapper: a Shader uniform is NOT animatable, so passing the
         // distortion progress directly would snap to the final value (no warp).
         // Driving it through `animatableData` re-evaluates the effect every frame.
-        .modifier(GenieEmergence(progress: p, size: CGSize(width: cardWidth, height: cardH), neckHalf: neckHalf))
+        .modifier(GenieEmergence(
+            progress: p,
+            size: CGSize(width: cardWidth, height: cardH),
+            neckHalf: neckHalf,
+            neckLen: params.neckLen,
+            unpinchStart: params.unpinchStart
+        ))
         .position(x: centerX, y: topY + cardH / 2)
         .onPreferenceChange(ShareCardSizeKey.self) { cardSize = $0 }
     }
@@ -167,7 +195,7 @@ struct ShareCardOverlay: View {
             .modifier(IslandCapsuleStretch(
                 progress: p,
                 compact: island.compactSize,
-                expanded: island.expandedSize,
+                expanded: CGSize(width: params.neckWidth, height: island.expandedSize.height),
                 topY: island.topY,
                 centerX: centerX
             ))
@@ -234,6 +262,7 @@ private struct GenieFunnelShape: Shape {
     var progress: CGFloat
     var neckHalf: CGFloat
     var neckLen: CGFloat = 0.70
+    var unpinchStart: CGFloat = 0.78
 
     var animatableData: CGFloat {
         get { progress }
@@ -254,7 +283,7 @@ private struct GenieFunnelShape: Shape {
         let fullHalf = w / 2
         let vFront = max(p, 0.001)
         let steps = 28
-        let unpinch = smoothstep(0.78, 1.0, p)
+        let unpinch = smoothstep(unpinchStart, 1.0, p)
 
         func halfWidth(atSourceV s: CGFloat) -> CGFloat {
             let funnel = lerp(neckHalf, fullHalf, smoothstep(0, neckLen, s))
@@ -290,6 +319,8 @@ private struct GenieEmergence: ViewModifier, Animatable {
     var progress: CGFloat
     var size: CGSize
     var neckHalf: CGFloat
+    var neckLen: CGFloat
+    var unpinchStart: CGFloat
 
     var animatableData: CGFloat {
         get { progress }
@@ -304,11 +335,13 @@ private struct GenieEmergence: ViewModifier, Animatable {
                     .float2(size.width, size.height),
                     .float(progress),
                     .float(neckHalf),
-                    .float(size.width / 2)
+                    .float(size.width / 2),
+                    .float(neckLen),
+                    .float(unpinchStart)
                 ),
                 maxSampleOffset: size
             )
-            .mask(GenieFunnelShape(progress: progress, neckHalf: neckHalf))
+            .mask(GenieFunnelShape(progress: progress, neckHalf: neckHalf, neckLen: neckLen, unpinchStart: unpinchStart))
             .shadow(color: .black.opacity(0.22 * shadowP), radius: 22, y: 14)
     }
 }
@@ -339,6 +372,90 @@ private struct IslandCapsuleStretch: ViewModifier, Animatable {
             .position(x: centerX, y: topY + h / 2)
     }
 }
+
+#if DEBUG
+/// DEBUG-only live tuner for the genie emergence. Scrub the progress by hand or
+/// hit Play, and drag the sliders to dial in duration / neck width / throat /
+/// release point — all update the warp in real time. Never shipped.
+struct GenieTunerView: View {
+    var day: WageDay
+    var onClose: () -> Void
+
+    @State private var params = GenieParams.default
+    @State private var scrub: CGFloat = 1
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            Color.black.opacity(0.28).ignoresSafeArea()
+
+            ShareCardOverlay(
+                isPresented: true,
+                day: day,
+                copy: .default,
+                hidesSensitiveInfo: .constant(false),
+                isPreparingShare: false,
+                params: params,
+                scrub: scrub,
+                onShare: {},
+                onDismiss: {}
+            )
+            .allowsHitTesting(false)
+
+            panel
+        }
+    }
+
+    private var panel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text("Genie 调参").font(.system(size: 15, weight: .bold))
+                Spacer()
+                Button("播放") { play() }.buttonStyle(.borderedProminent)
+                Button("重置") { withAnimation { params = .default; scrub = 1 } }
+                Button("关闭", action: onClose)
+            }
+            .controlSize(.small)
+
+            sliderRow("进度", $scrub, 0...1)
+            sliderRow("时长 s", durationBinding, 0.2...1.5)
+            sliderRow("颈宽 pt", $params.neckWidth, 80...340, "%.0f")
+            sliderRow("喉长", $params.neckLen, 0.1...1.0)
+            sliderRow("松弛点", $params.unpinchStart, 0.4...0.98)
+
+            Text(String(format: "duration %.2f · neckWidth %.0f · neckLen %.2f · unpinchStart %.2f",
+                        params.duration, params.neckWidth, params.neckLen, params.unpinchStart))
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+        }
+        .padding(14)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .padding(.horizontal, 12)
+        .padding(.bottom, 6)
+    }
+
+    private var durationBinding: Binding<CGFloat> {
+        Binding(get: { CGFloat(params.duration) }, set: { params.duration = Double($0) })
+    }
+
+    private func sliderRow(_ label: String, _ value: Binding<CGFloat>, _ range: ClosedRange<Double>, _ fmt: String = "%.2f") -> some View {
+        HStack(spacing: 10) {
+            Text(label).font(.system(size: 12, weight: .medium)).frame(width: 56, alignment: .leading)
+            Slider(value: Binding(get: { Double(value.wrappedValue) }, set: { value.wrappedValue = CGFloat($0) }), in: range)
+            Text(String(format: fmt, value.wrappedValue)).font(.system(size: 12, design: .monospaced)).frame(width: 46, alignment: .trailing)
+        }
+    }
+
+    private func play() {
+        scrub = 0
+        DispatchQueue.main.async {
+            withAnimation(.timingCurve(0.32, 0.72, 0, 1, duration: params.duration)) {
+                scrub = 1
+            }
+        }
+    }
+}
+#endif
 
 struct WonangfeiShareCard: View {
     var day: WageDay

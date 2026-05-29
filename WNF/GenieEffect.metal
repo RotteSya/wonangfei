@@ -18,7 +18,7 @@ using namespace metal;
 // Pixels outside the funnel map outside the source box and are clipped by a
 // matching SwiftUI mask, so this function never needs a transparency branch.
 [[ stitchable ]]
-float2 genie(float2 position, float2 size, float progress, float neckHalf, float neckCenter) {
+float2 genie(float2 position, float2 size, float progress, float neckHalf, float neckCenter, float neckLen, float unpinchStart) {
     float w = size.x;
     float h = size.y;
     float p = clamp(progress, 0.0, 1.0);
@@ -30,9 +30,8 @@ float2 genie(float2 position, float2 size, float progress, float neckHalf, float
     float vFront = max(p, 0.001);             // how far the card has emerged
     float sourceV = v / vFront;               // decompress the emerged band to the full card
 
-    float neckLen = 0.70;                     // long throat: most of the card necks into the slot
     float funnelHalf = mix(neckHalf, w * 0.5, smoothstep(0.0, neckLen, sourceV));
-    float unpinch = smoothstep(0.78, 1.0, p); // hold the neck pinched, release only at the very end
+    float unpinch = smoothstep(unpinchStart, 1.0, p);  // hold the neck pinched, release at the end
     float halfWidth = max(mix(funnelHalf, w * 0.5, unpinch), 1.0);
 
     float dx = position.x - neckCenter;

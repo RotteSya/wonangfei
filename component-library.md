@@ -259,7 +259,7 @@ The Settings (`我的`) scroll, top to bottom:
 
 ### BarChart
 
-- Current use: record page weekly/monthly/yearly data derived from a memoized `RecordsView` aggregation snapshot. The snapshot reads stored daily records when rebuilt, but cache equality is keyed by `WageState.currentDateKey`, `WageState.recordsRevision`, live-day wage settings, `includeOvertime`, and `selectedWeekdays` rather than comparing the full records dictionary.
+- Current use: record page weekly/monthly/yearly data derived from a memoized `RecordsView` aggregation snapshot. The snapshot reads retained daily SQLite rows plus folded monthly summaries when rebuilt, but cache equality is keyed by `WageState.currentDateKey`, `WageState.recordsRevision`, live-day wage settings, `includeOvertime`, and `selectedWeekdays` rather than comparing the full storage dictionaries.
 - Data contract: `RecordBar.amount` is an already-aggregated currency value; do not use visual-only multipliers for production records.
 - Bars: yellow for completed/current periods until selected, ink only for selected, pale cream for future.
 - Interaction:
@@ -267,7 +267,7 @@ The Settings (`我的`) scroll, top to bottom:
   - selected bar jumps by `-2px`;
   - callout appears above selected bar;
   - tap the selected bar again to clear state.
-- Week view groups Monday through Sunday, month view groups current-month 7-day buckets, and year view groups calendar months.
+- Week view groups Monday through Sunday, month view groups current-month 7-day buckets, and year view groups calendar months. Year bars include folded monthly summaries and replace today's persisted row with the current live-day calculation.
 - Year view: compact bar gaps and smaller labels.
 
 ### SalaryEditor

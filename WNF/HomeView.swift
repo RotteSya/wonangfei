@@ -23,7 +23,7 @@ struct HomeView: View {
             WNFTheme.bg.ignoresSafeArea()
 
             HeroHomePage(
-                initialStatus: state.calculation.status,
+                initialStatus: state.liveDay.status,
                 onShare: onShare,
                 onClockOut: onClockOut
             )
@@ -92,7 +92,7 @@ private struct HeroHomePage: View {
                 // is updated via `.onChange(of: day.status)` below, which
                 // triggers an outer body rebuild.
                 TimelineView(.periodic(from: .now, by: 1)) { context in
-                    let day = state.calculation(at: context.date)
+                    let day = state.liveDay(at: context.date)
                     LiveWageReadout(
                         day: day,
                         statusChipLabel: statusChipLabel,
@@ -126,7 +126,7 @@ private struct HeroHomePage: View {
             .overlayPreferenceValue(CoinSourceAnchorKey.self) { anchor in
                 if let anchor {
                     TimelineView(.periodic(from: .now, by: 1)) { context in
-                        let day = state.calculation(at: context.date)
+                        let day = state.liveDay(at: context.date)
                         HomeCoinDropLayer(
                             day: day,
                             isSettled: state.isTodaySettled,
@@ -495,7 +495,7 @@ private struct HomeCoinDropLayer: View {
         switch day.status {
         case .morning, .afternoon:
             return true
-        case .before, .lunch, .done:
+        case .off, .before, .lunch, .done:
             return false
         }
     }

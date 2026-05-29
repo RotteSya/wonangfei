@@ -49,6 +49,7 @@ struct DailySettlement: Equatable {
     static func derive(
         from day: WageDay,
         dailyRecords: [String: DailyWageRecord],
+        monthlyRecordSummaries: [String: MonthlyRecordSummary] = [:],
         at date: Date = Date()
     ) -> DailySettlement {
         let progress = day.progress
@@ -60,6 +61,7 @@ struct DailySettlement: Equatable {
         )
         let cumulativeEarned = deriveCumulativeEarned(
             dailyRecords: dailyRecords,
+            monthlyRecordSummaries: monthlyRecordSummaries,
             includingTodayEarned: day.earnedToday,
             todayDateKey: WageState.dateKey(for: date)
         )
@@ -91,6 +93,9 @@ struct DailySettlement: Equatable {
     private static func deriveSentiment(progress: Double, status: WorkStatus) -> SettlementSentiment {
         // `.done` always implies the user finished a full workday's worth of
         // elapsed time (WageCalculator caps elapsed at workdayMinutes).
+        if status == .off {
+            return .wisp
+        }
         if status == .done {
             return .heavy
         }
@@ -117,18 +122,22 @@ struct DailySettlement: Equatable {
 
     private static func deriveCumulativeEarned(
         dailyRecords: [String: DailyWageRecord],
+        monthlyRecordSummaries: [String: MonthlyRecordSummary],
         includingTodayEarned: Double,
         todayDateKey: String
     ) -> Double {
         // Sum every closed daily record plus today's live amount. The dictionary may also
         // contain a record for today (when it was persisted on scene change), so we replace
         // that with the live amount to avoid double counting.
+        let foldedHistoricalSum = monthlyRecordSummaries.values
+            .map(\.amount)
+            .reduce(0, +)
         let historicalSum = dailyRecords
             .filter { $0.key != todayDateKey }
             .values
             .map(\.earnedToday)
             .reduce(0, +)
-        return historicalSum + max(includingTodayEarned, dailyRecords[todayDateKey]?.earnedToday ?? 0)
+        return foldedHistoricalSum + historicalSum + max(includingTodayEarned, dailyRecords[todayDateKey]?.earnedToday ?? 0)
     }
 
     private static func deriveStreakDays(
@@ -1230,6 +1239,7 @@ struct ClockOutCTA: View {
     private var title: String {
         if isSettled { return "今日已下班 · 再看一眼" }
         switch status {
+        case .off: return "今天不用结算"
         case .before, .morning, .afternoon, .lunch: return "查看今天挣多少"
         case .done: return "下班！领今天的窝囊费"
         }
@@ -1238,6 +1248,7 @@ struct ClockOutCTA: View {
     private var subtitle: String {
         if isSettled { return "今日窝囊费已入账，剩下都是你的时间" }
         switch status {
+        case .off: return "今天不是选中的工作日，窝囊费记为 0"
         case .before: return "今天的窝囊费还没开张"
         case .morning: return "已经熬过早上的两小时最值钱"
         case .lunch: return "午休回血中，要不要看看今天挣多少"

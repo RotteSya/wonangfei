@@ -22,6 +22,7 @@ struct WageDay {
 }
 
 enum WorkStatus {
+    case off
     case before
     case morning
     case lunch
@@ -67,28 +68,33 @@ enum WageCalculator {
             )
         }
 
-        let lunchLength = max(0, lunchEndMinute - lunchStartMinute)
+        let effectiveLunchStartMinute = max(startMinute, lunchStartMinute)
+        let effectiveLunchEndMinute = min(endMinute, lunchEndMinute)
+        let lunchLength = max(0, effectiveLunchEndMinute - effectiveLunchStartMinute)
         let workdayMinutes = max(1, endMinute - startMinute - lunchLength)
         let hourlyRate = monthlySalary / (Double(max(1, workdaysPerMonth)) * (Double(workdayMinutes) / 60))
         let startSecond = startMinute * 60
         let endSecond = endMinute * 60
-        let lunchStartSecond = lunchStartMinute * 60
-        let lunchEndSecond = lunchEndMinute * 60
+        let lunchStartSecond = effectiveLunchStartMinute * 60
+        let lunchEndSecond = effectiveLunchEndMinute * 60
+        let hasEffectiveLunch = lunchEndSecond > lunchStartSecond
 
         var elapsedSeconds = 0
         if nowSecond > startSecond {
             let paidThroughSecond = includeOvertime ? nowSecond : min(nowSecond, endSecond)
             elapsedSeconds = paidThroughSecond - startSecond
-            let lunchOverlap = max(0, min(paidThroughSecond, lunchEndSecond) - lunchStartSecond)
+            let lunchOverlap = hasEffectiveLunch ? max(0, min(paidThroughSecond, lunchEndSecond) - lunchStartSecond) : 0
             elapsedSeconds = max(0, elapsedSeconds - lunchOverlap)
         }
 
         let status: WorkStatus
         if nowMinute < startMinute {
             status = .before
-        } else if nowMinute < lunchStartMinute {
+        } else if hasEffectiveLunch == false, nowMinute < endMinute {
             status = .morning
-        } else if nowMinute < lunchEndMinute {
+        } else if nowMinute < effectiveLunchStartMinute {
+            status = .morning
+        } else if nowMinute < effectiveLunchEndMinute {
             status = .lunch
         } else if nowMinute < endMinute {
             status = .afternoon

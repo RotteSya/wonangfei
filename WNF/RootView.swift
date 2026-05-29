@@ -112,7 +112,7 @@ struct RootView: View {
         }
     }
 
-    private var day: WageDay { state.calculation }
+    private var day: WageDay { state.liveDay }
     private var isHomeMascotSessionVisible: Bool { onboardingCompleted || entryAnimating }
     private var shareRenderScale: CGFloat {
         let scale = windowSceneScale ?? displayScale
@@ -333,10 +333,11 @@ struct RootView: View {
     private func presentSettlement() {
         guard selectedTab == .home else { return }
         let now = Date()
-        let day = state.calculation(at: now)
+        let day = state.liveDay(at: now)
         settlementSnapshot = DailySettlement.derive(
             from: day,
             dailyRecords: state.dailyRecords,
+            monthlyRecordSummaries: state.monthlyRecordSummaries,
             at: now
         )
         settlementHidesSensitiveInfo = state.privacyMode

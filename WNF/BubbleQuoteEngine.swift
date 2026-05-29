@@ -114,6 +114,8 @@ final class BubbleQuoteEngine: ObservableObject {
 
     private static func decorations(for status: WorkStatus) -> [String] {
         switch status {
+        case .off:
+            return ["( ´_ゝ`)", "(＿　＿)", "zzZ"]
         case .before:
             return ["(´-ω-`)", "( ´_ゝ`)", "(＿　＿)", "zzZ"]
         case .morning:
@@ -207,6 +209,7 @@ final class BubbleQuoteEngine: ObservableObject {
     @available(iOS 26.0, *)
     private static func statusContext(for status: WorkStatus) -> String {
         switch status {
+        case .off:       return "今天不是用户选择的工作日，不计薪也不掉金币"
         case .before:    return "还没到上班时间，窝囊牛在通勤或刚起床，时薪是零"
         case .morning:   return "上午在工位搬砖，状态半死不活"
         case .lunch:     return "午休回血，正在吃饭或趴桌小睡，吃饭这段不发工资"

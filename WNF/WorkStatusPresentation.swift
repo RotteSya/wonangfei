@@ -5,6 +5,16 @@ struct WorkStatusPresentation: Equatable {
 
     init(status: WorkStatus) {
         switch status {
+        case .off:
+            label = "今天不用窝囊"
+            quotes = [
+                "今天不在工位上计薪。",
+                "工作日没选今天，钱也先躺平。",
+                "休息日的自由，不按分钟卖。",
+                "今天没有窝囊费，只有自己的时间。",
+                "别盯数字了，今天它不上班。"
+            ]
+            mascotAssetName = "CowFrontSad"
         case .before:
             label = "尚未开工"
             quotes = [

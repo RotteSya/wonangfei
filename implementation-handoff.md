@@ -20,7 +20,7 @@ The runnable entry and live prototype files are:
 - `design-canvas.jsx`：Open Design preview canvas and artboards.
 - `tweaks-panel.jsx`：internal preview controls.
 
-Current `main` note: The app target ships with `WNFWidget` and `WNFTests`. The wage/settings core remains in the app target; there is still no `WageCore.swift` or `WageDisplayModel.swift` split. Settings and daily-record lifecycle stay in `WNF/WageState.swift`, while daily-record storage, wage calculation, formatting, and Widget snapshot writing are split into dedicated Swift files.
+Current `main` note: The app target ships with `WNFWidget` and `WNFTests`. The wage/settings core remains in the app target; there is still no `WageCore.swift` or `WageDisplayModel.swift` split. Settings and daily-record lifecycle stay in `WNF/WageState.swift`, while SQLite daily-record storage, wage calculation, formatting, and Widget snapshot writing are split into dedicated Swift files.
 
 ## Native Onboarding
 
@@ -50,7 +50,7 @@ All five target PNGs are expected to remain `1536 x 1024` with `hasAlpha: yes`. 
 Native sources:
 
 - `WNF/WageState.swift`: shared `ObservableObject`, editable settings, date-boundary lifecycle, current-day snapshots, and backfill orchestration.
-- `WNF/DailyRecordStorage.swift`: `StorageKey`, `DailyWageRecord`, storage envelope, legacy migration, decode recovery, recovery-key writes, shared locked JSON coders, and storage logging.
+- `WNF/DailyRecordStorage.swift`: `StorageKey`, `DailyWageRecord`, `MonthlyRecordSummary`, App Group SQLite store, legacy UserDefaults migration, migration backups, shared locked JSON coders, and storage logging.
 - `WNF/WageCalculator.swift`: `WageDay`, `WorkStatus`, pure wage calculation, and `DateComponents` minute/clock helpers.
 - `WNF/WorkStatusPresentation.swift`: presentation-only status labels, quotes, and mascot asset names consumed by home/share surfaces.
 - `WNF/WageFormatting.swift`: amount and duration formatting helpers used by home, records, onboarding, and share surfaces.
@@ -76,20 +76,22 @@ The native app owns editable settings in one shared `WageState` instance injecte
 
 Times are stored as minutes since midnight and normalize to `0...1439` on load. Selected weekdays are stored as a sorted `[Int]` using the same `0...6` Monday-through-Sunday index contract as the UI. Salary still clamps to `0...100000`; monthly workdays still clamp to `1...31`. First-launch completion remains separate at `wnf.onboarding.completed` via `RootView`.
 
-Daily record history lifecycle is owned by `WageState`; storage encoding, migration, and recovery helpers live in `DailyRecordStorage.swift`:
+Daily record history lifecycle is owned by `WageState`; SQLite storage, legacy decoding, migration, and backups live in `DailyRecordStorage.swift`:
 
-- `wnf.records.daily` stores a JSON-encoded `DailyRecordStorageEnvelope` with `schemaVersion` and a `[dateKey: DailyWageRecord]` dictionary, keyed as `yyyy-MM-dd` in the current calendar. Current schema version is `1`.
-- Daily-record encode/decode paths reuse one `JSONEncoder` and one `JSONDecoder`, guarded by `dailyRecordCoderLock`; keep envelope, legacy, migration, and recovery coding on the helper methods in `DailyRecordStorage.swift`.
-- Existing pre-envelope installs that stored a bare `[dateKey: DailyWageRecord]` dictionary are still readable. On first read, `DailyRecordStorage.swift` preserves the original raw data at `wnf.records.daily.rawBackup.legacy`, migrates the main key to the versioned envelope, and logs the migration.
-- Decode failures no longer fail silently. `DailyRecordStorage.swift` logs the envelope and legacy decode errors, preserves the raw payload at `wnf.records.daily.rawBackup.decodeFailed`, and returns an empty in-memory record set only after the raw data is saved for recovery/migration work. After a decode failure, writes are redirected to `wnf.records.daily.recovery.decodeFailed` so the primary raw payload is not overwritten. The active recovery key is persisted at `wnf.records.daily.recovery.activeKey`; later launches try that key, `wnf.records.daily.recovery.decodeFailed`, and `wnf.records.daily.recovery.unsupported` as fallbacks before starting empty. Future unsupported schema versions are backed up at `wnf.records.daily.rawBackup.unsupported` and redirect writes to `wnf.records.daily.recovery.unsupported`.
+- Main storage is `DailyRecords.sqlite` in App Group `group.com.wonangfei.app` (fallback: Application Support when the container URL is unavailable). The app target links `-lsqlite3`.
+- `daily_records` stores retained daily rows keyed by `yyyy-MM-dd`. `monthly_record_summaries` stores folded older rows keyed by `yyyy-MM`.
+- Retention window: keep the latest 400 calendar days as daily rows. Rows older than the cutoff are transactionally folded into `MonthlyRecordSummary` totals (`amount`, `recordedDays`, `elapsedPaidSeconds`) and deleted from `daily_records`.
+- Existing `wnf.records.daily` envelope payloads, bare legacy dictionaries, and readable recovery/raw-backup keys are migrated on first launch. A JSON backup of migrated records is written beside the SQLite database under `DailyRecordBackups/`; after successful migration, the large daily-record `UserDefaults` payload/recovery keys are removed and `wnf.records.daily.sqliteMigrationCompleted` is set.
+- Daily-record encode/decode paths still reuse one `JSONEncoder` and one `JSONDecoder`, guarded by `dailyRecordCoderLock`, but only for migration/backup compatibility. New writes use SQLite upserts, not whole-dictionary `UserDefaults` rewrites.
 - `DailyWageRecord` captures `earnedToday`, `targetToday`, `elapsedPaidSeconds`, `workdayMinutes`, `hourlyRate`, salary/workday settings, `capturedAt`, and a `source` marker. Existing records without `source` decode as `observed`; corrupt `source` values still throw instead of being silently coerced. New optional/defaulted fields should continue to use explicit `decodeIfPresent` defaults in the custom decoder.
 - `WageState` publishes `currentDateKey` only when the calendar date changes. A one-shot day-boundary timer, foreground refresh, and scene-phase snapshot path keep cross-midnight closure working without a global one-second `ObservableObject` tick.
+- `WageState.liveDay(at:)` is the single display-facing live-day entrypoint. It returns `.off` and zero earned/elapsed/target values when the date is not in `selectedWeekdays`, while `calculation(at:)` remains the raw wage math used by settings/onboarding previews.
 - `WNFApp` pauses the day-boundary timer whenever the scene leaves `.active`; returning to `.active` refreshes the date immediately and recreates the timer.
 - `wnf.records.lastObservedSnapshot` stores the last observed date key plus the wage calculation settings active at that observation (`monthlySalary`, `workdaysPerMonth`, work/lunch minutes, lunch/overtime flags, selected weekdays). `wnf.records.lastObservedDateKey` remains as a legacy fallback and mirror.
 - If the app was not opened for multiple calendar days, `WageState` first closes the last observed day, then backfills every date from `lastObservedDate + 1 day` through the calendar day before `now`. Observed closures and backfilled records are calculated from `lastObservedSnapshot`, not today's editable settings, so later salary changes do not rewrite historical estimates. Both paths use the snapshot's `selectedWeekdays` check: selected days receive a complete standard workday snapshot, while unselected days receive zero-yuan, zero-elapsed records with their original `source`.
 - `WNFApp` asks `WageState` to persist the current-day snapshot when the scene leaves `.active`, so a day can still appear in records even if the app is not open at midnight.
-- `HomeView` owns the one-second `TimelineView` used by the large live money number and passes the derived `WageDay` into the home hero. Other tabs do not subscribe to that tick.
-- `RecordsView` builds a memoized aggregation snapshot through internal `RecordAggregator` from `(currentDateKey, recordsRevision, dailyRecords payload, live-day settings, includeOvertime, selectedWeekdays)`. Cache equality compares the scalar `recordsRevision` instead of the full `[dateKey: DailyWageRecord]` dictionary, so week/month/year bars reuse the snapshot across body updates and only rebuild when the date key, stored-record revision, or wage settings change. The live today record returns zero amount / zero elapsed when `currentDateKey` is not in `selectedWeekdays`.
+- `HomeView` owns the one-second `TimelineView` used by the large live money number and passes `WageState.liveDay(at:)` into the home hero. Other tabs do not subscribe to that tick.
+- `RecordsView` builds a memoized aggregation snapshot through internal `RecordAggregator` from `(currentDateKey, recordsRevision, retained daily records, folded monthly summaries, live-day settings, includeOvertime, selectedWeekdays)`. Cache equality compares the scalar `recordsRevision` instead of the full dictionaries, so week/month/year bars reuse the snapshot across body updates and only rebuild when the date key, stored-record revision, or wage settings change. The live today record returns zero amount / zero elapsed when `currentDateKey` is not in `selectedWeekdays`, and year bars add folded monthly summaries without double-counting today.
 
 ## Widget
 
@@ -97,8 +99,8 @@ Daily record history lifecycle is owned by `WageState`; storage encoding, migrat
 - `WNFWidget` supports `.systemSmall`, `.systemMedium`, `.accessoryRectangular`, and `.accessoryInline`.
 - v1 uses an empty `AppIntentConfiguration` stub so v1.x can add per-widget settings without replacing the configuration model.
 - Every Widget view uses `containerBackground(for: .widget)` for iOS 17 rendering.
-- Timeline policy: working hours schedule `.after(now + 60s)`; non-working hours schedule `.after(next expected work start)`. Setting and daily-record changes trigger debounced `WidgetCenter.shared.reloadAllTimelines()` via `WNFWidgetReloader`.
-- Widget wage display reads `wnf.widget.wage.snapshot.v1`; gallery and placeholder paths never read real wage data. The snapshot includes `hidesSensitiveInfo`, and all widget families render `¥•••.••` when App privacy mode is on. `WNFApp` rewrites the snapshot when `privacyMode` changes.
+- Timeline policy: the provider reads one App Group snapshot and emits minute-level future entries through `workEnd` (or end of day when overtime is enabled), then schedules the next reload for the next selected workday start instead of reloading every 60 seconds.
+- Widget wage display reads `wnf.widget.wage.snapshot.v1`; gallery and placeholder paths never read real wage data. The v2 snapshot includes the capture date key, selected weekdays, work/lunch schedule, overtime flag, workday minutes, per-second rate, and `hidesSensitiveInfo`. Widget projection derives each entry's amount/elapsed/status locally and renders `¥•••.••` when App privacy mode is on. `WNFApp` rewrites the snapshot when privacy or wage/schedule/workday settings change.
 - Terms and Privacy links open remote URLs first and fall back to bundled `terms.html` / `privacy.html` through the local legal document viewer.
 
 Default app state lives in `窝囊费.html` under `TWEAK_DEFAULTS`:
@@ -129,7 +131,7 @@ Source: `shared.jsx -> computeDay(cfg, nowMin)`
 6. Compute current-day earnings:
    - `earnedToday = hourlyRate / 60 * elapsedPaid`
 
-Native `WageCalculator.compute` returns a zero-value `WageDay` when `workEnd <= workStart`; Settings and Onboarding route work-start/work-end changes through `WageState.setWorkStart` / `setWorkEnd` to keep the editable pair valid.
+Native `WageCalculator.compute` returns a zero-value `WageDay` when `workEnd <= workStart`; Settings and Onboarding route work-start/work-end changes through `WageState.setWorkStart` / `setWorkEnd` to keep the editable pair valid. Lunch deduction is clamped to the overlap between lunch and the work interval, so lunch outside work hours does not reduce paid time.
 
 Important: the settings UI label says `午休`. Switch on means "has lunch break"; switch off means "没有午休". The data flag remains `noLunch`.
 
@@ -205,7 +207,7 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 ### 记录页
 
 - 周 / 月 / 年 tabs must switch datasets.
-- Datasets must be derived from `wnf.records.daily`; do not reintroduce hard-coded chart multipliers.
+- Datasets must be derived from SQLite daily rows plus folded monthly summaries; do not reintroduce hard-coded chart multipliers.
 - Week view groups Monday through Sunday, month view groups 7-day buckets in the current month, and year view groups calendar months.
 - Today must be included from the live `WageState.calculation` so the current bar updates before the daily snapshot is closed.
 - Chart bars must be tappable except future bars.

@@ -62,6 +62,60 @@ struct WageCalculatorTests {
         #expect(day.progress == 0)
     }
 
+    @Test("午休早于上班时不扣减计薪时间")
+    func lunchBeforeWorkDoesNotReducePaidTime() {
+        let day = WageCalculator.compute(
+            monthlySalary: 22_000,
+            workdaysPerMonth: 22,
+            workStart: .minuteInDay(9 * 60 + 30),
+            workEnd: .minuteInDay(18 * 60 + 30),
+            lunchStart: .minuteInDay(8 * 60),
+            lunchEnd: .minuteInDay(9 * 60),
+            hasLunchBreak: true,
+            includeOvertime: false,
+            now: DateComponents(hour: 10, minute: 0)
+        )
+
+        #expect(day.workdayMinutes == 9 * 60)
+        #expect(day.elapsedPaidSeconds == 30 * 60)
+    }
+
+    @Test("午休晚于下班时不扣减计薪时间")
+    func lunchAfterWorkDoesNotReducePaidTime() {
+        let day = WageCalculator.compute(
+            monthlySalary: 22_000,
+            workdaysPerMonth: 22,
+            workStart: .minuteInDay(9 * 60 + 30),
+            workEnd: .minuteInDay(18 * 60 + 30),
+            lunchStart: .minuteInDay(19 * 60),
+            lunchEnd: .minuteInDay(20 * 60),
+            hasLunchBreak: true,
+            includeOvertime: false,
+            now: DateComponents(hour: 18, minute: 30)
+        )
+
+        #expect(day.workdayMinutes == 9 * 60)
+        #expect(day.elapsedPaidSeconds == 9 * 60 * 60)
+    }
+
+    @Test("午休部分重叠上班时只扣重叠部分")
+    func partialLunchOverlapOnlySubtractsOverlap() {
+        let day = WageCalculator.compute(
+            monthlySalary: 22_000,
+            workdaysPerMonth: 22,
+            workStart: .minuteInDay(9 * 60 + 30),
+            workEnd: .minuteInDay(18 * 60 + 30),
+            lunchStart: .minuteInDay(9 * 60),
+            lunchEnd: .minuteInDay(10 * 60),
+            hasLunchBreak: true,
+            includeOvertime: false,
+            now: DateComponents(hour: 10, minute: 30)
+        )
+
+        #expect(day.workdayMinutes == 8 * 60 + 30)
+        #expect(day.elapsedPaidSeconds == 30 * 60)
+    }
+
     private func sampleDay(now: DateComponents, includeOvertime: Bool) -> WageDay {
         WageCalculator.compute(
             monthlySalary: 22_000,
@@ -132,6 +186,46 @@ struct WageStateBackfillTests {
 }
 
 struct WageStateSettlementTests {
+    @Test("liveDay 在非选中工作日归零但 calculation 保留原始计薪")
+    func liveDayIsZeroOnUnselectedWeekday() throws {
+        let (defaults, suiteName) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let now = try #require(dateToday(hour: 10, minute: 30))
+        let todayWeekday = weekdayIndex(for: now)
+        defaults.set(Array(Set(0...6).subtracting([todayWeekday])), forKey: StorageKey.selectedWeekdays)
+        let state = WageState(userDefaults: defaults)
+        defer { state.pauseCalendarDayTimer() }
+
+        let rawDay = state.calculation(at: now)
+        let liveDay = state.liveDay(at: now)
+
+        #expect(rawDay.earnedToday > 0)
+        #expect(liveDay.earnedToday == 0)
+        #expect(liveDay.elapsedPaidSeconds == 0)
+        #expect(liveDay.status == .off)
+    }
+
+    @Test("selectedWeekdays 变化会立即影响同一秒 liveDay")
+    func selectedWeekdayChangeInvalidatesLiveDay() throws {
+        let (defaults, suiteName) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let now = try #require(dateToday(hour: 10, minute: 30))
+        let todayWeekday = weekdayIndex(for: now)
+        defaults.set(Array(0...6), forKey: StorageKey.selectedWeekdays)
+        let state = WageState(userDefaults: defaults)
+        defer { state.pauseCalendarDayTimer() }
+
+        let paidDay = state.liveDay(at: now)
+        state.selectedWeekdays = Set(0...6).subtracting([todayWeekday])
+        let offDay = state.liveDay(at: now)
+
+        #expect(paidDay.earnedToday > 0)
+        #expect(offDay.earnedToday == 0)
+        #expect(offDay.status == .off)
+    }
+
     @Test("markTodaySettled() 后 isTodaySettled == true")
     func markTodaySettledMarksCurrentDay() throws {
         let (defaults, suiteName) = try isolatedDefaults()
@@ -202,6 +296,157 @@ struct RecordsAggregationTests {
         #expect(todayBar.amount == snapshot.todayEarned)
         #expect(snapshot.currentMonthSummary.amount == snapshot.todayEarned)
     }
+
+    @Test("年聚合包含折叠月汇总并用 live today 替换今日已存快照")
+    func yearlyAggregationIncludesMonthlySummariesAndDoesNotDoubleCountToday() throws {
+        let now = try #require(dateToday(hour: 10, minute: 30))
+        let monthStart = DateComponents.calendar.date(from: DateComponents(
+            year: DateComponents.calendar.component(.year, from: now),
+            month: 3,
+            day: 1
+        ))
+        let foldedMonth = try #require(monthStart)
+        let todayRecord = sampleRecord(date: now, amount: 10, elapsedPaidSeconds: 600)
+        var input = aggregationInput(currentDate: now, selectedWeekdays: [weekdayIndex(for: now)])
+        input.dailyRecords = [todayRecord.dateKey: todayRecord]
+        input.monthlyRecordSummaries = [
+            monthKey(for: foldedMonth): MonthlyRecordSummary(
+                monthKey: monthKey(for: foldedMonth),
+                amount: 1234,
+                recordedDays: 12,
+                elapsedPaidSeconds: 42_000,
+                updatedAt: now
+            )
+        ]
+
+        let snapshot = RecordAggregator.make(input: input, now: now)
+        let marchBar = try #require(snapshot.yearBars.first { $0.key == "3" })
+        let todayWeekBar = try #require(snapshot.weekBars.first { $0.isToday })
+
+        #expect(marchBar.amount == 1234)
+        #expect(marchBar.recordedDays == 12)
+        #expect(snapshot.todayEarned > todayRecord.earnedToday)
+        #expect(todayWeekBar.amount == snapshot.todayEarned)
+    }
+}
+
+struct DailyRecordSQLiteStoreTests {
+    @Test("旧 UserDefaults envelope 会迁移到 SQLite 并清理大 payload")
+    func migratesLegacyUserDefaultsPayload() throws {
+        let (defaults, suiteName) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let now = Date()
+        let yesterday = try #require(DateComponents.calendar.date(byAdding: .day, value: -1, to: now))
+        let records = [
+            WageState.dateKey(for: yesterday): sampleRecord(date: yesterday, amount: 88, elapsedPaidSeconds: 3600),
+            WageState.dateKey(for: now): sampleRecord(date: now, amount: 99, elapsedPaidSeconds: 4200)
+        ]
+        defaults.set(try JSONEncoder().encode(DailyRecordStorageEnvelope(records: records)), forKey: StorageKey.dailyRecords)
+
+        let state = WageState(userDefaults: defaults)
+        defer { state.pauseCalendarDayTimer() }
+
+        #expect(state.dailyRecords[WageState.dateKey(for: yesterday)]?.earnedToday == 88)
+        #expect(defaults.data(forKey: StorageKey.dailyRecords) == nil)
+        #expect(defaults.bool(forKey: StorageKey.dailyRecordsSQLiteMigrationCompleted))
+        let backupPath = try #require(defaults.string(forKey: "\(StorageKey.dailyRecordsSQLiteMigrationCompleted).backupPath"))
+        #expect(FileManager.default.fileExists(atPath: backupPath))
+    }
+
+    @Test("超过 400 天的每日记录会折叠成月汇总")
+    func foldsRecordsOlderThanRetentionWindow() throws {
+        let (defaults, suiteName) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = DailyRecordSQLiteStore(userDefaults: defaults)
+        let now = Date()
+        let currentYear = DateComponents.calendar.component(.year, from: now)
+        let oldA = try #require(DateComponents.calendar.date(from: DateComponents(year: currentYear - 2, month: 1, day: 10)))
+        let oldB = try #require(DateComponents.calendar.date(from: DateComponents(year: currentYear - 2, month: 1, day: 11)))
+        let recent = try #require(DateComponents.calendar.date(byAdding: .day, value: -1, to: now))
+
+        let result = store.upsert([
+            sampleRecord(date: oldA, amount: 11, elapsedPaidSeconds: 110),
+            sampleRecord(date: oldB, amount: 22, elapsedPaidSeconds: 220),
+            sampleRecord(date: recent, amount: 33, elapsedPaidSeconds: 330)
+        ], now: now)
+
+        let oldMonthSummary = try #require(result.monthlySummaries[monthKey(for: oldA)])
+        #expect(result.records[WageState.dateKey(for: oldA)] == nil)
+        #expect(result.records[WageState.dateKey(for: oldB)] == nil)
+        #expect(result.records[WageState.dateKey(for: recent)]?.earnedToday == 33)
+        #expect(oldMonthSummary.amount == 33)
+        #expect(oldMonthSummary.recordedDays == 2)
+        #expect(oldMonthSummary.elapsedPaidSeconds == 330)
+    }
+}
+
+struct DailySettlementAggregationTests {
+    @Test("累计窝囊费包含月汇总且今日 live 不重复计入")
+    func cumulativeEarnedIncludesMonthlySummariesWithoutDoubleCountingToday() throws {
+        let today = try #require(dateToday(hour: 18, minute: 30))
+        let yesterday = try #require(DateComponents.calendar.date(byAdding: .day, value: -1, to: today))
+        let day = WageDay(
+            startMinute: 9 * 60,
+            endMinute: 18 * 60,
+            lunchStartMinute: 12 * 60,
+            lunchEndMinute: 13 * 60,
+            workdayMinutes: 480,
+            hourlyRate: 100,
+            elapsedPaidMinutes: 480,
+            elapsedPaidSeconds: 480 * 60,
+            earnedToday: 100,
+            targetToday: 100,
+            status: .done,
+            wallToEndMinutes: 0
+        )
+        let settlement = DailySettlement.derive(
+            from: day,
+            dailyRecords: [
+                WageState.dateKey(for: yesterday): sampleRecord(date: yesterday, amount: 20, elapsedPaidSeconds: 1200),
+                WageState.dateKey(for: today): sampleRecord(date: today, amount: 50, elapsedPaidSeconds: 3000)
+            ],
+            monthlyRecordSummaries: [
+                "2025-01": MonthlyRecordSummary(
+                    monthKey: "2025-01",
+                    amount: 1000,
+                    recordedDays: 20,
+                    elapsedPaidSeconds: 80_000,
+                    updatedAt: today
+                )
+            ],
+            at: today
+        )
+
+        #expect(settlement.cumulativeEarned == 1120)
+    }
+}
+
+struct WidgetProjectionTests {
+    @Test("Widget snapshot 可以按分钟推导增长金额")
+    func widgetSnapshotProjectsFutureMinute() throws {
+        let now = try #require(dateToday(hour: 10, minute: 0))
+        let snapshot = widgetSnapshot(hidesSensitiveInfo: false, capturedAt: now, earningPerSecond: 1)
+
+        let projected = snapshot.projected(at: now)
+
+        #expect(projected.earnedToday == 30 * 60)
+        #expect(projected.elapsedPaidMinutes == 30)
+        #expect(projected.statusLabel == "上午搬砖中")
+    }
+
+    @Test("Widget reload 目标会跳到下一个选中工作日起点")
+    func widgetSnapshotFindsNextSelectedWorkStart() throws {
+        let now = try #require(dateToday(hour: 19, minute: 0))
+        let snapshot = widgetSnapshot(hidesSensitiveInfo: false, capturedAt: now, earningPerSecond: 1)
+
+        let nextStart = try #require(snapshot.nextSelectedWorkStart(after: now))
+
+        #expect(nextStart > now)
+        #expect(DateComponents.calendar.component(.hour, from: nextStart) == 9)
+        #expect(DateComponents.calendar.component(.minute, from: nextStart) == 30)
+    }
 }
 
 struct WidgetSnapshotTests {
@@ -230,6 +475,14 @@ private func isolatedDefaults() throws -> (UserDefaults, String) {
         throw TestSetupError.userDefaultsUnavailable
     }
     defaults.removePersistentDomain(forName: suiteName)
+    let databaseURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent("WNFTests", isDirectory: true)
+        .appendingPathComponent("\(suiteName).sqlite")
+    try? FileManager.default.createDirectory(
+        at: databaseURL.deletingLastPathComponent(),
+        withIntermediateDirectories: true
+    )
+    defaults.set(databaseURL.path, forKey: StorageKey.dailyRecordsSQLitePathOverride)
     return (defaults, suiteName)
 }
 
@@ -250,15 +503,42 @@ private func aggregationInput(currentDate: Date, selectedWeekdays: Set<Int>) -> 
     )
 }
 
-private func widgetSnapshot(hidesSensitiveInfo: Bool) -> WNFWidgetSnapshot {
+private func widgetSnapshot(
+    hidesSensitiveInfo: Bool,
+    capturedAt: Date = Date(),
+    earningPerSecond: Double = 0
+) -> WNFWidgetSnapshot {
     WNFWidgetSnapshot(
-        capturedAt: Date(),
+        dateKey: WageState.dateKey(for: capturedAt),
+        capturedAt: capturedAt,
         earnedToday: 888.88,
         elapsedPaidMinutes: 188,
         workStartMinute: 9 * 60 + 30,
         workEndMinute: 18 * 60 + 30,
+        lunchStartMinute: 12 * 60,
+        lunchEndMinute: 13 * 60,
+        hasLunchBreak: true,
+        includeOvertime: false,
+        workdayMinutes: 480,
+        earningPerSecond: earningPerSecond,
+        selectedWeekdays: Array(0...6),
         statusLabel: "正在搬砖",
         hidesSensitiveInfo: hidesSensitiveInfo
+    )
+}
+
+private func sampleRecord(date: Date, amount: Double, elapsedPaidSeconds: Int) -> DailyWageRecord {
+    DailyWageRecord(
+        dateKey: WageState.dateKey(for: date),
+        earnedToday: amount,
+        targetToday: amount,
+        elapsedPaidSeconds: elapsedPaidSeconds,
+        workdayMinutes: 480,
+        hourlyRate: 100,
+        monthlySalary: 20_000,
+        workdaysPerMonth: 22,
+        capturedAt: date,
+        source: .observed
     )
 }
 
@@ -273,4 +553,9 @@ private func dateToday(hour: Int, minute: Int) -> Date? {
 private func weekdayIndex(for date: Date) -> Int {
     let weekday = DateComponents.calendar.component(.weekday, from: date)
     return (weekday + 5) % 7
+}
+
+private func monthKey(for date: Date) -> String {
+    let components = DateComponents.calendar.dateComponents([.year, .month], from: date)
+    return String(format: "%04d-%02d", components.year ?? 0, components.month ?? 0)
 }

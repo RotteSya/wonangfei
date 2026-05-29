@@ -45,6 +45,7 @@ struct RecordAggregationInput: Equatable {
     var currentDateKey: String
     var recordsRevision: Int
     var dailyRecords: [String: DailyWageRecord]
+    var monthlyRecordSummaries: [String: MonthlyRecordSummary]
     var monthlySalary: Double
     var workdaysPerMonth: Int
     var workStartMinute: Int
@@ -59,6 +60,7 @@ struct RecordAggregationInput: Equatable {
         currentDateKey: String,
         recordsRevision: Int,
         dailyRecords: [String: DailyWageRecord],
+        monthlyRecordSummaries: [String: MonthlyRecordSummary] = [:],
         monthlySalary: Double,
         workdaysPerMonth: Int,
         workStartMinute: Int,
@@ -72,6 +74,7 @@ struct RecordAggregationInput: Equatable {
         self.currentDateKey = currentDateKey
         self.recordsRevision = recordsRevision
         self.dailyRecords = dailyRecords
+        self.monthlyRecordSummaries = monthlyRecordSummaries
         self.monthlySalary = monthlySalary
         self.workdaysPerMonth = workdaysPerMonth
         self.workStartMinute = workStartMinute
@@ -87,6 +90,7 @@ struct RecordAggregationInput: Equatable {
         currentDateKey = state.currentDateKey
         recordsRevision = state.recordsRevision
         dailyRecords = state.dailyRecords
+        monthlyRecordSummaries = state.monthlyRecordSummaries
         monthlySalary = state.monthlySalary
         workdaysPerMonth = state.workdaysPerMonth
         workStartMinute = state.workStart.minutesInDay
@@ -227,7 +231,10 @@ struct RecordAggregationSnapshot {
         let yearBars = (1...12).map { month in
             let startDate = calendar.date(from: DateComponents(year: year, month: month, day: 1)) ?? currentDayStart
             let endDate = monthEnd(for: startDate, calendar: calendar)
-            let summary = summarizeRecords(from: startDate, through: endDate)
+            let monthKey = Self.monthKey(for: startDate, calendar: calendar)
+            let dailySummary = summarizeRecords(from: startDate, through: endDate)
+            let foldedSummary = input.monthlyRecordSummaries[monthKey]
+            let summary = combine(dailySummary, foldedSummary)
             let isToday = calendar.isDate(startDate, equalTo: currentDayStart, toGranularity: .month)
 
             return RecordBar(
@@ -245,7 +252,10 @@ struct RecordAggregationSnapshot {
             weekBars: weekBars,
             monthBars: monthBars,
             yearBars: yearBars,
-            currentMonthSummary: summarizeRecords(from: startOfMonth, through: monthEnd(for: currentDayStart, calendar: calendar)),
+            currentMonthSummary: combine(
+                summarizeRecords(from: startOfMonth, through: monthEnd(for: currentDayStart, calendar: calendar)),
+                input.monthlyRecordSummaries[Self.monthKey(for: currentDayStart, calendar: calendar)]
+            ),
             daysInCurrentMonth: daysInCurrentMonth,
             todayEarned: liveToday.earnedToday
         )
@@ -314,6 +324,20 @@ struct RecordAggregationSnapshot {
     private static func monthEnd(for date: Date, calendar: Calendar) -> Date {
         let startOfMonth = monthStart(for: date, calendar: calendar)
         return calendar.date(byAdding: DateComponents(month: 1, day: -1), to: startOfMonth) ?? startOfMonth
+    }
+
+    private static func monthKey(for date: Date, calendar: Calendar) -> String {
+        let components = calendar.dateComponents([.year, .month], from: date)
+        return String(format: "%04d-%02d", components.year ?? 0, components.month ?? 0)
+    }
+
+    private static func combine(_ dailySummary: RecordSummary, _ foldedSummary: MonthlyRecordSummary?) -> RecordSummary {
+        guard let foldedSummary else { return dailySummary }
+        return RecordSummary(
+            amount: dailySummary.amount + foldedSummary.amount,
+            recordedDays: dailySummary.recordedDays + foldedSummary.recordedDays,
+            elapsedPaidSeconds: dailySummary.elapsedPaidSeconds + foldedSummary.elapsedPaidSeconds
+        )
     }
 }
 

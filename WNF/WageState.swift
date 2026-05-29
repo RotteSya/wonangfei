@@ -81,6 +81,7 @@ final class WageState: ObservableObject {
 
     @Published private(set) var currentDateKey: String
     @Published private(set) var dailyRecords: [String: DailyWageRecord]
+    @Published private(set) var monthlyRecordSummaries: [String: MonthlyRecordSummary]
     private(set) var recordsRevision = 0
 
     @Published private(set) var lastSettlementDateKey: String? {
@@ -105,7 +106,7 @@ final class WageState: ObservableObject {
     }
 
     let userDefaults: UserDefaults
-    var dailyRecordStorageMode: DailyRecordStorageMode
+    private let dailyRecordStore: DailyRecordSQLiteStore
     private var dayBoundaryTimer: Timer?
 
     /// Cached result of the most recent `calculation(at:)` call. Keyed by the
@@ -116,8 +117,9 @@ final class WageState: ObservableObject {
     /// and the compute step.
     private var calculationCache: (fingerprint: CalculationFingerprint, secondBucket: Int, day: WageDay)?
 
-    init(userDefaults: UserDefaults = .standard) {
+    init(userDefaults: UserDefaults = .standard, dailyRecordStore: DailyRecordSQLiteStore? = nil) {
         self.userDefaults = userDefaults
+        self.dailyRecordStore = dailyRecordStore ?? DailyRecordSQLiteStore(userDefaults: userDefaults)
 
         monthlySalary = Self.clampedMonthlySalary(userDefaults.doubleValue(forKey: StorageKey.monthlySalary) ?? Default.monthlySalary)
         workdaysPerMonth = Self.clampedWorkdaysPerMonth(userDefaults.integerValue(forKey: StorageKey.workdaysPerMonth) ?? Default.workdaysPerMonth)
@@ -133,9 +135,9 @@ final class WageState: ObservableObject {
         lastSettlementDateKey = userDefaults.string(forKey: StorageKey.lastSettlementDateKey)
         let now = Date()
         currentDateKey = Self.dateKey(for: now)
-        let dailyRecordLoadResult = Self.loadDailyRecords(from: userDefaults)
+        let dailyRecordLoadResult = self.dailyRecordStore.load(now: now)
         dailyRecords = dailyRecordLoadResult.records
-        dailyRecordStorageMode = dailyRecordLoadResult.storageMode
+        monthlyRecordSummaries = dailyRecordLoadResult.monthlySummaries
         persistEditableSettings()
 
         closeLastObservedDayIfNeeded(now: now)
@@ -155,6 +157,10 @@ final class WageState: ObservableObject {
         calculation(at: Date())
     }
 
+    var liveDay: WageDay {
+        liveDay(at: Date())
+    }
+
     func calculation(at date: Date) -> WageDay {
         let secondBucket = Int(date.timeIntervalSinceReferenceDate)
         let fingerprint = calculationFingerprint
@@ -166,6 +172,14 @@ final class WageState: ObservableObject {
 
         let day = calculateWageDay(at: date, settings: currentSettingsSnapshot)
         calculationCache = (fingerprint, secondBucket, day)
+        return day
+    }
+
+    func liveDay(at date: Date) -> WageDay {
+        let day = calculation(at: date)
+        guard isPaidWorkday(date, settings: currentSettingsSnapshot) else {
+            return Self.offDay(from: day)
+        }
         return day
     }
 
@@ -192,7 +206,8 @@ final class WageState: ObservableObject {
             lunchStartMinute: lunchStart.minutesInDay,
             lunchEndMinute: lunchEnd.minutesInDay,
             hasLunchBreak: hasLunchBreak,
-            includeOvertime: includeOvertime
+            includeOvertime: includeOvertime,
+            selectedWeekdays: selectedWeekdays.sorted()
         )
     }
 
@@ -378,6 +393,7 @@ final class WageState: ObservableObject {
         guard lastObservedStart < todayStart else { return }
 
         var nextRecords = dailyRecords
+        var recordsToWrite: [DailyWageRecord] = []
 
         let closedLastObservedRecord = makeDailyRecord(
             for: Self.endOfDay(for: lastObservedStart),
@@ -386,6 +402,7 @@ final class WageState: ObservableObject {
             settings: settings
         )
         nextRecords[closedLastObservedRecord.dateKey] = closedLastObservedRecord
+        recordsToWrite.append(closedLastObservedRecord)
 
         var cursor = calendar.date(byAdding: .day, value: 1, to: lastObservedStart)
         while let date = cursor, date < todayStart {
@@ -393,12 +410,12 @@ final class WageState: ObservableObject {
             if nextRecords[dateKey] == nil {
                 let record = makeBackfilledDailyRecord(for: date, capturedAt: capturedAt, settings: settings)
                 nextRecords[record.dateKey] = record
+                recordsToWrite.append(record)
             }
             cursor = calendar.date(byAdding: .day, value: 1, to: date)
         }
 
-        replaceDailyRecords(nextRecords)
-        saveDailyRecords()
+        persistDailyRecords(recordsToWrite, now: capturedAt)
     }
 
     private func persistDailySnapshot(for date: Date, capturedAt: Date) {
@@ -408,14 +425,18 @@ final class WageState: ObservableObject {
             source: .observed,
             settings: currentSettingsSnapshot
         )
-        var nextRecords = dailyRecords
-        nextRecords[record.dateKey] = record
-        replaceDailyRecords(nextRecords)
-        saveDailyRecords()
+        persistDailyRecords([record], now: capturedAt)
     }
 
-    private func replaceDailyRecords(_ records: [String: DailyWageRecord]) {
-        dailyRecords = records
+    private func persistDailyRecords(_ records: [DailyWageRecord], now: Date) {
+        guard records.isEmpty == false else { return }
+        let result = dailyRecordStore.upsert(records, now: now)
+        applyDailyRecordLoadResult(result)
+    }
+
+    private func applyDailyRecordLoadResult(_ result: DailyRecordLoadResult) {
+        dailyRecords = result.records
+        monthlyRecordSummaries = result.monthlySummaries
         recordsRevision += 1
     }
 
@@ -485,6 +506,23 @@ final class WageState: ObservableObject {
 
     private func isPaidWorkday(_ date: Date, settings: WageCalculationSettingsSnapshot) -> Bool {
         settings.selectedWeekdaySet.contains(Self.weekdayIndex(for: date))
+    }
+
+    private static func offDay(from day: WageDay) -> WageDay {
+        WageDay(
+            startMinute: day.startMinute,
+            endMinute: day.endMinute,
+            lunchStartMinute: day.lunchStartMinute,
+            lunchEndMinute: day.lunchEndMinute,
+            workdayMinutes: day.workdayMinutes,
+            hourlyRate: day.hourlyRate,
+            elapsedPaidMinutes: 0,
+            elapsedPaidSeconds: 0,
+            earnedToday: 0,
+            targetToday: 0,
+            status: .off,
+            wallToEndMinutes: 0
+        )
     }
 
     private func persistEditableSettings() {
@@ -640,6 +678,7 @@ private struct CalculationFingerprint: Equatable {
     let lunchEndMinute: Int
     let hasLunchBreak: Bool
     let includeOvertime: Bool
+    let selectedWeekdays: [Int]
 }
 
 private enum Default {

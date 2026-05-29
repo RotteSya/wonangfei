@@ -47,6 +47,26 @@ enum WageCalculator {
         let rawLunchEnd = hasLunchBreak ? lunchEnd.minutesInDay : endMinute
         let lunchStartMinute = min(rawLunchStart, rawLunchEnd)
         let lunchEndMinute = max(rawLunchStart, rawLunchEnd)
+        let nowSecond = now.secondsInDay
+        let nowMinute = nowSecond / 60
+
+        guard endMinute > startMinute else {
+            return WageDay(
+                startMinute: startMinute,
+                endMinute: endMinute,
+                lunchStartMinute: lunchStartMinute,
+                lunchEndMinute: lunchEndMinute,
+                workdayMinutes: 0,
+                hourlyRate: 0,
+                elapsedPaidMinutes: 0,
+                elapsedPaidSeconds: 0,
+                earnedToday: 0,
+                targetToday: 0,
+                status: nowMinute < startMinute ? .before : .done,
+                wallToEndMinutes: 0
+            )
+        }
+
         let lunchLength = max(0, lunchEndMinute - lunchStartMinute)
         let workdayMinutes = max(1, endMinute - startMinute - lunchLength)
         let hourlyRate = monthlySalary / (Double(max(1, workdaysPerMonth)) * (Double(workdayMinutes) / 60))
@@ -54,8 +74,6 @@ enum WageCalculator {
         let endSecond = endMinute * 60
         let lunchStartSecond = lunchStartMinute * 60
         let lunchEndSecond = lunchEndMinute * 60
-        let nowSecond = now.secondsInDay
-        let nowMinute = nowSecond / 60
 
         var elapsedSeconds = 0
         if nowSecond > startSecond {

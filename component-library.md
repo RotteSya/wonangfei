@@ -212,7 +212,7 @@ The Settings (`我的`) scroll, top to bottom:
 1. `profileBanner` (ink hero card with mascot)
 2. `收入` SectionCard (salary, monthly workdays, hourly rate)
 3. `weekdaysCard` (工作日)
-4. `时间` SectionCard (work-start, work-end, lunch toggle + lunch rows)
+4. `时间` SectionCard (work-start, work-end, lunch toggle + lunch rows; work-start/work-end edits route through `WageState` validated setters so end stays after start)
 5. `clockOutReminderCard` (提醒 — see below)
 6. `其它` SectionCard (计入加班 toggle)
 7. `引导` SectionCard (重新设置工资/时间)

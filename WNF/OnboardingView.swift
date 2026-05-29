@@ -453,6 +453,22 @@ private struct WorkTimeSetupCard: View {
         max(0, state.lunchEnd.minutesInDay - state.lunchStart.minutesInDay)
     }
 
+    private var workStartBinding: Binding<DateComponents> {
+        Binding {
+            state.workStart
+        } set: { value in
+            state.setWorkStart(value)
+        }
+    }
+
+    private var workEndBinding: Binding<DateComponents> {
+        Binding {
+            state.workEnd
+        } set: { value in
+            state.setWorkEnd(value)
+        }
+    }
+
     var body: some View {
         VStack(spacing: 7) {
             HStack(spacing: 7) {
@@ -478,8 +494,8 @@ private struct WorkTimeSetupCard: View {
 
             VStack(spacing: 8) {
                 HStack(spacing: 8) {
-                    OnboardingTimePicker(title: "上班", components: $state.workStart)
-                    OnboardingTimePicker(title: "下班", components: $state.workEnd)
+                    OnboardingTimePicker(title: "上班", components: workStartBinding)
+                    OnboardingTimePicker(title: "下班", components: workEndBinding)
                 }
 
                 HStack(spacing: 8) {

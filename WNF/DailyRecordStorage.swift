@@ -24,6 +24,7 @@ enum StorageKey {
     static let dailyRecordsDecodeFailedRecovery = "wnf.records.daily.recovery.decodeFailed"
     static let dailyRecordsActiveRecoveryKey = "wnf.records.daily.recovery.activeKey"
     static let lastObservedDateKey = "wnf.records.lastObservedDateKey"
+    static let lastObservedSnapshot = "wnf.records.lastObservedSnapshot"
 }
 
 struct DailyRecordLoadResult {

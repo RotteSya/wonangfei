@@ -11,6 +11,21 @@ struct SettingsView: View {
     @State private var notificationAuthStatus: UNAuthorizationStatus = .notDetermined
 
     private var day: WageDay { state.calculation }
+    private var workStartBinding: Binding<DateComponents> {
+        Binding {
+            state.workStart
+        } set: { value in
+            state.setWorkStart(value)
+        }
+    }
+
+    private var workEndBinding: Binding<DateComponents> {
+        Binding {
+            state.workEnd
+        } set: { value in
+            state.setWorkEnd(value)
+        }
+    }
 
     var body: some View {
         ScrollView {
@@ -68,8 +83,8 @@ struct SettingsView: View {
                     weekdaysCard
 
                     SectionCard(title: "时间") {
-                        TimePickerRow(title: "上班", components: $state.workStart)
-                        TimePickerRow(title: "下班", components: $state.workEnd)
+                        TimePickerRow(title: "上班", components: workStartBinding)
+                        TimePickerRow(title: "下班", components: workEndBinding)
                         SettingsRow(title: "午休") {
                             WNFToggle(isOn: $state.hasLunchBreak)
                         }

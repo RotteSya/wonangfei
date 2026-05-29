@@ -40,6 +40,28 @@ struct WageCalculatorTests {
         #expect(afterWork.progress == 1)
     }
 
+    @Test("下班早于上班时返回零值结果")
+    func invalidWorkRangeReturnsZeroDay() {
+        let day = WageCalculator.compute(
+            monthlySalary: 22_000,
+            workdaysPerMonth: 22,
+            workStart: .minuteInDay(18 * 60 + 30),
+            workEnd: .minuteInDay(9 * 60 + 30),
+            lunchStart: .minuteInDay(12 * 60),
+            lunchEnd: .minuteInDay(13 * 60),
+            hasLunchBreak: true,
+            includeOvertime: true,
+            now: DateComponents(hour: 18, minute: 31)
+        )
+
+        #expect(day.workdayMinutes == 0)
+        #expect(day.hourlyRate == 0)
+        #expect(day.elapsedPaidSeconds == 0)
+        #expect(day.earnedToday == 0)
+        #expect(day.targetToday == 0)
+        #expect(day.progress == 0)
+    }
+
     private func sampleDay(now: DateComponents, includeOvertime: Bool) -> WageDay {
         WageCalculator.compute(
             monthlySalary: 22_000,
@@ -52,6 +74,60 @@ struct WageCalculatorTests {
             includeOvertime: includeOvertime,
             now: now
         )
+    }
+}
+
+struct WageStateBackfillTests {
+    @Test("跨日回填沿用上次观察时的薪资设置")
+    func backfilledRecordsUseLastObservedSettingsSnapshot() throws {
+        let (defaults, suiteName) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let calendar = DateComponents.calendar
+        let todayStart = calendar.startOfDay(for: Date())
+        let lastObservedDate = try #require(calendar.date(byAdding: .day, value: -3, to: todayStart))
+        let lastObservedSnapshot = LastObservedSnapshot(
+            dateKey: WageState.dateKey(for: lastObservedDate),
+            settings: WageCalculationSettingsSnapshot(
+                monthlySalary: 12_000,
+                workdaysPerMonth: 20,
+                workStartMinute: 9 * 60,
+                workEndMinute: 17 * 60,
+                lunchStartMinute: 12 * 60,
+                lunchEndMinute: 13 * 60,
+                hasLunchBreak: true,
+                includeOvertime: false,
+                selectedWeekdays: Set(0...6)
+            )
+        )
+
+        defaults.set(try JSONEncoder().encode(lastObservedSnapshot), forKey: StorageKey.lastObservedSnapshot)
+        defaults.set(lastObservedSnapshot.dateKey, forKey: StorageKey.lastObservedDateKey)
+        defaults.set(20_000, forKey: StorageKey.monthlySalary)
+        defaults.set(10, forKey: StorageKey.workdaysPerMonth)
+        defaults.set(Array(0...6), forKey: StorageKey.selectedWeekdays)
+
+        let state = WageState(userDefaults: defaults)
+        defer { state.pauseCalendarDayTimer() }
+
+        #expect(state.monthlySalary == 20_000)
+        #expect(state.workdaysPerMonth == 10)
+
+        for dayOffset in -3 ... -1 {
+            let date = try #require(calendar.date(byAdding: .day, value: dayOffset, to: todayStart))
+            let record = try #require(state.dailyRecords[WageState.dateKey(for: date)])
+
+            #expect(record.monthlySalary == 12_000)
+            #expect(record.workdaysPerMonth == 20)
+            #expect(abs(record.targetToday - 600) < 0.001)
+        }
+
+        let observedRecord = try #require(state.dailyRecords[lastObservedSnapshot.dateKey])
+        let backfilledDate = try #require(calendar.date(byAdding: .day, value: -2, to: todayStart))
+        let backfilledRecord = try #require(state.dailyRecords[WageState.dateKey(for: backfilledDate)])
+
+        #expect(observedRecord.source == .observed)
+        #expect(backfilledRecord.source == .backfilled)
     }
 }
 

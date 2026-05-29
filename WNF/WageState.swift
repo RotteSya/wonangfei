@@ -4,24 +4,28 @@ final class WageState: ObservableObject {
     @Published var monthlySalary: Double {
         didSet {
             userDefaults.set(monthlySalary, forKey: StorageKey.monthlySalary)
+            recordCalculationSettingsChanged()
         }
     }
 
     @Published var workdaysPerMonth: Int {
         didSet {
             userDefaults.set(workdaysPerMonth, forKey: StorageKey.workdaysPerMonth)
+            recordCalculationSettingsChanged()
         }
     }
 
     @Published var workStart: DateComponents {
         didSet {
             userDefaults.set(workStart.minutesInDay, forKey: StorageKey.workStartMinute)
+            recordCalculationSettingsChanged()
         }
     }
 
     @Published var workEnd: DateComponents {
         didSet {
             userDefaults.set(workEnd.minutesInDay, forKey: StorageKey.workEndMinute)
+            recordCalculationSettingsChanged()
             reconcileClockOutReminder()
         }
     }
@@ -29,24 +33,28 @@ final class WageState: ObservableObject {
     @Published var lunchStart: DateComponents {
         didSet {
             userDefaults.set(lunchStart.minutesInDay, forKey: StorageKey.lunchStartMinute)
+            recordCalculationSettingsChanged()
         }
     }
 
     @Published var lunchEnd: DateComponents {
         didSet {
             userDefaults.set(lunchEnd.minutesInDay, forKey: StorageKey.lunchEndMinute)
+            recordCalculationSettingsChanged()
         }
     }
 
     @Published var hasLunchBreak: Bool {
         didSet {
             userDefaults.set(hasLunchBreak, forKey: StorageKey.hasLunchBreak)
+            recordCalculationSettingsChanged()
         }
     }
 
     @Published var includeOvertime: Bool {
         didSet {
             userDefaults.set(includeOvertime, forKey: StorageKey.includeOvertime)
+            recordCalculationSettingsChanged()
         }
     }
 
@@ -59,6 +67,7 @@ final class WageState: ObservableObject {
     @Published var selectedWeekdays: Set<Int> {
         didSet {
             userDefaults.set(selectedWeekdays.sorted(), forKey: StorageKey.selectedWeekdays)
+            recordCalculationSettingsChanged()
             reconcileClockOutReminder()
         }
     }
@@ -130,7 +139,7 @@ final class WageState: ObservableObject {
         persistEditableSettings()
 
         closeLastObservedDayIfNeeded(now: now)
-        rememberObservedDate(now)
+        rememberObservedSnapshot(now)
         scheduleDayBoundaryTimer(from: now)
     }
 
@@ -155,20 +164,23 @@ final class WageState: ObservableObject {
             return cache.day
         }
 
-        let currentTime = DateComponents.calendar.dateComponents([.hour, .minute, .second], from: date)
-        let day = WageCalculator.compute(
-            monthlySalary: monthlySalary,
-            workdaysPerMonth: workdaysPerMonth,
-            workStart: workStart,
-            workEnd: workEnd,
-            lunchStart: lunchStart,
-            lunchEnd: lunchEnd,
-            hasLunchBreak: hasLunchBreak,
-            includeOvertime: includeOvertime,
-            now: currentTime
-        )
+        let day = calculateWageDay(at: date, settings: currentSettingsSnapshot)
         calculationCache = (fingerprint, secondBucket, day)
         return day
+    }
+
+    private var currentSettingsSnapshot: WageCalculationSettingsSnapshot {
+        WageCalculationSettingsSnapshot(
+            monthlySalary: monthlySalary,
+            workdaysPerMonth: workdaysPerMonth,
+            workStartMinute: workStart.minutesInDay,
+            workEndMinute: workEnd.minutesInDay,
+            lunchStartMinute: lunchStart.minutesInDay,
+            lunchEndMinute: lunchEnd.minutesInDay,
+            hasLunchBreak: hasLunchBreak,
+            includeOvertime: includeOvertime,
+            selectedWeekdays: selectedWeekdays
+        )
     }
 
     private var calculationFingerprint: CalculationFingerprint {
@@ -188,7 +200,12 @@ final class WageState: ObservableObject {
         let dateKey = Self.dateKey(for: date)
         if includingLiveToday, dateKey == currentDateKey {
             let now = Date()
-            return makeDailyRecord(for: now, capturedAt: now, source: .observed)
+            return makeDailyRecord(
+                for: now,
+                capturedAt: now,
+                source: .observed,
+                settings: currentSettingsSnapshot
+            )
         }
 
         return dailyRecords[dateKey]
@@ -198,7 +215,7 @@ final class WageState: ObservableObject {
         let now = Date()
         advanceCalendarDay(to: now)
         persistDailySnapshot(for: now, capturedAt: now)
-        rememberObservedDate(now)
+        rememberObservedSnapshot(now)
     }
 
     func refreshCalendarDayIfNeeded(now: Date = Date()) {
@@ -220,7 +237,14 @@ final class WageState: ObservableObject {
     }
 
     func updateTime(_ keyPath: ReferenceWritableKeyPath<WageState, DateComponents>, date: Date) {
-        self[keyPath: keyPath] = DateComponents.calendar.dateComponents([.hour, .minute], from: date)
+        let components = DateComponents.calendar.dateComponents([.hour, .minute], from: date)
+        if keyPath == \WageState.workStart {
+            setWorkStart(components)
+        } else if keyPath == \WageState.workEnd {
+            setWorkEnd(components)
+        } else {
+            self[keyPath: keyPath] = components
+        }
     }
 
     func adjustMonthlySalary(by delta: Double) {
@@ -249,6 +273,28 @@ final class WageState: ObservableObject {
         setWorkdaysPerMonth(value)
     }
 
+    func setWorkStart(_ components: DateComponents) {
+        var startMinute = clampedMinuteInDay(components.minutesInDay)
+        if startMinute >= workEnd.minutesInDay {
+            if startMinute >= Self.lastMinuteInDay {
+                startMinute = Self.lastMinuteInDay - 1
+            }
+            workEnd = DateComponents.minuteInDay(startMinute + 1)
+        }
+        workStart = DateComponents.minuteInDay(startMinute)
+    }
+
+    func setWorkEnd(_ components: DateComponents) {
+        var endMinute = clampedMinuteInDay(components.minutesInDay)
+        if endMinute <= workStart.minutesInDay {
+            if endMinute <= 0 {
+                endMinute = 1
+            }
+            workStart = DateComponents.minuteInDay(endMinute - 1)
+        }
+        workEnd = DateComponents.minuteInDay(endMinute)
+    }
+
     func toggleWeekday(_ index: Int) {
         guard (0...6).contains(index) else { return }
         var nextWeekdays = selectedWeekdays
@@ -268,13 +314,26 @@ final class WageState: ObservableObject {
         min(max(value, 1), 31)
     }
 
+    private static let lastMinuteInDay = 23 * 60 + 59
+
+    private func clampedMinuteInDay(_ value: Int) -> Int {
+        min(max(value, 0), Self.lastMinuteInDay)
+    }
+
+    private func recordCalculationSettingsChanged() {
+        let now = Date()
+        advanceCalendarDay(to: now)
+        rememberObservedSnapshot(now)
+    }
+
     private func advanceCalendarDay(to newDate: Date) {
         let newDateKey = Self.dateKey(for: newDate)
         guard newDateKey != currentDateKey else { return }
 
-        closeObservedDateRange(from: currentDayStart, to: newDate, capturedAt: newDate)
+        let settings = lastObservedSnapshotForClosure()?.settings ?? currentSettingsSnapshot
+        closeObservedDateRange(from: currentDayStart, to: newDate, capturedAt: newDate, settings: settings)
         currentDateKey = newDateKey
-        rememberObservedDate(newDate)
+        rememberObservedSnapshot(newDate)
     }
 
     private func scheduleDayBoundaryTimer(from date: Date) {
@@ -292,17 +351,27 @@ final class WageState: ObservableObject {
     }
 
     private func closeLastObservedDayIfNeeded(now: Date) {
-        guard let lastObservedDateKey = userDefaults.string(forKey: StorageKey.lastObservedDateKey),
-              lastObservedDateKey != Self.dateKey(for: now),
-              let lastObservedDate = Self.date(fromDateKey: lastObservedDateKey)
+        guard let lastObservedSnapshot = lastObservedSnapshotForClosure(),
+              lastObservedSnapshot.dateKey != Self.dateKey(for: now),
+              let lastObservedDate = Self.date(fromDateKey: lastObservedSnapshot.dateKey)
         else {
             return
         }
 
-        closeObservedDateRange(from: lastObservedDate, to: now, capturedAt: now)
+        closeObservedDateRange(
+            from: lastObservedDate,
+            to: now,
+            capturedAt: now,
+            settings: lastObservedSnapshot.settings
+        )
     }
 
-    private func closeObservedDateRange(from lastObservedDate: Date, to now: Date, capturedAt: Date) {
+    private func closeObservedDateRange(
+        from lastObservedDate: Date,
+        to now: Date,
+        capturedAt: Date,
+        settings: WageCalculationSettingsSnapshot
+    ) {
         let calendar = DateComponents.calendar
         let lastObservedStart = calendar.startOfDay(for: lastObservedDate)
         let todayStart = calendar.startOfDay(for: now)
@@ -313,7 +382,8 @@ final class WageState: ObservableObject {
         let closedLastObservedRecord = makeDailyRecord(
             for: Self.endOfDay(for: lastObservedStart),
             capturedAt: capturedAt,
-            source: .observed
+            source: .observed,
+            settings: settings
         )
         nextRecords[closedLastObservedRecord.dateKey] = closedLastObservedRecord
 
@@ -321,7 +391,7 @@ final class WageState: ObservableObject {
         while let date = cursor, date < todayStart {
             let dateKey = Self.dateKey(for: date)
             if nextRecords[dateKey] == nil {
-                let record = makeBackfilledDailyRecord(for: date, capturedAt: capturedAt)
+                let record = makeBackfilledDailyRecord(for: date, capturedAt: capturedAt, settings: settings)
                 nextRecords[record.dateKey] = record
             }
             cursor = calendar.date(byAdding: .day, value: 1, to: date)
@@ -332,7 +402,12 @@ final class WageState: ObservableObject {
     }
 
     private func persistDailySnapshot(for date: Date, capturedAt: Date) {
-        let record = makeDailyRecord(for: date, capturedAt: capturedAt, source: .observed)
+        let record = makeDailyRecord(
+            for: date,
+            capturedAt: capturedAt,
+            source: .observed,
+            settings: currentSettingsSnapshot
+        )
         var nextRecords = dailyRecords
         nextRecords[record.dateKey] = record
         replaceDailyRecords(nextRecords)
@@ -344,13 +419,27 @@ final class WageState: ObservableObject {
         recordsRevision += 1
     }
 
-    private func makeBackfilledDailyRecord(for date: Date, capturedAt: Date) -> DailyWageRecord {
-        makeDailyRecord(for: Self.endOfDay(for: date), capturedAt: capturedAt, source: .backfilled)
+    private func makeBackfilledDailyRecord(
+        for date: Date,
+        capturedAt: Date,
+        settings: WageCalculationSettingsSnapshot
+    ) -> DailyWageRecord {
+        makeDailyRecord(
+            for: Self.endOfDay(for: date),
+            capturedAt: capturedAt,
+            source: .backfilled,
+            settings: settings
+        )
     }
 
-    private func makeDailyRecord(for date: Date, capturedAt: Date, source: DailyRecordSource) -> DailyWageRecord {
-        let day = calculation(at: date)
-        guard isPaidWorkday(date) else {
+    private func makeDailyRecord(
+        for date: Date,
+        capturedAt: Date,
+        source: DailyRecordSource,
+        settings: WageCalculationSettingsSnapshot
+    ) -> DailyWageRecord {
+        let day = calculateWageDay(at: date, settings: settings)
+        guard isPaidWorkday(date, settings: settings) else {
             return DailyWageRecord(
                 dateKey: Self.dateKey(for: date),
                 earnedToday: 0,
@@ -358,8 +447,8 @@ final class WageState: ObservableObject {
                 elapsedPaidSeconds: 0,
                 workdayMinutes: day.workdayMinutes,
                 hourlyRate: day.hourlyRate,
-                monthlySalary: monthlySalary,
-                workdaysPerMonth: workdaysPerMonth,
+                monthlySalary: settings.monthlySalary,
+                workdaysPerMonth: settings.workdaysPerMonth,
                 capturedAt: capturedAt,
                 source: source
             )
@@ -372,15 +461,30 @@ final class WageState: ObservableObject {
             elapsedPaidSeconds: day.elapsedPaidSeconds,
             workdayMinutes: day.workdayMinutes,
             hourlyRate: day.hourlyRate,
-            monthlySalary: monthlySalary,
-            workdaysPerMonth: workdaysPerMonth,
+            monthlySalary: settings.monthlySalary,
+            workdaysPerMonth: settings.workdaysPerMonth,
             capturedAt: capturedAt,
             source: source
         )
     }
 
-    private func isPaidWorkday(_ date: Date) -> Bool {
-        selectedWeekdays.contains(Self.weekdayIndex(for: date))
+    private func calculateWageDay(at date: Date, settings: WageCalculationSettingsSnapshot) -> WageDay {
+        let currentTime = DateComponents.calendar.dateComponents([.hour, .minute, .second], from: date)
+        return WageCalculator.compute(
+            monthlySalary: settings.monthlySalary,
+            workdaysPerMonth: settings.workdaysPerMonth,
+            workStart: settings.workStart,
+            workEnd: settings.workEnd,
+            lunchStart: settings.lunchStart,
+            lunchEnd: settings.lunchEnd,
+            hasLunchBreak: settings.hasLunchBreak,
+            includeOvertime: settings.includeOvertime,
+            now: currentTime
+        )
+    }
+
+    private func isPaidWorkday(_ date: Date, settings: WageCalculationSettingsSnapshot) -> Bool {
+        settings.selectedWeekdaySet.contains(Self.weekdayIndex(for: date))
     }
 
     private func persistEditableSettings() {
@@ -410,8 +514,33 @@ final class WageState: ObservableObject {
         }
     }
 
-    private func rememberObservedDate(_ date: Date) {
-        userDefaults.set(Self.dateKey(for: date), forKey: StorageKey.lastObservedDateKey)
+    private func rememberObservedSnapshot(_ date: Date) {
+        let snapshot = LastObservedSnapshot(
+            dateKey: Self.dateKey(for: date),
+            settings: currentSettingsSnapshot
+        )
+        if let data = try? JSONEncoder().encode(snapshot) {
+            userDefaults.set(data, forKey: StorageKey.lastObservedSnapshot)
+        }
+        userDefaults.set(snapshot.dateKey, forKey: StorageKey.lastObservedDateKey)
+    }
+
+    private func lastObservedSnapshotForClosure() -> LastObservedSnapshot? {
+        let mirroredDateKey = userDefaults.string(forKey: StorageKey.lastObservedDateKey)
+        if let data = userDefaults.data(forKey: StorageKey.lastObservedSnapshot),
+           let snapshot = try? JSONDecoder().decode(LastObservedSnapshot.self, from: data),
+           Self.date(fromDateKey: snapshot.dateKey) != nil,
+           mirroredDateKey == nil || mirroredDateKey == snapshot.dateKey {
+            return snapshot
+        }
+
+        guard let dateKey = mirroredDateKey,
+              Self.date(fromDateKey: dateKey) != nil
+        else {
+            return nil
+        }
+
+        return LastObservedSnapshot(dateKey: dateKey, settings: currentSettingsSnapshot)
     }
 
     static func dateKey(for date: Date) -> String {
@@ -438,6 +567,67 @@ final class WageState: ObservableObject {
     private static func weekdayIndex(for date: Date) -> Int {
         let weekday = DateComponents.calendar.component(.weekday, from: date)
         return (weekday + 5) % 7
+    }
+}
+
+struct LastObservedSnapshot: Codable, Equatable {
+    var dateKey: String
+    var settings: WageCalculationSettingsSnapshot
+}
+
+struct WageCalculationSettingsSnapshot: Codable, Equatable {
+    var monthlySalary: Double
+    var workdaysPerMonth: Int
+    var workStartMinute: Int
+    var workEndMinute: Int
+    var lunchStartMinute: Int
+    var lunchEndMinute: Int
+    var hasLunchBreak: Bool
+    var includeOvertime: Bool
+    var selectedWeekdays: [Int]
+
+    init(
+        monthlySalary: Double,
+        workdaysPerMonth: Int,
+        workStartMinute: Int,
+        workEndMinute: Int,
+        lunchStartMinute: Int,
+        lunchEndMinute: Int,
+        hasLunchBreak: Bool,
+        includeOvertime: Bool,
+        selectedWeekdays: Set<Int>
+    ) {
+        self.monthlySalary = monthlySalary
+        self.workdaysPerMonth = workdaysPerMonth
+        self.workStartMinute = workStartMinute
+        self.workEndMinute = workEndMinute
+        self.lunchStartMinute = lunchStartMinute
+        self.lunchEndMinute = lunchEndMinute
+        self.hasLunchBreak = hasLunchBreak
+        self.includeOvertime = includeOvertime
+        self.selectedWeekdays = selectedWeekdays
+            .filter { (0...6).contains($0) }
+            .sorted()
+    }
+
+    var workStart: DateComponents {
+        .minuteInDay(workStartMinute)
+    }
+
+    var workEnd: DateComponents {
+        .minuteInDay(workEndMinute)
+    }
+
+    var lunchStart: DateComponents {
+        .minuteInDay(lunchStartMinute)
+    }
+
+    var lunchEnd: DateComponents {
+        .minuteInDay(lunchEndMinute)
+    }
+
+    var selectedWeekdaySet: Set<Int> {
+        Set(selectedWeekdays)
     }
 }
 

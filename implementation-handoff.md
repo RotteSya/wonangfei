@@ -85,7 +85,8 @@ Daily record history lifecycle is owned by `WageState`; storage encoding, migrat
 - `DailyWageRecord` captures `earnedToday`, `targetToday`, `elapsedPaidSeconds`, `workdayMinutes`, `hourlyRate`, salary/workday settings, `capturedAt`, and a `source` marker. Existing records without `source` decode as `observed`; corrupt `source` values still throw instead of being silently coerced. New optional/defaulted fields should continue to use explicit `decodeIfPresent` defaults in the custom decoder.
 - `WageState` publishes `currentDateKey` only when the calendar date changes. A one-shot day-boundary timer, foreground refresh, and scene-phase snapshot path keep cross-midnight closure working without a global one-second `ObservableObject` tick.
 - `WNFApp` pauses the day-boundary timer whenever the scene leaves `.active`; returning to `.active` refreshes the date immediately and recreates the timer.
-- If the app was not opened for multiple calendar days, `WageState` first closes the last observed day, then backfills every date from `lastObservedDate + 1 day` through the calendar day before `now`. Observed closures and backfilled records both use the same `selectedWeekdays` check: selected days receive a complete standard workday snapshot, while unselected days receive zero-yuan, zero-elapsed records with their original `source`.
+- `wnf.records.lastObservedSnapshot` stores the last observed date key plus the wage calculation settings active at that observation (`monthlySalary`, `workdaysPerMonth`, work/lunch minutes, lunch/overtime flags, selected weekdays). `wnf.records.lastObservedDateKey` remains as a legacy fallback and mirror.
+- If the app was not opened for multiple calendar days, `WageState` first closes the last observed day, then backfills every date from `lastObservedDate + 1 day` through the calendar day before `now`. Observed closures and backfilled records are calculated from `lastObservedSnapshot`, not today's editable settings, so later salary changes do not rewrite historical estimates. Both paths use the snapshot's `selectedWeekdays` check: selected days receive a complete standard workday snapshot, while unselected days receive zero-yuan, zero-elapsed records with their original `source`.
 - `WNFApp` asks `WageState` to persist the current-day snapshot when the scene leaves `.active`, so a day can still appear in records even if the app is not open at midnight.
 - `HomeView` owns the one-second `TimelineView` used by the large live money number and passes the derived `WageDay` into the home hero. Other tabs do not subscribe to that tick.
 - `RecordsView` builds a memoized aggregation snapshot through internal `RecordAggregator` from `(currentDateKey, recordsRevision, dailyRecords payload, live-day settings, includeOvertime, selectedWeekdays)`. Cache equality compares the scalar `recordsRevision` instead of the full `[dateKey: DailyWageRecord]` dictionary, so week/month/year bars reuse the snapshot across body updates and only rebuild when the date key, stored-record revision, or wage settings change. The live today record returns zero amount / zero elapsed when `currentDateKey` is not in `selectedWeekdays`.
@@ -127,6 +128,8 @@ Source: `shared.jsx -> computeDay(cfg, nowMin)`
 5. Compute elapsed paid minutes up to `nowMin`, subtracting lunch overlap.
 6. Compute current-day earnings:
    - `earnedToday = hourlyRate / 60 * elapsedPaid`
+
+Native `WageCalculator.compute` returns a zero-value `WageDay` when `workEnd <= workStart`; Settings and Onboarding route work-start/work-end changes through `WageState.setWorkStart` / `setWorkEnd` to keep the editable pair valid.
 
 Important: the settings UI label says `午休`. Switch on means "has lunch break"; switch off means "没有午休". The data flag remains `noLunch`.
 

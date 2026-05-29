@@ -82,9 +82,8 @@ struct ShareCardOverlay: View {
     @State private var reveal: CGFloat = 0
     @State private var cardSize: CGSize = .zero
 
-    private static let cardCornerRadius: CGFloat = 29
-    private static let unfurlIn = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.44)
-    private static let unfurlOut = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.30)
+    private static let unfurlIn = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.5)
+    private static let unfurlOut = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.32)
 
     private var isActive: Bool { isPresented || reveal > 0.001 }
 
@@ -93,12 +92,13 @@ struct ShareCardOverlay: View {
             let island = IslandMetrics(topInset: proxy.safeAreaInsets.top)
             let centerX = proxy.size.width / 2
             let cardWidth = min(proxy.size.width - 52, 340)
+            let p = reveal
 
             ZStack(alignment: .topLeading) {
                 if isActive {
-                    unfurlingCard(island: island, centerX: centerX, cardWidth: cardWidth)
+                    unfurlingCard(p: p, island: island, centerX: centerX, cardWidth: cardWidth)
                     if island.hasIsland {
-                        islandCapsule(island: island, centerX: centerX)
+                        islandCapsule(p: p, island: island, centerX: centerX)
                     }
                 }
             }
@@ -116,31 +116,19 @@ struct ShareCardOverlay: View {
         }
     }
 
-    private func unfurlingCard(island: IslandMetrics, centerX: CGFloat, cardWidth: CGFloat) -> some View {
-        let p = reveal
+    private func unfurlingCard(p: CGFloat, island: IslandMetrics, centerX: CGFloat, cardWidth: CGFloat) -> some View {
         let cardH = max(cardSize.height, 1)
+        let neckHalf = island.expandedSize.width / 2
 
-        // Genie from the island. The WHOLE card scales up from a pill-sized seed
-        // — its content (the ¥ figure, the mascot, the labels) visibly grows out
-        // of the capsule rather than just being uncovered — while a top-anchored
-        // rounded window unmasks it top→bottom slightly ahead of the scale, giving
-        // the "tongue extruding from the pill, then unfolding" read of the video.
-        // Scaling the whole card (vs. a fixed-scale reveal) also keeps the card's
-        // asymmetric content coherent at every size instead of slicing a column.
-        let scaleStart: CGFloat = 0.44                      // seed ≈ pill width
-        let scale = lerp(scaleStart, 1.0, smoothstep(0.05, 1.0, p))
-        // The reveal front tracks the growth (rather than finishing early) so the
-        // card visibly UNFOLDS top→bottom as it scales, instead of popping in whole.
-        let revealP = smoothstep(0.0, 0.82, p)
-        let revealH = max(1, revealP * cardH)
-        let maskCorner = lerp(island.expandedSize.height / 2, Self.cardCornerRadius, smoothstep(0.2, 1.0, p))
-        let shadowP = smoothstep(0.12, 0.7, p)
-
-        // The top edge stays pinned to the island's lower lip through the
-        // emergence, then drops free as it settles. scaleEffect(anchor: .top)
-        // keeps the rendered top at the frame's top, so positioning by the
-        // unscaled center plants that top exactly at `topY`.
-        let detach = smoothstep(0.55, 1.0, p)
+        // Genie / Command-M warp. The card is rendered ONCE at full size; the
+        // `genie` Metal distortion then pushes those finished pixels out of the
+        // island slot — pinched into the neck and decompressing downward — exactly
+        // like macOS minimize in reverse. A matching funnel mask supplies the clean
+        // edges so the shader only has to do the deformation. At p == 1 both are
+        // the identity, so the resting card is crisp and its buttons hit-test.
+        let shadowP = smoothstep(0.2, 0.85, p)
+        // Detaches from the island's lip only at the very end, as it settles.
+        let detach = smoothstep(0.72, 1.0, p)
         let topY = island.compactBottomY + island.detachGap * detach
 
         return WonangfeiShareCard(
@@ -163,23 +151,29 @@ struct ShareCardOverlay: View {
                 Color.clear.preference(key: ShareCardSizeKey.self, value: geo.size)
             }
         )
-        .mask(alignment: .top) {
-            RoundedRectangle(cornerRadius: maskCorner, style: .continuous)
-                .frame(width: cardWidth, height: revealH)
-                .frame(width: cardWidth, height: cardH, alignment: .top)
-        }
-        .scaleEffect(scale, anchor: .top)
+        .distortionEffect(
+            ShaderLibrary.genie(
+                .float2(cardWidth, cardH),
+                .float(p),
+                .float(neckHalf),
+                .float(cardWidth / 2)
+            ),
+            maxSampleOffset: CGSize(width: cardWidth, height: cardH)
+        )
+        .mask(
+            GenieFunnelShape(progress: p, neckHalf: neckHalf)
+                .frame(width: cardWidth, height: cardH)
+        )
+        .shadow(color: .black.opacity(0.22 * shadowP), radius: 22, y: 14)
         .position(x: centerX, y: topY + cardH / 2)
-        .shadow(color: .black.opacity(0.24 * shadowP), radius: 24, y: 16)
         .onPreferenceChange(ShareCardSizeKey.self) { cardSize = $0 }
     }
 
-    private func islandCapsule(island: IslandMetrics, centerX: CGFloat) -> some View {
-        let p = reveal
-        // Capsule stretches open quickly, holds, then snaps back to compact as the
-        // card finishes detaching — at rest it matches the hardware island exactly.
-        let rise = min(p / 0.22, 1)
-        let fall = smoothstep(0.55, 1.0, p)
+    private func islandCapsule(p: CGFloat, island: IslandMetrics, centerX: CGFloat) -> some View {
+        // The capsule opens just a little as the card is pushed out, then snaps
+        // back to compact — at rest it matches the hardware island exactly.
+        let rise = min(p / 0.18, 1)
+        let fall = smoothstep(0.6, 1.0, p)
         let stretch = rise * (1 - fall)
         let w = lerp(island.compactSize.width, island.expandedSize.width, stretch)
         let h = lerp(island.compactSize.height, island.expandedSize.height, stretch)
@@ -209,7 +203,7 @@ private struct IslandMetrics {
         if island {
             topY = 11
             compactSize = CGSize(width: 126, height: 37.33)
-            expandedSize = CGSize(width: 208, height: 44)
+            expandedSize = CGSize(width: 164, height: 41)   // opens just a little
             detachGap = 18
         } else {
             topY = max(8, topInset * 0.4)
@@ -240,6 +234,61 @@ private func smoothstep(_ edge0: CGFloat, _ edge1: CGFloat, _ x: CGFloat) -> CGF
     guard edge1 > edge0 else { return x < edge0 ? 0 : 1 }
     let t = min(max((x - edge0) / (edge1 - edge0), 0), 1)
     return t * t * (3 - 2 * t)
+}
+
+/// The funnel silhouette the genie-warped card is clipped to — pinched to the
+/// island neck at the top, flaring to full width below, occupying the top
+/// `progress` fraction of the card. Kept in lock-step with the `genie` shader's
+/// `halfWidth`/`vFront` so the warp and the clip share one outline. At progress
+/// 1 it's the full card rectangle (identity), matching the shader.
+private struct GenieFunnelShape: Shape {
+    var progress: CGFloat
+    var neckHalf: CGFloat
+    var neckLen: CGFloat = 0.42
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let p = min(max(progress, 0), 1)
+        if p >= 0.999 {
+            path.addRect(rect)
+            return path
+        }
+
+        let w = rect.width
+        let h = rect.height
+        let center = rect.midX
+        let fullHalf = w / 2
+        let vFront = max(p, 0.001)
+        let steps = 28
+
+        func halfWidth(atSourceV s: CGFloat) -> CGFloat {
+            let funnel = lerp(neckHalf, fullHalf, smoothstep(0, neckLen, s))
+            return max(lerp(funnel, fullHalf, p), 1)
+        }
+
+        var leftEdge: [CGPoint] = []
+        for i in 0...steps {
+            let v = vFront * CGFloat(i) / CGFloat(steps)   // output v in [0, vFront]
+            let hw = halfWidth(atSourceV: v / vFront)
+            let y = v * h
+            if i == 0 {
+                path.move(to: CGPoint(x: center + hw, y: y))
+            } else {
+                path.addLine(to: CGPoint(x: center + hw, y: y))
+            }
+            leftEdge.append(CGPoint(x: center - hw, y: y))
+        }
+        for point in leftEdge.reversed() {
+            path.addLine(to: point)
+        }
+        path.closeSubpath()
+        return path
+    }
 }
 
 struct WonangfeiShareCard: View {

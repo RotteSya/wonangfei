@@ -124,6 +124,11 @@ struct ShareActionPanel: View {
 
     @State private var shown = false
 
+    // The panel starts rising at the same moment as the card, but settles faster
+    // (the card keeps the slower genie curve); design-system ease.
+    private static let riseIn = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.8)
+    private static let riseOut = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.34)
+
     var body: some View {
         VStack(spacing: 0) {
             Spacer(minLength: 0)
@@ -135,7 +140,7 @@ struct ShareActionPanel: View {
         .ignoresSafeArea(.container, edges: .all)
         .allowsHitTesting(isPresented)
         .onChange(of: isPresented) { _, presented in
-            withAnimation(presented ? GenieParams.default.presentAnimation : GenieParams.default.dismissAnimation) {
+            withAnimation(presented ? Self.riseIn : Self.riseOut) {
                 shown = presented
             }
         }
@@ -280,6 +285,7 @@ struct ShareCardOverlay: View {
             copy: copy,
             hidesSensitiveInfo: hidesSensitiveInfo,
             showsControls: true,
+            showsShareButton: false,   // sharing lives in the bottom panel now
             isPreparingShare: isPreparingShare,
             onTogglePrivacy: {
                 withAnimation(.snappy(duration: 0.18)) {
@@ -504,6 +510,7 @@ struct WonangfeiShareCard: View {
     var copy: ShareCardCopy = .default
     var hidesSensitiveInfo: Bool
     var showsControls: Bool
+    var showsShareButton: Bool = true
     var isPreparingShare: Bool = false
     var onTogglePrivacy: () -> Void
     var onShare: () -> Void
@@ -552,13 +559,15 @@ struct WonangfeiShareCard: View {
                         accessibilityLabel: hidesSensitiveInfo ? "显示敏感信息" : "隐藏敏感信息",
                         action: onTogglePrivacy
                     )
-                    ShareCardIconButton(
-                        systemName: "square.and.arrow.up",
-                        accessibilityLabel: isPreparingShare ? "正在生成分享图" : "唤起系统分享",
-                        isLoading: isPreparingShare,
-                        isDisabled: isPreparingShare,
-                        action: onShare
-                    )
+                    if showsShareButton {
+                        ShareCardIconButton(
+                            systemName: "square.and.arrow.up",
+                            accessibilityLabel: isPreparingShare ? "正在生成分享图" : "唤起系统分享",
+                            isLoading: isPreparingShare,
+                            isDisabled: isPreparingShare,
+                            action: onShare
+                        )
+                    }
                     ShareCardIconButton(
                         systemName: "xmark",
                         accessibilityLabel: "退出分享卡片",

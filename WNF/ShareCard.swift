@@ -83,7 +83,7 @@ struct ShareCardOverlay: View {
     @State private var cardSize: CGSize = .zero
 
     private static let cardCornerRadius: CGFloat = 29
-    private static let unfurlIn = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.40)
+    private static let unfurlIn = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.44)
     private static let unfurlOut = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.30)
 
     private var isActive: Bool { isPresented || reveal > 0.001 }
@@ -118,24 +118,30 @@ struct ShareCardOverlay: View {
 
     private func unfurlingCard(island: IslandMetrics, centerX: CGFloat, cardWidth: CGFloat) -> some View {
         let p = reveal
-        // The card detaches from the island only in the back half of the curve.
-        let detach = smoothstep(0.5, 1.0, p)
-        let cardTopY = island.compactBottomY + island.detachGap * detach
-        let cardBottomY = cardTopY + cardSize.height
-        let cardCenterY = cardTopY + cardSize.height / 2
+        let cardH = max(cardSize.height, 1)
 
-        // Reveal window grows out of the island. Top edge trails downward, bottom
-        // edge leads — so the card is unmasked top-to-bottom as it pours out.
-        let maskTopY = lerp(island.topY, cardTopY, p)
-        let maskBottomY = lerp(island.compactBottomY, cardBottomY, p)
-        // Width lags height for the "narrow column first, then widen" read.
-        let widthP = smoothstep(0.06, 0.85, p)
-        let maskWidth = lerp(island.expandedSize.width, cardWidth, widthP)
-        let cornerP = smoothstep(0.12, 1.0, p)
-        let maskCorner = lerp(island.expandedSize.height / 2, Self.cardCornerRadius, cornerP)
-        let maskHeight = max(0, maskBottomY - maskTopY)
-        let maskCenterY = (maskTopY + maskBottomY) / 2
-        let shadowP = smoothstep(0.1, 0.65, p)
+        // Genie from the island. The WHOLE card scales up from a pill-sized seed
+        // — its content (the ¥ figure, the mascot, the labels) visibly grows out
+        // of the capsule rather than just being uncovered — while a top-anchored
+        // rounded window unmasks it top→bottom slightly ahead of the scale, giving
+        // the "tongue extruding from the pill, then unfolding" read of the video.
+        // Scaling the whole card (vs. a fixed-scale reveal) also keeps the card's
+        // asymmetric content coherent at every size instead of slicing a column.
+        let scaleStart: CGFloat = 0.44                      // seed ≈ pill width
+        let scale = lerp(scaleStart, 1.0, smoothstep(0.05, 1.0, p))
+        // The reveal front tracks the growth (rather than finishing early) so the
+        // card visibly UNFOLDS top→bottom as it scales, instead of popping in whole.
+        let revealP = smoothstep(0.0, 0.82, p)
+        let revealH = max(1, revealP * cardH)
+        let maskCorner = lerp(island.expandedSize.height / 2, Self.cardCornerRadius, smoothstep(0.2, 1.0, p))
+        let shadowP = smoothstep(0.12, 0.7, p)
+
+        // The top edge stays pinned to the island's lower lip through the
+        // emergence, then drops free as it settles. scaleEffect(anchor: .top)
+        // keeps the rendered top at the frame's top, so positioning by the
+        // unscaled center plants that top exactly at `topY`.
+        let detach = smoothstep(0.55, 1.0, p)
+        let topY = island.compactBottomY + island.detachGap * detach
 
         return WonangfeiShareCard(
             day: day,
@@ -157,12 +163,13 @@ struct ShareCardOverlay: View {
                 Color.clear.preference(key: ShareCardSizeKey.self, value: geo.size)
             }
         )
-        .position(x: centerX, y: cardCenterY)
-        .mask(alignment: .topLeading) {
+        .mask(alignment: .top) {
             RoundedRectangle(cornerRadius: maskCorner, style: .continuous)
-                .frame(width: maskWidth, height: maskHeight)
-                .position(x: centerX, y: maskCenterY)
+                .frame(width: cardWidth, height: revealH)
+                .frame(width: cardWidth, height: cardH, alignment: .top)
         }
+        .scaleEffect(scale, anchor: .top)
+        .position(x: centerX, y: topY + cardH / 2)
         .shadow(color: .black.opacity(0.24 * shadowP), radius: 24, y: 16)
         .onPreferenceChange(ShareCardSizeKey.self) { cardSize = $0 }
     }

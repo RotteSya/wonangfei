@@ -230,20 +230,16 @@ struct RootView: View {
             ShareCardBackdrop(isPresented: homeSharePresented, onDismiss: dismissShareCard)
                 .zIndex(2)
 
-            if homeSharePresented {
-                ShareCardOverlay(
-                    day: day,
-                    copy: shareCardCopy,
-                    hidesSensitiveInfo: $shareCardHidesSensitiveInfo,
-                    isPreparingShare: isPreparingShareActivity,
-                    onShare: presentSystemShare,
-                    onDismiss: dismissShareCard
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .ignoresSafeArea(.container, edges: .all)
-                .transition(.opacity)
-                .zIndex(3)
-            }
+            ShareCardOverlay(
+                isPresented: homeSharePresented,
+                day: day,
+                copy: shareCardCopy,
+                hidesSensitiveInfo: $shareCardHidesSensitiveInfo,
+                isPreparingShare: isPreparingShareActivity,
+                onShare: presentSystemShare,
+                onDismiss: dismissShareCard
+            )
+            .zIndex(3)
 
             if settlementPresented, let snapshot = settlementSnapshot {
                 DailySettlementOverlay(
@@ -325,9 +321,10 @@ struct RootView: View {
         guard selectedTab == .home else { return }
         shareCardCopy = ShareCardCopy.random(excluding: shareCardCopy)
         shareCardHidesSensitiveInfo = state.privacyMode
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
-            homeSharePresented = true
-        }
+        // The unfurl is choreographed inside ShareCardOverlay (driven by its own
+        // `reveal` state); the backdrop, home blur, and tab bar each animate off
+        // this flag through their own `.animation` modifiers.
+        homeSharePresented = true
     }
 
     private func presentSettlement() {
@@ -363,9 +360,8 @@ struct RootView: View {
 
     private func dismissShareCard() {
         isPreparingShareActivity = false
-        withAnimation(.easeOut(duration: 0.2)) {
-            homeSharePresented = false
-        }
+        // ShareCardOverlay furls the card back into the island on this change.
+        homeSharePresented = false
     }
 
     @MainActor

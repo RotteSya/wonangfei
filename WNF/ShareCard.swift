@@ -59,7 +59,19 @@ struct ShareCardBackdrop: View {
     }
 }
 
+/// The share card "unfurls" out of the Dynamic Island: a black capsule at the
+/// island position stretches open, the card pours out of its lower edge while a
+/// rounded-rect reveal window grows (height first, then width), and finally the
+/// card detaches downward as the capsule snaps back to its compact shape. On a
+/// real Dynamic Island device the drawn capsule sits exactly over the hardware
+/// island, so the card genuinely appears to be born from it; on notch/older
+/// devices we skip the capsule and unfurl from the top edge instead.
+///
+/// One curve drives everything — the design system's only ease,
+/// cubic-bezier(.32,.72,0,1). All geometry is a pure function of `reveal`
+/// (0 = furled into the island, 1 = resting card), so dismissal reverses for free.
 struct ShareCardOverlay: View {
+    var isPresented: Bool
     var day: WageDay
     var copy: ShareCardCopy
     @Binding var hidesSensitiveInfo: Bool
@@ -67,30 +79,160 @@ struct ShareCardOverlay: View {
     var onShare: () -> Void
     var onDismiss: () -> Void
 
+    @State private var reveal: CGFloat = 0
+    @State private var cardSize: CGSize = .zero
+
+    private static let cardCornerRadius: CGFloat = 29
+    private static let unfurlIn = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.40)
+    private static let unfurlOut = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.30)
+
+    private var isActive: Bool { isPresented || reveal > 0.001 }
+
     var body: some View {
-        ZStack {
-            WonangfeiShareCard(
-                day: day,
-                copy: copy,
-                hidesSensitiveInfo: hidesSensitiveInfo,
-                showsControls: true,
-                isPreparingShare: isPreparingShare,
-                onTogglePrivacy: {
-                    withAnimation(.snappy(duration: 0.18)) {
-                        hidesSensitiveInfo.toggle()
+        GeometryReader { proxy in
+            let island = IslandMetrics(topInset: proxy.safeAreaInsets.top)
+            let centerX = proxy.size.width / 2
+            let cardWidth = min(proxy.size.width - 52, 340)
+
+            ZStack(alignment: .topLeading) {
+                if isActive {
+                    unfurlingCard(island: island, centerX: centerX, cardWidth: cardWidth)
+                    if island.hasIsland {
+                        islandCapsule(island: island, centerX: centerX)
                     }
-                },
-                onShare: onShare,
-                onDismiss: onDismiss
-            )
-            .frame(maxWidth: 330)
-            .padding(.horizontal, 41)
-            .shadow(color: .black.opacity(0.24), radius: 24, y: 16)
-            .offset(y: 8)
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .ignoresSafeArea(.container, edges: .all)
+        .allowsHitTesting(isPresented)
+        .onChange(of: isPresented) { _, presented in
+            if presented {
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                withAnimation(Self.unfurlIn) { reveal = 1 }
+            } else {
+                withAnimation(Self.unfurlOut) { reveal = 0 }
+            }
+        }
     }
+
+    private func unfurlingCard(island: IslandMetrics, centerX: CGFloat, cardWidth: CGFloat) -> some View {
+        let p = reveal
+        // The card detaches from the island only in the back half of the curve.
+        let detach = smoothstep(0.5, 1.0, p)
+        let cardTopY = island.compactBottomY + island.detachGap * detach
+        let cardBottomY = cardTopY + cardSize.height
+        let cardCenterY = cardTopY + cardSize.height / 2
+
+        // Reveal window grows out of the island. Top edge trails downward, bottom
+        // edge leads — so the card is unmasked top-to-bottom as it pours out.
+        let maskTopY = lerp(island.topY, cardTopY, p)
+        let maskBottomY = lerp(island.compactBottomY, cardBottomY, p)
+        // Width lags height for the "narrow column first, then widen" read.
+        let widthP = smoothstep(0.06, 0.85, p)
+        let maskWidth = lerp(island.expandedSize.width, cardWidth, widthP)
+        let cornerP = smoothstep(0.12, 1.0, p)
+        let maskCorner = lerp(island.expandedSize.height / 2, Self.cardCornerRadius, cornerP)
+        let maskHeight = max(0, maskBottomY - maskTopY)
+        let maskCenterY = (maskTopY + maskBottomY) / 2
+        let shadowP = smoothstep(0.1, 0.65, p)
+
+        return WonangfeiShareCard(
+            day: day,
+            copy: copy,
+            hidesSensitiveInfo: hidesSensitiveInfo,
+            showsControls: true,
+            isPreparingShare: isPreparingShare,
+            onTogglePrivacy: {
+                withAnimation(.snappy(duration: 0.18)) {
+                    hidesSensitiveInfo.toggle()
+                }
+            },
+            onShare: onShare,
+            onDismiss: onDismiss
+        )
+        .frame(width: cardWidth)
+        .background(
+            GeometryReader { geo in
+                Color.clear.preference(key: ShareCardSizeKey.self, value: geo.size)
+            }
+        )
+        .position(x: centerX, y: cardCenterY)
+        .mask(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: maskCorner, style: .continuous)
+                .frame(width: maskWidth, height: maskHeight)
+                .position(x: centerX, y: maskCenterY)
+        }
+        .shadow(color: .black.opacity(0.24 * shadowP), radius: 24, y: 16)
+        .onPreferenceChange(ShareCardSizeKey.self) { cardSize = $0 }
+    }
+
+    private func islandCapsule(island: IslandMetrics, centerX: CGFloat) -> some View {
+        let p = reveal
+        // Capsule stretches open quickly, holds, then snaps back to compact as the
+        // card finishes detaching — at rest it matches the hardware island exactly.
+        let rise = min(p / 0.22, 1)
+        let fall = smoothstep(0.55, 1.0, p)
+        let stretch = rise * (1 - fall)
+        let w = lerp(island.compactSize.width, island.expandedSize.width, stretch)
+        let h = lerp(island.compactSize.height, island.expandedSize.height, stretch)
+
+        return Capsule(style: .continuous)
+            .fill(.black)
+            .frame(width: w, height: h)
+            .position(x: centerX, y: island.topY + h / 2)
+            .allowsHitTesting(false)
+    }
+}
+
+/// Geometry of the Dynamic Island as the source/anchor of the unfurl. Values are
+/// measured in points from the physical top-left of the screen (the overlay
+/// ignores safe area, so the GeometryReader origin is the true top edge).
+private struct IslandMetrics {
+    var hasIsland: Bool
+    var topY: CGFloat
+    var compactSize: CGSize
+    var expandedSize: CGSize
+    var detachGap: CGFloat
+
+    init(topInset: CGFloat) {
+        // Dynamic Island devices report a ~59pt top inset; notch devices ~44–50pt.
+        let island = topInset >= 51
+        hasIsland = island
+        if island {
+            topY = 11
+            compactSize = CGSize(width: 126, height: 37.33)
+            expandedSize = CGSize(width: 208, height: 44)
+            detachGap = 18
+        } else {
+            topY = max(8, topInset * 0.4)
+            compactSize = CGSize(width: 96, height: 30)
+            expandedSize = CGSize(width: 150, height: 34)
+            detachGap = 14
+        }
+    }
+
+    var compactBottomY: CGFloat { topY + compactSize.height }
+}
+
+private struct ShareCardSizeKey: PreferenceKey {
+    static var defaultValue: CGSize = .zero
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+        let next = nextValue()
+        if next != .zero { value = next }
+    }
+}
+
+private func lerp(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat {
+    a + (b - a) * t
+}
+
+/// Hermite smoothstep — eases a sub-range of the master `reveal` progress so
+/// individual properties (width, detach, corner) can lead or trail the reveal.
+private func smoothstep(_ edge0: CGFloat, _ edge1: CGFloat, _ x: CGFloat) -> CGFloat {
+    guard edge1 > edge0 else { return x < edge0 ? 0 : 1 }
+    let t = min(max((x - edge0) / (edge1 - edge0), 0), 1)
+    return t * t * (3 - 2 * t)
 }
 
 struct WonangfeiShareCard: View {

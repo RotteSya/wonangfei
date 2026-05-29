@@ -19,7 +19,7 @@ using namespace metal;
 // matching SwiftUI mask, so this function never needs a transparency branch.
 [[ stitchable ]]
 float2 genie(float2 position, float2 size, float progress, float neckHalf, float neckCenter,
-             float neckLen, float unpinchStart, float squish, float curve) {
+             float neckLen, float unpinchStart, float squish, float curve, float bottomHalf) {
     float w = size.x;
     float h = size.y;
     float p = clamp(progress, 0.0, 1.0);
@@ -41,9 +41,9 @@ float2 genie(float2 position, float2 size, float progress, float neckHalf, float
     // >1 = stays pinched longer then flares (concave/genie), <1 = flares early.
     float t = clamp(vis / max(neckLen, 0.001), 0.0, 1.0);
     float funnelT = pow(t, max(curve, 0.05));
-    float funnelHalf = mix(neckHalf, w * 0.5, funnelT);
+    float funnelHalf = mix(neckHalf, bottomHalf, funnelT);             // top neck → bottom width
     float unpinch = smoothstep(unpinchStart, 1.0, p);  // hold the neck pinched, release at the end
-    float halfWidth = max(mix(funnelHalf, w * 0.5, unpinch), 1.0);
+    float halfWidth = max(mix(funnelHalf, w * 0.5, unpinch), 1.0);     // …then open to the full card
 
     float dx = position.x - neckCenter;
     float sourceX = neckCenter + dx * (w * 0.5) / halfWidth;

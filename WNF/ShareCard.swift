@@ -49,7 +49,7 @@ struct ShareCardCopy: Equatable {
 /// can be dialled in without rebuilding.
 struct GenieParams: Equatable {
     // Timing
-    var duration: Double = 0.62          // emergence (present) seconds
+    var duration: Double = 0.75          // emergence (present) seconds
     var dismissDuration: Double = 0.34   // furl-back (dismiss) seconds
     // Easing — the two cubic-bézier control points of the present curve.
     var ease1x: Double = 0.32
@@ -58,14 +58,15 @@ struct GenieParams: Equatable {
     var ease2y: Double = 1.0
 
     // Genie warp
-    var neckWidth: CGFloat = 164         // width of the island slot the card necks into (pt)
-    var neckLen: CGFloat = 0.70          // funnel throat length (fraction of the card, 0…1)
-    var unpinchStart: CGFloat = 0.78     // progress at which the neck starts releasing
+    var neckWidth: CGFloat = 70          // width of the island slot the card necks into — funnel TOP (pt)
+    var bottomWidth: CGFloat = 340       // funnel's wide end — the card BOTTOM during the warp (pt)
+    var neckLen: CGFloat = 1.0           // funnel throat length (fraction of the card, 0…1)
+    var unpinchStart: CGFloat = 0.80     // progress at which the neck starts releasing
     var squish: CGFloat = 1.0            // vertical squeeze into the slot (1 = full genie, 0 = none)
-    var curve: CGFloat = 1.4             // funnel side shape (1 = straight, >1 = curved/concave)
+    var curve: CGFloat = 2.5             // funnel side shape (1 = straight, >1 = curved/concave)
 
     // Landing
-    var restDrop: CGFloat = 0            // how far below the island the settled card drops (pt)
+    var restDrop: CGFloat = 85           // how far below the island the settled card drops (pt)
 
     // Island capsule
     var expandedHeight: CGFloat = 41     // how tall the capsule opens (pt)
@@ -283,9 +284,10 @@ private func smoothstep(_ edge0: CGFloat, _ edge1: CGFloat, _ x: CGFloat) -> CGF
 private struct GenieFunnelShape: Shape {
     var progress: CGFloat
     var neckHalf: CGFloat
-    var neckLen: CGFloat = 0.70
-    var unpinchStart: CGFloat = 0.78
-    var curve: CGFloat = 1.4
+    var neckLen: CGFloat = 1.0
+    var unpinchStart: CGFloat = 0.80
+    var curve: CGFloat = 2.5
+    var bottomHalf: CGFloat = 170
 
     var animatableData: CGFloat {
         get { progress }
@@ -311,7 +313,7 @@ private struct GenieFunnelShape: Shape {
         func halfWidth(atVis s: CGFloat) -> CGFloat {
             let t = min(max(s / max(neckLen, 0.001), 0), 1)
             let funnelT = CGFloat(pow(Double(t), Double(max(curve, 0.05))))
-            let funnel = lerp(neckHalf, fullHalf, funnelT)
+            let funnel = lerp(neckHalf, bottomHalf, funnelT)
             return max(lerp(funnel, fullHalf, unpinch), 1)
         }
 
@@ -365,11 +367,12 @@ private struct GenieEmergence: ViewModifier, Animatable {
                     .float(params.neckLen),
                     .float(params.unpinchStart),
                     .float(params.squish),
-                    .float(params.curve)
+                    .float(params.curve),
+                    .float(params.bottomWidth / 2)
                 ),
                 maxSampleOffset: size
             )
-            .mask(GenieFunnelShape(progress: progress, neckHalf: neckHalf, neckLen: params.neckLen, unpinchStart: params.unpinchStart, curve: params.curve))
+            .mask(GenieFunnelShape(progress: progress, neckHalf: neckHalf, neckLen: params.neckLen, unpinchStart: params.unpinchStart, curve: params.curve, bottomHalf: params.bottomWidth / 2))
             .shadow(color: .black.opacity(params.shadowOpacity * shadowP), radius: params.shadowRadius, y: params.shadowY)
             .offset(y: drop)
     }
@@ -458,7 +461,8 @@ struct GenieTunerView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     section("形变长相")
                     sliderRow("挤压", $params.squish, 0...1)
-                    sliderRow("颈宽 pt", $params.neckWidth, 60...340, "%.0f")
+                    sliderRow("颈宽 pt", $params.neckWidth, 40...340, "%.0f")
+                    sliderRow("底宽 pt", $params.bottomWidth, 60...380, "%.0f")
                     sliderRow("喉长", $params.neckLen, 0.1...1.0)
                     sliderRow("弯曲", $params.curve, 0.4...3.0)
                     sliderRow("松弛", $params.unpinchStart, 0.3...0.98)
@@ -487,8 +491,8 @@ struct GenieTunerView: View {
     }
 
     private var summary: String {
-        String(format: "squish=%.2f neckW=%.0f neckLen=%.2f curve=%.2f unpinch=%.2f restDrop=%.0f cardW=%.0f duration=%.2f",
-                     params.squish, params.neckWidth, params.neckLen, params.curve,
+        String(format: "squish=%.2f neckW=%.0f bottomW=%.0f neckLen=%.2f curve=%.2f unpinch=%.2f restDrop=%.0f cardW=%.0f duration=%.2f",
+                     params.squish, params.neckWidth, params.bottomWidth, params.neckLen, params.curve,
                      params.unpinchStart, params.restDrop, params.cardWidth, params.duration)
     }
 

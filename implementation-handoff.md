@@ -248,7 +248,7 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 - Current simulator validation uses `iPhone 17` on iOS `26.5`.
 - XcodeBuildMCP defaults are committed under `.xcodebuildmcp/config.yaml`, so agents can call `build_sim`, `build_run_sim`, `snapshot_ui`, `tap`, and `screenshot` without re-entering project defaults.
 - Build validation: `xcodebuild -project WNF.xcodeproj -scheme WNF -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' build` must succeed before commit.
-- External release blockers remain outside the repo: App Group/Associated Domains provisioning, AASA deployment, ASC product creation/localization/pricing, Paid Apps Agreement, tax/banking, China备案/软著/ICP/privacy URL/customer support, Sandbox/TestFlight payment QA, and App Review notes.
+- External release blockers remain outside the repo: App Group/Associated Domains provisioning, AASA deployment, ASC product creation/localization/pricing, China备案/软著/ICP/privacy URL/customer support, and App Review notes. v1 does not ship paid features, subscriptions, or in-app purchases.
 - 2026-05-17 onboarding hero replacement validation: five source PNGs from `/Users/shelingzhao/Documents/窝囊费素材/引导/` matched their target asset-catalog SHA-256 hashes, all target files reported `1536 x 1024` and `hasAlpha: yes`, and `build_sim` succeeded.
 - 2026-05-17 home responsive-layout fix: `WNF/HomeView.swift` no longer reads `UIScreen.main.bounds.width` for the mascot-stage coin layout; use simulator rotation or iPad split-view checks when visually validating this area.
 - Home share card verification covered opening the card, masking sensitive values, presenting the iOS share sheet, closing with the x button, and closing by tapping outside the card.

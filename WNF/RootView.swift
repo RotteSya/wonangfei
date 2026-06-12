@@ -201,14 +201,21 @@ struct RootView: View {
     }
 
     private var appShell: some View {
+        GeometryReader { proxy in
+            appShellBody(pageWidth: max(proxy.size.width, 1))
+        }
+    }
+
+    private func appShellBody(pageWidth: CGFloat) -> some View {
         ZStack(alignment: .bottom) {
             WNFTheme.bg.ignoresSafeArea()
 
             currentTabContent
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .id(selectedTab)
-            .transition(tabContentTransition)
+            .transition(tabContentTransition(pageWidth: pageWidth))
             .clipped()
+            .simultaneousGesture(tabSwipeGesture)
 
             AppTabBar(selectedTab: tabSelection)
                 .padding(.bottom, 10)
@@ -300,21 +307,49 @@ struct RootView: View {
         }
     }
 
-    private var tabContentTransition: AnyTransition {
-        let insertionEdge: Edge = tabTransitionDirection >= 0 ? .trailing : .leading
-        let removalEdge: Edge = tabTransitionDirection >= 0 ? .leading : .trailing
+    /// Jelly slide: the incoming page warps elastically mid-flight (see
+    /// `TabSlideIn` / the `jellyWarp` shader) while the outgoing page parallaxes
+    /// away underneath. The warp stays off for the home tab because the mascot's
+    /// AVPlayerLayer would drop out of a shader-rasterized snapshot.
+    private func tabContentTransition(pageWidth: CGFloat) -> AnyTransition {
+        let direction: CGFloat = tabTransitionDirection >= 0 ? 1 : -1
+        let warpEnabled = selectedTab != .home
 
         return .asymmetric(
-            insertion: .move(edge: insertionEdge).combined(with: .opacity),
-            removal: .move(edge: removalEdge).combined(with: .opacity)
+            insertion: .modifier(
+                active: TabSlideIn(progress: 0, direction: direction, width: pageWidth, warpEnabled: warpEnabled),
+                identity: TabSlideIn(progress: 1, direction: direction, width: pageWidth, warpEnabled: warpEnabled)
+            ),
+            removal: .modifier(
+                active: TabSlideOut(progress: 1, direction: direction, width: pageWidth),
+                identity: TabSlideOut(progress: 0, direction: direction, width: pageWidth)
+            )
         )
+    }
+
+    /// Horizontal flick anywhere on the page steps to the neighboring tab.
+    /// `simultaneousGesture` keeps scroll views working; the axis-dominance
+    /// check keeps diagonal scrolls from switching tabs.
+    private var tabSwipeGesture: some Gesture {
+        DragGesture(minimumDistance: 24)
+            .onEnded { value in
+                let dx = value.translation.width
+                let dy = value.translation.height
+                guard abs(dx) > 56, abs(dx) > abs(dy) * 1.4 else { return }
+
+                let tabs = AppTab.allCases
+                guard let index = tabs.firstIndex(of: selectedTab) else { return }
+                let nextIndex = dx < 0 ? index + 1 : index - 1
+                guard tabs.indices.contains(nextIndex) else { return }
+                selectTab(tabs[nextIndex])
+            }
     }
 
     private func selectTab(_ tab: AppTab) {
         guard tab != selectedTab else { return }
         tabTransitionDirection = tab.order > selectedTab.order ? 1 : -1
 
-        withAnimation(.snappy(duration: 0.32, extraBounce: 0.02)) {
+        withAnimation(.spring(response: 0.46, dampingFraction: 0.86)) {
             selectedTab = tab
         }
         homeMascotVideoSession.handleTabChange(to: tab, isHomeSessionVisible: isHomeMascotSessionVisible)
@@ -574,46 +609,85 @@ private struct WindowSceneScaleReader: UIViewRepresentable {
 struct AppTabBar: View {
     @Binding var selectedTab: AppTab
 
+    @Namespace private var pillNamespace
+    @State private var barWidth: CGFloat = 0
+
     var body: some View {
         HStack(spacing: 4) {
             ForEach(AppTab.allCases) { tab in
                 Button {
                     selectedTab = tab
                 } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: tab.symbol)
-                            .font(.system(size: 15, weight: .bold))
-                        if selectedTab == tab {
-                            Text(tab.title)
-                                .font(.system(size: 13, weight: .heavy))
-                        }
-                    }
-                    .foregroundStyle(selectedTab == tab ? Color.white : WNFTheme.inkSoft)
-                    .padding(.horizontal, selectedTab == tab ? 17 : 13)
-                    .frame(height: 44)
-                    .background {
-                        if selectedTab == tab {
-                            Capsule().fill(WNFTheme.ink)
-                        }
-                    }
-                    .overlay {
-                        if selectedTab == tab {
-                            Image(systemName: tab.symbol)
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundStyle(WNFTheme.yellow)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.leading, 17)
-                        }
-                    }
+                    tabLabel(tab)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(tab.title)
             }
         }
         .padding(6)
+        .background {
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { barWidth = proxy.size.width }
+                    .onChange(of: proxy.size.width) { _, newWidth in
+                        barWidth = newWidth
+                    }
+            }
+        }
         .background(.ultraThinMaterial, in: Capsule())
         .overlay(Capsule().stroke(.white.opacity(0.8), lineWidth: 0.5))
         .shadow(color: .black.opacity(0.16), radius: 18, y: 10)
+        .gesture(pillDragGesture)
+        .sensoryFeedback(.selection, trigger: selectedTab)
+    }
+
+    private func tabLabel(_ tab: AppTab) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: tab.symbol)
+                .font(.system(size: 15, weight: .bold))
+            if selectedTab == tab {
+                Text(tab.title)
+                    .font(.system(size: 13, weight: .heavy))
+            }
+        }
+        .foregroundStyle(selectedTab == tab ? Color.white : WNFTheme.inkSoft)
+        .padding(.horizontal, selectedTab == tab ? 17 : 13)
+        .frame(height: 44)
+        .background {
+            // Matched geometry makes the ink pill glide (and stretch) between
+            // tabs instead of cross-fading in place.
+            if selectedTab == tab {
+                Capsule()
+                    .fill(WNFTheme.ink)
+                    .matchedGeometryEffect(id: "tabPill", in: pillNamespace)
+            }
+        }
+        .overlay {
+            if selectedTab == tab {
+                Image(systemName: tab.symbol)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(WNFTheme.yellow)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, 17)
+            }
+        }
+    }
+
+    /// Slide a finger along the bar to drag the pill across tabs; each segment
+    /// boundary snaps the selection (and ticks) immediately, so the pill chases
+    /// the finger with its spring.
+    private var pillDragGesture: some Gesture {
+        DragGesture(minimumDistance: 10)
+            .onChanged { value in
+                guard barWidth > 0 else { return }
+                let tabs = AppTab.allCases
+                let slot = barWidth / CGFloat(tabs.count)
+                let index = min(max(Int(value.location.x / slot), 0), tabs.count - 1)
+                let tab = tabs[index]
+                if tab != selectedTab {
+                    selectedTab = tab
+                }
+            }
     }
 }
 

@@ -24,6 +24,8 @@
 		100000000000000000000115 /* WageFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000215 /* WageFormatting.swift */; };
 		100000000000000000000116 /* ShareCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000216 /* ShareCard.swift */; };
 		100000000000000000000A01 /* GenieEffect.metal in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000A02 /* GenieEffect.metal */; };
+		100000000000000000000A03 /* PolishShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000A04 /* PolishShaders.metal */; };
+		100000000000000000000A05 /* PolishEffects.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000A06 /* PolishEffects.swift */; };
 		100000000000000000000117 /* HomeMascotVideoSessionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000217 /* HomeMascotVideoSessionCoordinator.swift */; };
 		100000000000000000000118 /* WorkStatusPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000218 /* WorkStatusPresentation.swift */; };
 		100000000000000000000119 /* WidgetShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000219 /* WidgetShared.swift */; };
@@ -90,6 +92,8 @@
 		100000000000000000000215 /* WageFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WageFormatting.swift; sourceTree = "<group>"; };
 		100000000000000000000216 /* ShareCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareCard.swift; sourceTree = "<group>"; };
 		100000000000000000000A02 /* GenieEffect.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = GenieEffect.metal; sourceTree = "<group>"; };
+		100000000000000000000A04 /* PolishShaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = PolishShaders.metal; sourceTree = "<group>"; };
+		100000000000000000000A06 /* PolishEffects.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolishEffects.swift; sourceTree = "<group>"; };
 		100000000000000000000217 /* HomeMascotVideoSessionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeMascotVideoSessionCoordinator.swift; sourceTree = "<group>"; };
 		100000000000000000000218 /* WorkStatusPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkStatusPresentation.swift; sourceTree = "<group>"; };
 		100000000000000000000219 /* WidgetShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetShared.swift; sourceTree = "<group>"; };
@@ -166,6 +170,8 @@
 				100000000000000000000217 /* HomeMascotVideoSessionCoordinator.swift */,
 				100000000000000000000216 /* ShareCard.swift */,
 				100000000000000000000A02 /* GenieEffect.metal */,
+				100000000000000000000A04 /* PolishShaders.metal */,
+				100000000000000000000A06 /* PolishEffects.swift */,
 				100000000000000000000238 /* BubbleQuoteEngine.swift */,
 				100000000000000000000236 /* DailySettlement.swift */,
 				100000000000000000000237 /* ClockOutReminder.swift */,
@@ -360,6 +366,8 @@
 				100000000000000000000117 /* HomeMascotVideoSessionCoordinator.swift in Sources */,
 				100000000000000000000116 /* ShareCard.swift in Sources */,
 				100000000000000000000A01 /* GenieEffect.metal in Sources */,
+				100000000000000000000A03 /* PolishShaders.metal in Sources */,
+				100000000000000000000A05 /* PolishEffects.swift in Sources */,
 				100000000000000000000129 /* BubbleQuoteEngine.swift in Sources */,
 				100000000000000000000127 /* DailySettlement.swift in Sources */,
 				100000000000000000000128 /* ClockOutReminder.swift in Sources */,

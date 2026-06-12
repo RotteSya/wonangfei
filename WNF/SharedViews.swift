@@ -73,12 +73,30 @@ struct YenBadge: View {
 struct StatusChip: View {
     var label: String
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         HStack(spacing: 7) {
             Circle()
                 .fill(WNFTheme.coral)
                 .frame(width: 7, height: 7)
-                .shadow(color: WNFTheme.coralSoft, radius: 0, x: 0, y: 0)
+                .background {
+                    // Live-status heartbeat: a halo that swells out of the dot.
+                    // PhaseAnimator loops on its own; static under Reduce Motion
+                    // (and in ImageRenderer snapshots, which capture phase one).
+                    if !reduceMotion {
+                        Circle()
+                            .fill(WNFTheme.coral)
+                            .frame(width: 7, height: 7)
+                            .phaseAnimator([false, true]) { halo, expanded in
+                                halo
+                                    .scaleEffect(expanded ? 2.6 : 1)
+                                    .opacity(expanded ? 0 : 0.55)
+                            } animation: { _ in
+                                .easeOut(duration: 1.6)
+                            }
+                    }
+                }
             Text(label)
                 .font(.system(size: 12, weight: .heavy))
         }
@@ -112,6 +130,7 @@ struct MetricTile: View {
                 .foregroundStyle(WNFTheme.ink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
+                .contentTransition(.numericText())
 
             if let subtitle {
                 Text(subtitle)

@@ -22,6 +22,9 @@ struct HomeView: View {
         ZStack {
             WNFTheme.bg.ignoresSafeArea()
 
+            AuroraBackdrop()
+                .ignoresSafeArea()
+
             HeroHomePage(
                 initialStatus: state.liveDay.status,
                 onShare: onShare,
@@ -400,7 +403,42 @@ private struct BigMoneyText: View {
     var value: Double
     var privacy: Bool
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var burstTrigger = 0
+    @State private var pulseScale: CGFloat = 1
+    @GestureState private var isPressed = false
+
+    private var integerYuan: Int {
+        max(0, Int(value.rounded(.down)))
+    }
+
     var body: some View {
+        moneyRow
+            .modifier(LoopingSheen(enabled: !reduceMotion))
+            .scaleEffect(pulseScale, anchor: .leading)
+            .scaleEffect(x: isPressed ? 0.965 : 1, y: isPressed ? 0.93 : 1, anchor: .bottomLeading)
+            .animation(.spring(response: 0.3, dampingFraction: 0.45), value: isPressed)
+            .overlay(alignment: .top) {
+                CoinPopBurst(trigger: burstTrigger)
+                    .offset(y: -6)
+            }
+            .gesture(pressGesture)
+            .sensoryFeedback(.impact(weight: .medium, intensity: 0.9), trigger: burstTrigger)
+            .onChange(of: integerYuan) { oldValue, newValue in
+                // A whole yuan landing gets a tiny "money in the pocket" pulse;
+                // the rolling cents already carry the per-second motion.
+                guard newValue > oldValue, !reduceMotion else { return }
+                withAnimation(.spring(response: 0.22, dampingFraction: 0.5)) {
+                    pulseScale = 1.015
+                } completion: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        pulseScale = 1
+                    }
+                }
+            }
+    }
+
+    private var moneyRow: some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
             Text("¥")
                 .foregroundStyle(WNFTheme.yellow)
@@ -426,6 +464,20 @@ private struct BigMoneyText: View {
         .contentTransition(.numericText(value: value))
         .animation(.linear(duration: 0.2), value: value)
     }
+
+    /// Press-and-release easter egg: the number squashes under the finger and
+    /// pops a coin burst on release. A drag that wanders off (> 14pt) is
+    /// treated as not-a-tap so page swipes don't detonate coins.
+    private var pressGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .updating($isPressed) { _, state, _ in
+                state = true
+            }
+            .onEnded { value in
+                guard abs(value.translation.width) < 14, abs(value.translation.height) < 14 else { return }
+                burstTrigger += 1
+            }
+    }
 }
 
 private struct ProgressTrack: View {
@@ -433,25 +485,42 @@ private struct ProgressTrack: View {
     var startText: String
     var endText: String
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var milestoneTrigger = 0
+
+    /// Tenths of the workday survived; each increment earns a ring + soft tap.
+    private var decile: Int {
+        min(10, max(0, Int(day.progress * 10)))
+    }
+
     var body: some View {
         VStack(spacing: 8) {
             GeometryReader { proxy in
+                let fillWidth = max(0, proxy.size.width * day.progress)
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color(red: 0.95, green: 0.90, blue: 0.75))
-                    Capsule()
-                        .fill(LinearGradient(colors: [WNFTheme.gold, WNFTheme.yellow], startPoint: .leading, endPoint: .trailing))
-                        .frame(width: proxy.size.width * day.progress)
+                    LiquidGoldCapsule(animated: !reduceMotion)
+                        .frame(width: fillWidth)
                     if day.progress > 0 && day.progress < 1 {
-                        Circle()
-                            .fill(Color.white)
-                            .overlay(Circle().stroke(WNFTheme.ink, lineWidth: 3))
-                            .frame(width: 15, height: 15)
-                            .offset(x: max(0, proxy.size.width * day.progress - 7))
+                        knob
+                            .offset(x: max(0, fillWidth - 7))
                     }
+                }
+                // Overlay so the 36pt ring never participates in the 13pt
+                // track's layout; it just radiates out of the knob.
+                .overlay(alignment: .leading) {
+                    PulseRing(trigger: milestoneTrigger)
+                        .frame(width: 36, height: 36)
+                        .offset(x: max(0, fillWidth - 18))
+                }
+                .onChange(of: decile) { oldValue, newValue in
+                    guard newValue > oldValue, day.progress > 0 else { return }
+                    milestoneTrigger += 1
                 }
             }
             .frame(height: 13)
             .anchorPreference(key: CoinSourceAnchorKey.self, value: .bounds) { $0 }
+            .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.7), trigger: milestoneTrigger)
 
             HStack {
                 Text(startText)
@@ -462,6 +531,24 @@ private struct ProgressTrack: View {
             }
             .font(.system(size: 11, weight: .bold, design: .monospaced))
             .foregroundStyle(WNFTheme.muted)
+        }
+    }
+
+    @ViewBuilder
+    private var knob: some View {
+        let core = Circle()
+            .fill(Color.white)
+            .overlay(Circle().stroke(WNFTheme.ink, lineWidth: 3))
+            .frame(width: 15, height: 15)
+
+        if reduceMotion {
+            core.shadow(color: WNFTheme.gold.opacity(0.5), radius: 7)
+        } else {
+            core.phaseAnimator([0.3, 0.8]) { view, glow in
+                view.shadow(color: WNFTheme.gold.opacity(glow), radius: 7)
+            } animation: { _ in
+                .easeInOut(duration: 1.5)
+            }
         }
     }
 }

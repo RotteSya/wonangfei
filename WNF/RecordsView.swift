@@ -22,6 +22,11 @@ enum RecordPeriod: String, CaseIterable, Identifiable {
         case .year: "本 年 窝 囊 费"
         }
     }
+
+    /// Position in the segmented control; drives direction-aware transitions.
+    var order: Int {
+        RecordPeriod.allCases.firstIndex(of: self) ?? 0
+    }
 }
 
 struct RecordBar: Identifiable {
@@ -362,6 +367,24 @@ struct RecordsView: View {
     @StateObject private var aggregationStore = RecordAggregationStore()
     @State private var period: RecordPeriod = .month
     @State private var selectedBarID: RecordBar.ID?
+    @State private var periodDirection = 1
+
+    /// Routes segment changes through one place so the slide direction is fixed
+    /// before the animated state change renders, and every period-driven
+    /// transition (chart slide, numeric rolls, hero sheen) shares one spring.
+    private var periodSelection: Binding<RecordPeriod> {
+        Binding(
+            get: { period },
+            set: { newValue in
+                guard newValue != period else { return }
+                periodDirection = newValue.order > period.order ? 1 : -1
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
+                    period = newValue
+                    selectedBarID = nil
+                }
+            }
+        )
+    }
 
     private var day: WageDay { state.calculation }
     private var aggregation: RecordAggregationSnapshot {
@@ -445,32 +468,39 @@ struct RecordsView: View {
             }
             .padding(.bottom, 105)
         }
-        .background(WNFTheme.bg)
-        .onChange(of: period) { _, _ in
-            selectedBarID = nil
+        .background {
+            ZStack {
+                WNFTheme.bg
+                AuroraBackdrop(intensity: 0.65)
+            }
+            .ignoresSafeArea()
         }
     }
 
     private var heroCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Picker("周期", selection: $period) {
-                ForEach(RecordPeriod.allCases) { item in
-                    Text(item.label).tag(item)
-                }
-            }
-            .pickerStyle(.segmented)
-            .tint(WNFTheme.yellow)
+            ElasticSegmentedControl(
+                items: RecordPeriod.allCases,
+                selection: periodSelection,
+                label: { $0.label },
+                containerFill: Color.white.opacity(0.4),
+                pillFill: WNFTheme.ink,
+                selectedLabelColor: WNFTheme.yellow,
+                idleLabelColor: WNFTheme.ink.opacity(0.55)
+            )
 
             Text(period.heroLabel)
                 .font(.system(size: 11, weight: .heavy))
                 .tracking(2)
                 .foregroundStyle(WNFTheme.ink.opacity(0.65))
+                .contentTransition(.opacity)
 
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(WNFFormat.money(total, privacy: state.privacyMode))
                     .font(.system(size: 56, weight: .black, design: .rounded))
                     .lineLimit(1)
                     .minimumScaleFactor(0.65)
+                    .contentTransition(.numericText(value: total))
                 Spacer(minLength: 0)
             }
 
@@ -481,6 +511,7 @@ struct RecordsView: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                     .background(WNFTheme.ink, in: Capsule())
+                    .contentTransition(.numericText())
                 Text("今日金额计入本期")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(WNFTheme.ink.opacity(0.6))
@@ -496,6 +527,7 @@ struct RecordsView: View {
                 .offset(x: 26, y: -42)
         }
         .clipShape(RoundedRectangle(cornerRadius: 28))
+        .sheenSweep(on: period, duration: 0.9, bandWidth: 0.22, strength: 0.35)
         .shadow(color: WNFTheme.yellow.opacity(0.24), radius: 20, y: 10)
     }
 
@@ -530,13 +562,27 @@ struct RecordsView: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(period == .week ? "本周每日窝囊费" : period == .month ? "本月每周窝囊费" : "本年每月窝囊费")
                     .font(.system(size: 19, weight: .black, design: .rounded))
+                    .contentTransition(.opacity)
                 Spacer()
                 Text(chartRangeLabel)
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(WNFTheme.muted)
+                    .contentTransition(.opacity)
             }
 
-            BarChart(bars: bars, selectedBarID: $selectedBarID, privacy: state.privacyMode)
+            // `.id(period)` swaps the chart wholesale so bars re-run their
+            // staggered entrance; the slide direction follows the segment order.
+            ZStack {
+                BarChart(bars: bars, selectedBarID: $selectedBarID, privacy: state.privacyMode)
+                    .id(period)
+                    .transition(
+                        .asymmetric(
+                            insertion: .move(edge: periodDirection >= 0 ? .trailing : .leading).combined(with: .opacity),
+                            removal: .move(edge: periodDirection >= 0 ? .leading : .trailing).combined(with: .opacity)
+                        )
+                    )
+            }
+            .clipped()
         }
         .padding(16)
         .background(Color.white, in: RoundedRectangle(cornerRadius: 22))
@@ -571,72 +617,185 @@ struct RecordsView: View {
     }
 }
 
+/// Scrubbable bar chart: drag a finger across to sweep the selection (with a
+/// selection tick per bar), tap a bar to pin it, tap the pinned bar to clear.
+/// Bars grow in with a per-bar staggered spring whenever the chart instance is
+/// swapped (the parent re-keys it with `.id(period)`), and the floating
+/// tooltip glides between bars instead of popping per column.
 private struct BarChart: View {
     var bars: [RecordBar]
     @Binding var selectedBarID: RecordBar.ID?
     var privacy: Bool
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var appeared = false
+    @State private var isScrubbing = false
+    @State private var scrubMoved = false
+    @State private var scrubStartSelection: RecordBar.ID?
+
     private var maxAmount: Double {
         max(bars.map(\.amount).max() ?? 1, 1)
     }
 
+    private var compact: Bool {
+        bars.count > 8
+    }
+
+    private var selectedIndex: Int? {
+        guard let selectedBarID else { return nil }
+        return bars.firstIndex { $0.id == selectedBarID }
+    }
+
     var body: some View {
-        HStack(alignment: .bottom, spacing: bars.count > 8 ? 4 : 10) {
-            ForEach(bars) { bar in
-                let selected = selectedBarID == bar.id
-                Group {
-                    if bar.isFuture {
-                        barColumn(bar: bar, selected: selected)
-                    } else {
-                        Button {
-                            withAnimation(.snappy(duration: 0.2)) {
-                                selectedBarID = selected ? nil : bar.id
-                            }
-                        } label: {
-                            barColumn(bar: bar, selected: selected)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("\(bar.title) \(WNFFormat.money(bar.amount, privacy: privacy))")
-                        .accessibilityValue(selected ? "已选中" : "未选中")
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let count = max(bars.count, 1)
+            let slot = width / CGFloat(count)
+
+            VStack(spacing: 6) {
+                HStack(alignment: .bottom, spacing: 0) {
+                    ForEach(Array(bars.enumerated()), id: \.element.id) { index, bar in
+                        column(bar: bar, index: index)
+                            .frame(width: slot, height: 130, alignment: .bottom)
                     }
                 }
-                .frame(maxWidth: .infinity)
+                .frame(width: width, height: 130, alignment: .bottom)
+                .contentShape(Rectangle())
+                .gesture(scrubGesture(slot: slot))
+                .overlay(alignment: .topLeading) {
+                    tooltipOverlay(slot: slot, width: width)
+                }
+
+                HStack(spacing: 0) {
+                    ForEach(bars) { bar in
+                        let highlighted = bar.isToday || bar.id == selectedBarID
+                        Text(bar.key)
+                            .font(.system(size: compact ? 9 : 11, weight: highlighted ? .heavy : .bold))
+                            .foregroundStyle(highlighted ? WNFTheme.ink : WNFTheme.muted)
+                            .frame(width: slot)
+                    }
+                }
             }
+        }
+        .frame(height: 152)
+        .sensoryFeedback(.selection, trigger: selectedBarID)
+        .onAppear {
+            appeared = true
         }
     }
 
-    private func barColumn(bar: RecordBar, selected: Bool) -> some View {
-        VStack(spacing: 6) {
-            ZStack(alignment: .bottom) {
-                if selected {
-                    Text("\(bar.title) \(WNFFormat.money(bar.amount, privacy: privacy))")
-                        .font(.system(size: 10, weight: .heavy))
-                        .foregroundStyle(Color.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .background(WNFTheme.ink, in: Capsule())
-                        .offset(y: -104)
-                        .fixedSize()
+    private func column(bar: RecordBar, index: Int) -> some View {
+        let selected = bar.id == selectedBarID
+        return RoundedRectangle(cornerRadius: compact ? 4 : 8)
+            .fill(barColor(bar: bar, selected: selected))
+            .frame(width: compact ? 16 : 24, height: barHeight(for: bar))
+            .scaleEffect(y: appeared ? 1 : 0.05, anchor: .bottom)
+            .animation(
+                reduceMotion
+                    ? .easeOut(duration: 0.2)
+                    : .spring(response: 0.55, dampingFraction: 0.7).delay(Double(index) * 0.04),
+                value: appeared
+            )
+            .offset(y: selected ? -3 : 0)
+            .shadow(color: selected ? .black.opacity(0.22) : .clear, radius: 9, y: 5)
+            .modifier(TodayBarGlow(isActive: bar.isToday && !selected && !reduceMotion))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(bar.title) \(WNFFormat.money(bar.amount, privacy: privacy))")
+            .accessibilityValue(selected ? "已选中" : "未选中")
+            .accessibilityAddTraits(bar.isFuture ? [] : .isButton)
+            .accessibilityAction {
+                guard !bar.isFuture else { return }
+                withAnimation(.snappy(duration: 0.2)) {
+                    selectedBarID = selected ? nil : bar.id
                 }
-
-                RoundedRectangle(cornerRadius: bars.count > 8 ? 4 : 8)
-                    .fill(barColor(bar: bar, selected: selected))
-                    .frame(width: bars.count > 8 ? 16 : 24, height: bar.isFuture ? 6 : max(8, 100 * bar.amount / maxAmount))
-                    .offset(y: selected ? -2 : 0)
-                    .shadow(color: selected ? .black.opacity(0.24) : .clear, radius: 9, y: 5)
             }
-            .frame(height: 130, alignment: .bottom)
+    }
 
-            Text(bar.key)
-                .font(.system(size: bars.count > 8 ? 9 : 11, weight: bar.isToday || selected ? .heavy : .bold))
-                .foregroundStyle(bar.isToday || selected ? WNFTheme.ink : WNFTheme.muted)
+    private func barHeight(for bar: RecordBar) -> CGFloat {
+        bar.isFuture ? 6 : max(8, 100 * bar.amount / maxAmount)
+    }
+
+    @ViewBuilder
+    private func tooltipOverlay(slot: CGFloat, width: CGFloat) -> some View {
+        if let index = selectedIndex {
+            let bar = bars[index]
+            let x = min(max(slot * (CGFloat(index) + 0.5), 52), max(width - 52, 52))
+            let y = max(130 - barHeight(for: bar) - 20, 14)
+            Text("\(bar.title) \(WNFFormat.money(bar.amount, privacy: privacy))")
+                .font(.system(size: 10, weight: .heavy))
+                .foregroundStyle(Color.white)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(WNFTheme.ink, in: Capsule())
+                .fixedSize()
+                .position(x: x, y: y)
+                .animation(.spring(response: 0.32, dampingFraction: 0.74), value: index)
+                .transition(.scale(scale: 0.7).combined(with: .opacity))
+                .allowsHitTesting(false)
         }
+    }
+
+    private func scrubGesture(slot: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                if !isScrubbing {
+                    isScrubbing = true
+                    scrubStartSelection = selectedBarID
+                    scrubMoved = false
+                }
+                if abs(value.translation.width) > 6 || abs(value.translation.height) > 6 {
+                    scrubMoved = true
+                }
+                // A clearly vertical drag is page-scroll intent, not a scrub —
+                // leave the selection alone so scrolling over the chart is safe.
+                if abs(value.translation.height) > 12,
+                   abs(value.translation.height) > abs(value.translation.width) * 1.6 {
+                    return
+                }
+                let index = min(max(Int(value.location.x / slot), 0), bars.count - 1)
+                let bar = bars[index]
+                guard !bar.isFuture else { return }
+                if selectedBarID != bar.id {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        selectedBarID = bar.id
+                    }
+                }
+            }
+            .onEnded { _ in
+                // A stationary tap on the already-pinned bar unpins it; any
+                // actual scrub keeps the last bar it touched.
+                if !scrubMoved, let started = scrubStartSelection, started == selectedBarID {
+                    withAnimation(.snappy(duration: 0.2)) {
+                        selectedBarID = nil
+                    }
+                }
+                isScrubbing = false
+            }
     }
 
     private func barColor(bar: RecordBar, selected: Bool) -> Color {
         if selected { return WNFTheme.ink }
         if bar.isFuture { return Color(red: 0.95, green: 0.92, blue: 0.82) }
         return WNFTheme.yellow
+    }
+}
+
+/// Gentle breathing gold halo on the "today" bar so the live column reads as
+/// alive without stealing focus from a pinned selection.
+private struct TodayBarGlow: ViewModifier {
+    var isActive: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isActive {
+            content.phaseAnimator([0.25, 0.7]) { view, glow in
+                view.shadow(color: WNFTheme.gold.opacity(glow), radius: 7, y: 2)
+            } animation: { _ in
+                .easeInOut(duration: 1.5)
+            }
+        } else {
+            content
+        }
     }
 }
 

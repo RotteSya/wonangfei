@@ -37,8 +37,8 @@
 - Active state: black pill background, yellow icon, white label.
 - Inactive state: transparent item, ink-soft label/icon.
 - Position: absolute bottom `18px`.
-- Interaction: tap target is the full button, active item expands horizontally.
-- Native transition: tab content slides horizontally by tab order and crossfades; bottom selected state animates with the same snappy timing.
+- Interaction: tap target is the full button, active item expands horizontally. The ink pill also tracks a horizontal drag along the bar (snap per segment, `.selection` haptic per change).
+- Native transition: the active pill glides between tabs with `matchedGeometryEffect`; tab content slides by tab order with a jelly shader warp on the incoming page (`TabSlideIn` + `jellyWarp`, disabled for home because of its AVPlayerLayer) and parallax-out on the outgoing page (`TabSlideOut`). All driven by one `spring(response: 0.46, dampingFraction: 0.86)`.
 
 ## Brand
 
@@ -81,6 +81,7 @@
   - record page: `#FFC83D`
   - settings profile banner: `#0D0D0D`
 - Decoration: oversized low-opacity `¥` watermark only.
+- Record page motion: a gold `sheenSweep` runs across the card once per period change, and the hero total rolls with `.numericText`.
 - Rule: one hero card should own the screen's primary message.
 
 ### Tile
@@ -253,21 +254,24 @@ The Settings (`我的`) scroll, top to bottom:
 ### SegTabs
 
 - Current use: 周 / 月 / 年 on record page.
-- Container: ink pill, `padding: 3px`, radius `999px`.
-- Active item: yellow fill, ink text.
-- Inactive item: transparent, white at 65%.
-- Interaction: active tab changes chart dataset and resets selected bar.
+- Native implementation: `ElasticSegmentedControl` (`WNF/PolishEffects.swift`), replacing system `Picker(.segmented)`.
+- Container: translucent white capsule on the yellow hero card; ink pill slides between segments via `matchedGeometryEffect` with a 3pt inset.
+- Active item: yellow label on ink pill. Inactive: ink at 55%.
+- Interaction: tap or drag across segments; the pill chases the finger, squashes while pressed (x 1.05 / y 0.86), and emits a `.selection` haptic per change. Selection animation is owned by the caller's binding setter so chart/number transitions share its transaction.
+- Behavior contract: active tab changes chart dataset and resets selected bar (handled in `RecordsView.periodSelection`).
 
 ### BarChart
 
 - Current use: record page weekly/monthly/yearly data derived from a memoized `RecordsView` aggregation snapshot. The snapshot reads retained daily SQLite rows plus folded monthly summaries when rebuilt, but cache equality is keyed by `WageState.currentDateKey`, `WageState.recordsRevision`, live-day wage settings, `includeOvertime`, and `selectedWeekdays` rather than comparing the full storage dictionaries.
 - Data contract: `RecordBar.amount` is an already-aggregated currency value; do not use visual-only multipliers for production records.
-- Bars: yellow for completed/current periods until selected, ink only for selected, pale cream for future.
-- Interaction:
-  - tap available bar to select;
-  - selected bar jumps by `-2px`;
-  - callout appears above selected bar;
-  - tap the selected bar again to clear state.
+- Bars: yellow for completed/current periods until selected, ink only for selected, pale cream for future. The "today" bar breathes a gold glow while unselected.
+- Interaction (scrub model):
+  - drag horizontally across the chart to sweep the selection continuously, one `.selection` haptic per bar;
+  - tap an available bar to pin it; tap the pinned bar again to clear;
+  - selected bar lifts by `-3px` with a shadow; the ink callout glides between bar tops on a spring instead of re-appearing per column;
+  - clearly vertical drags are treated as page-scroll intent and do not change the selection;
+  - future bars are not selectable; VoiceOver toggles selection through per-bar accessibility actions.
+- Entrance: bars grow from the baseline with a 0.04s-per-bar staggered spring whenever the period changes (chart is re-keyed by `.id(period)`).
 - Week view groups Monday through Sunday, month view groups current-month 7-day buckets, and year view groups calendar months. Year bars include folded monthly summaries and replace today's persisted row with the current live-day calculation.
 - Year view: compact bar gaps and smaller labels.
 

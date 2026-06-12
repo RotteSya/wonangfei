@@ -70,7 +70,8 @@ XcodeBuildMCP 已在 `.xcodebuildmcp/config.yaml` 持久化默认值：project `
 - 下班结算：产品语义是“数据自动保存，仪式手动触发”。下班前首页不显示结算 CTA；下班后未结算时，progress track 下方显示「下班！领今天的窝囊费」，但不自动弹窗、不红点追赶、不连续催。点击进入全屏 settlement overlay，三阶段动画 — 中心金币雨爆开（heavy 触感）→ 结算卡 spring-in、金额从 0 滚到今日金额 → 「存入资产 / 分享卡片」action 行 ease-in；可随时跳过。卡片含金额、忍耐指数（1-4 星）、已忍时长、连续打工天数（封顶 60）、动态文案、今日最佳忍耐时刻、累积窝囊费总额。「今日最佳忍耐时刻」quote 卡支持长按 0.4s 撕碎换文案（rigid 触感 + id-driven transition）。每日记录会照常自动持久化；只有「存入资产」会额外执行 `markTodaySettled()` 并触发个人时间状态。App 启动或回到前台不会自动结算；用户不点也不会丢当天数据。「分享卡片」复用已有 `ImageRenderer` 管线，输出 `DailySettlementShareCard` 系统分享图。结算文件集中在 `WNF/DailySettlement.swift`。
 - 个人时间模式：用户完成「存入资产」后当天首页切换为个人时间态 — StatusChip 文案改为「今日已下班 · 个人时间」，CTA 改为「今日已下班 · 再看一眼 / 今日窝囊费已入账，剩下都是你的时间」（带 ✓ 图标）；其它数字（金额 / 进度 / 时长）保持实时同步。状态来自 `WageState.isTodaySettled`，跨日自动重置。持久化键 `wnf.settlement.lastCompletedDateKey`。
 - 下班结算提醒（可选 / 默认关闭）：「我的」页 `提醒` section 提供开关；开启后 `ClockOutReminderService` 会按选中工作日 + 下班时间调度 `UNCalendarNotificationTrigger` 本地通知；权限被系统拒绝时 Settings 内会展示打开系统通知设置的引导。提醒文件集中在 `WNF/ClockOutReminder.swift`。
-- 底部 tab 切换：页面内容按 tab 顺序横向滑入/滑出，并与胶囊选中态同步过渡。
+- 底部 tab 切换：页面内容按 tab 顺序横向滑动，新页面带 `jellyWarp` Metal 着色器果冻形变（home 因 AVPlayerLayer 例外），旧页面视差退场；胶囊选中态用 matchedGeometryEffect 滑动，支持在 tab bar 上拖动换 tab，页面上横滑也可切换相邻 tab。
+- 质感层（`WNF/PolishEffects.swift` + `WNF/PolishShaders.metal`）：首页/记录页 aurora 呼吸背景；大金额金色扫光、整数元落袋脉冲、按压金币迸发彩蛋；进度条液态黄金流动 + 旋钮呼吸光晕 + 每 10% 里程碑光环涟漪与软触感；记录页弹性分段控件（可拖拽、捏扁手感）、柱状图刮擦选择（逐柱触感、tooltip 弹簧滑移）、换周期柱子错峰生长 + hero 卡扫光。全部动效尊重 Reduce Motion。
 - 首次启动引导：4 屏 SwiftUI onboarding、第一页参考大图优先的 intro 布局、跳过/返回/分页控制、月薪/作息/午休设置和最终确认。
 - 记录页周 / 月 / 年切换、柱状图选中态、成就和徽章模块；金额来自 `WageState` 暴露的 SQLite 每日明细 + 月汇总，今日金额按记录页聚合快照计入，跨日或 App 离开活跃前台时按日期 upsert 本机 SQLite，并暂停跨日计时器；回到活跃前台会刷新日期并重建计时器，多天未打开时会补齐中间日期。
 - 我的页月薪和每月工作日支持 `- / +` 微调，也支持点中间数字弹出快速输入框；时间、午休和加班状态可编辑，上下班时间会保持“下班晚于上班”的有效组合。

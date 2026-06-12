@@ -141,8 +141,10 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 ### 全局 Tab
 
 - 底部 `首页 / 记录 / 我的` tab 使用自定义 SwiftUI `AppTabBar`。
-- 切换 tab 时，主内容按 tab 顺序做横向滑入/滑出并叠加淡入淡出：向右侧 tab 前进时新页面从右进入，返回左侧 tab 时新页面从左进入。
-- 底部胶囊选中态和页面内容过渡共用同一次 `snappy` 动画。
+- 切换 tab 时，主内容按 tab 顺序横向滑动：新页面滑入时经过 `jellyWarp` Metal 着色器（`TabSlideIn`，sin(p·π) 包络的弹性形变，落位时归零），旧页面以 iOS 导航式视差退场（`TabSlideOut`：移动 34% 宽度 + 轻微缩小 + 变暗）。果冻形变只作用于 records / settings — home 含 `AVPlayerLayer`（UIKit-backed），SwiftUI shader 栅格化会丢掉它，所以 home 插入时 `warpEnabled == false`，只走滑动+视差。
+- 底部胶囊选中态用 `matchedGeometryEffect` 在 tab 间滑动（不再原地淡入淡出），与页面内容过渡共用同一个 `spring(response: 0.46, dampingFraction: 0.86)`。
+- `AppTabBar` 支持按住后横向拖动：手指划过每个分段边界立即吸附选中（pill 弹簧追手指），每次切换发 `.selection` 触感。
+- 页面内容上有 `simultaneousGesture` 横滑手势：横向位移 > 56pt 且横向占优（|dx| > 1.4·|dy|）时切到相邻 tab；纵向滚动和对角线滚动不会误触。分享卡 / 结算 overlay 呈现期间被更高 zIndex 的 backdrop 挡住，不会响应。
 
 ### 引导页
 
@@ -156,6 +158,16 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 
 - Top-right action opens the share card; it no longer toggles privacy on the home page.
 - The home live amount is driven by a view-local one-second `TimelineView`, not by a global `WageState` publication.
+- 背景在 `WNFTheme.bg` 之上叠一层 `AuroraBackdrop`（`aurora` colorEffect 着色器）：金 / 奶油 / 薄荷三个慢速漂移光斑，约一分钟级别的呼吸节奏，30fps `TimelineView` 驱动，Reduce Motion 时静止。记录页用同款 backdrop（intensity 0.65）保持质感一致。
+- 大金额数字（`BigMoneyText`）的体验层：
+  - `LoopingSheen`：每 5.2s 一次 1.15s 的对角金色扫光（`sheen` layerEffect），扫光间隙 `isEnabled == false` 不耗 GPU；Reduce Motion 关闭。
+  - 整数元跳变时金额做 1.015x 的「落袋」脉冲（spring 进、spring 回，锚点 leading）；分位数滚动仍由 `.numericText` 承担每秒动势。
+  - 按压彩蛋：手指按住数字整体向左下角弹性压扁（x 0.965 / y 0.93），原地松手触发一次 `CoinPopBurst`（10 颗 ¥ 金币+sparkle 上半圆扇形迸发）+ medium 触感；位移超过 14pt 视为滑动不触发，避免与横滑切页冲突。
+- 进度条（`ProgressTrack`）：
+  - 填充改为 `LiquidGoldCapsule`（`liquidGold` colorEffect：深金→亮金渐变 + 两条右行高光波 + 顶部光泽），Reduce Motion 退回静态渐变。
+  - 旋钮带金色呼吸光晕（`phaseAnimator`，1.5s easeInOut 循环）。
+  - 每跨过一个 10% 里程碑：旋钮处 `PulseRing` 光环涟漪（overlay，不参与 13pt 轨道布局）+ `.impact(flexibility: .soft)` 触感；只在 decile 递增时触发，启动时不会误响。
+- `StatusChip` 的珊瑚色状态点带向外扩散的心跳光环（1.6s easeOut 循环，Reduce Motion 静止；`ImageRenderer` 导出时定格第一帧）。
 - The home mascot slot now renders transparent `WNF/home-typing.mov` and `WNF/home-bored.mov` clips through an `AVPlayerLayer` SwiftUI wrapper. `RootView` owns one stable `HomeMascotVideoSessionCoordinator` and injects the coordinator's `HomeMascotVideoController` into Home, so tab transitions can recreate `HomeView` without rebuilding the `AVQueuePlayer` pipeline. The coordinator owns scene-phase and tab-change playback decisions; `HomeMascotVideoSequence` is only the rendering bridge. The controller keeps upcoming local clips prequeued, shuffles the clip order for each full cycle, avoids repeating the last clip at the cycle boundary, and mutes playback. Short inactive transitions and tab switches call `pauseTemporarily()` so the queue and playback request stay intact; `.active` resumes an already requested, non-empty queue with `player.play()` only. The coordinator releases the queue with `removeAllItems()` only when the app enters background, and `HomeMascotVideoController` also clears the queue on `UIApplication.didReceiveMemoryWarningNotification`.
 - The mascot speech bubble and decorative yen coins are owned by the local `HomeMascotStage`. Coin offsets are calculated from that stage's actual layout width through `GeometryReader`, not from `UIScreen.main.bounds`, so iPad split view, Stage Manager, and rotation can reflow the home decoration.
 - Opening the share card blurs the existing home content and adds a full-bleed dimmed overlay that covers the status bar and bottom home-indicator areas.
@@ -208,11 +220,14 @@ Important: the settings UI label says `午休`. Switch on means "has lunch break
 ### 记录页
 
 - 周 / 月 / 年 tabs must switch datasets.
+- 周期切换控件是自研 `ElasticSegmentedControl`（替代系统 `Picker(.segmented)`）：墨色 pill 用 `matchedGeometryEffect` 在分段间滑动，按住时 pill 横向拉伸 / 纵向压扁，手指可在控件上连续拖动换挡，每次换挡发 `.selection` 触感。
+- 周期切换统一走 `RecordsView.periodSelection` binding setter：先定方向（`periodDirection`，按 `RecordPeriod.order`）再在同一个 `spring(response: 0.5, dampingFraction: 0.85)` 事务里改 `period` 并清空选中柱，保证图表滑动方向、数字滚动、hero 扫光同帧出发。
+- 切换周期时：hero 卡跑一次 `sheenSweep` 金色扫光（`sheen` layerEffect，0.9s）；hero 总额 / 已记录天数 / 指标 tile 数值用 `.numericText` 滚动；图表以 `.id(period)` 整体换装，按方向横向滑入滑出（卡片内 `.clipped()`），新柱子按 index 错峰 0.04s 依次从底部弹簧生长（Reduce Motion 退化为整体 easeOut）。
 - Datasets must be derived from SQLite daily rows plus folded monthly summaries; do not reintroduce hard-coded chart multipliers.
 - Week view groups Monday through Sunday, month view groups 7-day buckets in the current month, and year view groups calendar months.
 - Today must be included from the live `WageState.calculation` so the current bar updates before the daily snapshot is closed.
-- Chart bars must be tappable except future bars.
-- Selected chart bar must show a callout and can be cleared.
+- 图表交互改为刮擦式（`DragGesture(minimumDistance: 0)`，等宽 slot 命中）：手指横向划过即连续切换选中柱（每柱一次 `.selection` 触感），tooltip 在柱顶间弹簧滑移而不是逐柱重现；点一下钉选、再点已钉选的柱清除；未来柱不可选；明显纵向的拖动（|dy| > 12 且 |dy| > 1.6·|dx|）视为页面滚动意图、不动选中态。VoiceOver 走每柱的 `accessibilityAction` 切换。
+- 「今日」柱未被选中时带金色呼吸光晕（`TodayBarGlow`，Reduce Motion 关闭）。
 - Privacy toggle must mask all money strings with dot placeholders.
 - Hero total, averages, peak value, monthly achievement copy, and badge count must recompute from the same record-backed bar data.
 

@@ -47,7 +47,11 @@ struct OdometerMoneyText: View {
     /// `fitScale` safety net below catches anything larger (and the privacy
     /// dots, and oversized accessibility widths).
     private var mainFontSize: CGFloat {
-        switch integerDigits.count {
+        // Masked dots are a FIXED glyph count — pin the size so a real value
+        // crossing a digit boundary underneath (it still ticks up every second)
+        // can't make the hidden `•••` jump font sizes and flicker.
+        if privacy { return 78 }
+        return switch integerDigits.count {
         case ...3: 78
         case 4: 68
         case 5: 58
@@ -73,8 +77,10 @@ struct OdometerMoneyText: View {
     }
 
     /// 1 when the natural row fits, shrinking toward 0.5 for very large values.
+    /// Pinned to 1 in privacy mode — the masked `•••.••` always fits, and any
+    /// per-second wobble here would read as flicker.
     private var fitScale: CGFloat {
-        guard maxWidth.isFinite, maxWidth > 0, estimatedNaturalWidth > maxWidth else { return 1 }
+        guard !privacy, maxWidth.isFinite, maxWidth > 0, estimatedNaturalWidth > maxWidth else { return 1 }
         return max(0.5, maxWidth / estimatedNaturalWidth)
     }
 
@@ -169,6 +175,10 @@ struct OdometerMoneyText: View {
 
     private func handleYuanRollover(from oldYuan: Int?, to newYuan: Int) {
         defer { lastWholeYuan = newYuan }
+        // No celebration while the amount is hidden — the value keeps ticking
+        // up underneath, but a masked readout must stay perfectly still (no
+        // pulse, no `+¥1` chips, no haptic).
+        guard !privacy else { return }
         guard let oldYuan, newYuan > oldYuan else { return }
         // Ignore jumps from settings edits / day changes — only celebrate the
         // organic tick-up while watching money accrue.

@@ -417,11 +417,16 @@ struct RecordsView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 14) {
-                TopBar()
-                    .padding(.top, 2)
+        // TopBar lives OUTSIDE the ScrollView so it's a fixed header. Keeping it
+        // inside the scroll content put its buttons in a UIScrollView whose
+        // delayed-touch handling, combined with the pager's simultaneousGesture
+        // drag, swallowed their taps (the privacy eye stopped responding). A
+        // fixed header matches the home page and restores reliable hit-testing.
+        VStack(spacing: 0) {
+            TopBar()
+                .padding(.top, 2)
 
+            ScrollView {
                 VStack(spacing: 14) {
                     heroCard
                         .cardEntrance(order: 0)
@@ -451,8 +456,9 @@ struct RecordsView: View {
                         .cardEntrance(order: 5)
                 }
                 .padding(.horizontal, 18)
+                .padding(.top, 14)
+                .padding(.bottom, 105)
             }
-            .padding(.bottom, 105)
         }
         .background(WNFTheme.bg.paperGrain(0.02))
         .onChange(of: period) { _, _ in

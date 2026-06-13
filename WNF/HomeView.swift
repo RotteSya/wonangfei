@@ -136,15 +136,6 @@ private struct HeroHomePage: View {
                     .padding(.bottom, mascotBottomPadding)
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
-            // Ambient glow lives in the BACKGROUND so its oversized drifting
-            // circles never expand the page's layout (a ZStack sibling would,
-            // shoving the TopBar's trailing buttons off-screen). `.background`
-            // sizes to the page and clips.
-            .background {
-                HomeAmbientBackdrop(status: displayedStatus, isActive: isActive)
-                    .frame(width: proxy.size.width, height: proxy.size.height)
-                    .clipped()
-            }
             .overlayPreferenceValue(CoinSourceAnchorKey.self) { anchor in
                 if let anchor, isActive {
                     TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -538,82 +529,6 @@ private struct HomeMascotVideoClip: Equatable {
         HomeMascotVideoClip(resourceName: "home-typing"),
         HomeMascotVideoClip(resourceName: "home-bored")
     ]
-}
-
-// MARK: - Ambient backdrop
-
-/// A pair of huge, soft radial-gradient glows that drift slowly behind the
-/// readout and re-tint with the workday phase — cool before dawn, fresh in
-/// the morning, peach over lunch, deep gold through the afternoon slog, and
-/// a relieved dusk teal after clock-out. Static film grain on top keeps the
-/// big cream field from reading as flat digital paint.
-private struct HomeAmbientBackdrop: View {
-    var status: WorkStatus
-    var isActive: Bool
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var drifting = false
-
-    private var tint: Color {
-        switch status {
-        case .off:
-            Color(red: 0.62, green: 0.80, blue: 0.86)
-        case .before:
-            Color(red: 0.68, green: 0.66, blue: 0.92)
-        case .morning:
-            Color(red: 1.0, green: 0.84, blue: 0.36)
-        case .lunch:
-            Color(red: 1.0, green: 0.63, blue: 0.42)
-        case .afternoon:
-            Color(red: 1.0, green: 0.72, blue: 0.20)
-        case .done:
-            Color(red: 0.33, green: 0.80, blue: 0.72)
-        }
-    }
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [tint.opacity(0.34), tint.opacity(0)],
-                        center: .center,
-                        startRadius: 8,
-                        endRadius: 290
-                    )
-                )
-                .frame(width: 580, height: 580)
-                .offset(
-                    x: drifting ? -60 : -130,
-                    y: drifting ? -210 : -150
-                )
-
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [WNFTheme.gold.opacity(0.20), WNFTheme.gold.opacity(0)],
-                        center: .center,
-                        startRadius: 6,
-                        endRadius: 230
-                    )
-                )
-                .frame(width: 460, height: 460)
-                .offset(
-                    x: drifting ? 165 : 205,
-                    y: drifting ? 235 : 320
-                )
-        }
-        .animation(.easeInOut(duration: 2.4), value: status)
-        .paperGrain(0.024)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(.easeInOut(duration: 9).repeatForever(autoreverses: true)) {
-                drifting = true
-            }
-        }
-    }
 }
 
 // MARK: - Long-press coin fountain

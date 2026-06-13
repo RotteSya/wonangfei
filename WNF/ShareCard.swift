@@ -168,6 +168,7 @@ struct ShareActionPanel: View {
                     .background(WNFTheme.surfaceSoft, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("share.cancel")
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 30)

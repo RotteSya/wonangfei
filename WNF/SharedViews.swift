@@ -20,18 +20,23 @@ struct TopBar: View {
 
             HStack(spacing: 8) {
                 Button {
-                    state.privacyMode.toggle()
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                        state.privacyMode.toggle()
+                    }
+                    WNFHaptics.selection()
                 } label: {
                     Image(systemName: state.privacyMode ? "eye.slash" : "eye")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(state.privacyMode ? WNFTheme.yellow : WNFTheme.ink)
+                        .contentTransition(.symbolEffect(.replace))
                         .frame(width: 40, height: 40)
                         .background(state.privacyMode ? WNFTheme.ink : Color.white, in: RoundedRectangle(cornerRadius: 13))
                         .overlay(RoundedRectangle(cornerRadius: 13).stroke(WNFTheme.hairline, lineWidth: 0.5))
                         .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.squish)
                 .accessibilityLabel(state.privacyMode ? "显示工资" : "隐藏工资")
+                .accessibilityIdentifier("home.privacy")
 
                 if let onShare {
                     Button(action: onShare) {
@@ -43,8 +48,9 @@ struct TopBar: View {
                             .overlay(RoundedRectangle(cornerRadius: 13).stroke(WNFTheme.hairline, lineWidth: 0.5))
                             .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.squish)
                     .accessibilityLabel("分享今日窝囊费")
+                    .accessibilityIdentifier("home.share")
                 }
             }
         }
@@ -73,18 +79,46 @@ struct YenBadge: View {
 struct StatusChip: View {
     var label: String
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         HStack(spacing: 7) {
-            Circle()
-                .fill(WNFTheme.coral)
-                .frame(width: 7, height: 7)
-                .shadow(color: WNFTheme.coralSoft, radius: 0, x: 0, y: 0)
+            statusDot
             Text(label)
                 .font(.system(size: 12, weight: .heavy))
+                .contentTransition(.numericText())
+                .animation(.snappy(duration: 0.3), value: label)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
         .background(WNFTheme.surfaceSoft, in: Capsule())
+    }
+
+    @ViewBuilder
+    private var statusDot: some View {
+        let dot = Circle()
+            .fill(WNFTheme.coral)
+            .frame(width: 7, height: 7)
+
+        if reduceMotion {
+            dot
+        } else {
+            // Live heartbeat: the dot breathes with a soft halo, signalling
+            // "the meter is running" without a single extra word on screen.
+            dot.phaseAnimator([false, true]) { view, pulsing in
+                view
+                    .scaleEffect(pulsing ? 1.0 : 0.72)
+                    .opacity(pulsing ? 1.0 : 0.6)
+                    .background(
+                        Circle()
+                            .fill(WNFTheme.coral.opacity(pulsing ? 0 : 0.35))
+                            .frame(width: 13, height: 13)
+                            .scaleEffect(pulsing ? 1.5 : 0.6)
+                    )
+            } animation: { _ in
+                .easeInOut(duration: 1.15)
+            }
+        }
     }
 }
 
@@ -112,6 +146,8 @@ struct MetricTile: View {
                 .foregroundStyle(WNFTheme.ink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
+                .contentTransition(.numericText())
+                .animation(.snappy(duration: 0.32), value: value)
 
             if let subtitle {
                 Text(subtitle)

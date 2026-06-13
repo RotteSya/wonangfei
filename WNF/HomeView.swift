@@ -5,15 +5,18 @@ import UIKit
 struct HomeView: View {
     @EnvironmentObject private var state: WageState
     @Binding private var isShareCardPresented: Bool
+    private var isActive: Bool
     private var onShare: () -> Void
     private var onClockOut: () -> Void
 
     init(
         isShareCardPresented: Binding<Bool> = .constant(false),
+        isActive: Bool = true,
         onShare: @escaping () -> Void = {},
         onClockOut: @escaping () -> Void = {}
     ) {
         self._isShareCardPresented = isShareCardPresented
+        self.isActive = isActive
         self.onShare = onShare
         self.onClockOut = onClockOut
     }
@@ -24,6 +27,7 @@ struct HomeView: View {
 
             HeroHomePage(
                 initialStatus: state.liveDay.status,
+                isActive: isActive,
                 onShare: onShare,
                 onClockOut: onClockOut
             )
@@ -40,12 +44,17 @@ struct HomeView: View {
 private struct HeroHomePage: View {
     @EnvironmentObject private var state: WageState
     @Environment(\.tabBarFloorHeight) private var tabBarFloorHeight: CGFloat
+    @Environment(\.pagerJellyStretch) private var jellyStretch: CGFloat
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var quoteEngine: BubbleQuoteEngine
     @State private var displayedStatus: WorkStatus
+    @State private var fountainBursts: [CoinFountainBurst] = []
+    var isActive: Bool
     var onShare: () -> Void
     var onClockOut: () -> Void
 
-    init(initialStatus: WorkStatus, onShare: @escaping () -> Void, onClockOut: @escaping () -> Void) {
+    init(initialStatus: WorkStatus, isActive: Bool, onShare: @escaping () -> Void, onClockOut: @escaping () -> Void) {
+        self.isActive = isActive
         self.onShare = onShare
         self.onClockOut = onClockOut
         self._quoteEngine = StateObject(wrappedValue: BubbleQuoteEngine(initialStatus: initialStatus))
@@ -81,50 +90,63 @@ private struct HeroHomePage: View {
     var body: some View {
         GeometryReader { proxy in
             VStack(alignment: .leading, spacing: 0) {
-                TopBar(onShare: onShare)
-                    .padding(.top, 2)
+                // The page itself takes the pager's jelly squash; the cow
+                // additionally leans into the drag like it's standing on a
+                // braking bus — readout stays upright, mascot reacts.
+                VStack(alignment: .leading, spacing: 0) {
+                    TopBar(onShare: onShare)
+                        .padding(.top, 2)
 
-                // Only the wage readout actually has to refresh per second —
-                // money ticks up, "已忍" / "离下班" advance, and the progress
-                // bar fills. TopBar, ClockOutCTA, and the mascot live outside
-                // so they don't get diffed every tick. The CTA's visibility
-                // still flips at the workEnd boundary because `displayedStatus`
-                // is updated via `.onChange(of: day.status)` below, which
-                // triggers an outer body rebuild.
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    let day = state.liveDay(at: context.date)
-                    LiveWageReadout(
-                        day: day,
-                        statusChipLabel: statusChipLabel,
-                        privacyMode: state.privacyMode,
-                        workStartText: state.workStart.clockText,
-                        workEndText: state.workEnd.clockText
-                    )
-                    .onChange(of: day.status) { _, newStatus in
-                        displayedStatus = newStatus
-                        quoteEngine.setStatus(newStatus)
+                    // Only the wage readout actually has to refresh per second —
+                    // money ticks up, "已忍" / "离下班" advance, and the progress
+                    // bar fills. TopBar, ClockOutCTA, and the mascot live outside
+                    // so they don't get diffed every tick. The CTA's visibility
+                    // still flips at the workEnd boundary because `displayedStatus`
+                    // is updated via `.onChange(of: day.status)` below, which
+                    // triggers an outer body rebuild. While the page is parked
+                    // off-screen in the pager, the per-second clock pauses and a
+                    // static snapshot stands in.
+                    Group {
+                        if isActive {
+                            TimelineView(.periodic(from: .now, by: 1)) { context in
+                                readout(at: context.date, contentWidth: proxy.size.width - 44)
+                            }
+                        } else {
+                            readout(at: Date(), contentWidth: proxy.size.width - 44)
+                        }
                     }
-                }
-                .padding(.horizontal, 22)
-
-                if state.isTodaySettled || displayedStatus == .done {
-                    ClockOutCTA(
-                        status: displayedStatus,
-                        isSettled: state.isTodaySettled,
-                        action: onClockOut
-                    )
-                    .padding(.top, 4)
                     .padding(.horizontal, 22)
+
+                    if state.isTodaySettled || displayedStatus == .done {
+                        ClockOutCTA(
+                            status: displayedStatus,
+                            isSettled: state.isTodaySettled,
+                            action: onClockOut
+                        )
+                        .padding(.top, 4)
+                        .padding(.horizontal, 22)
+                    }
                 }
 
                 Spacer(minLength: 16)
 
                 HomeMascotStage(quote: quoteEngine.currentQuote, bubbleOffset: quoteEngine.bubbleOffset)
+                    .rotationEffect(.degrees(jellyStretch * -0.4), anchor: .bottom)
+                    .offset(x: jellyStretch * -0.55)
                     .padding(.bottom, mascotBottomPadding)
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+            // Ambient glow lives in the BACKGROUND so its oversized drifting
+            // circles never expand the page's layout (a ZStack sibling would,
+            // shoving the TopBar's trailing buttons off-screen). `.background`
+            // sizes to the page and clips.
+            .background {
+                HomeAmbientBackdrop(status: displayedStatus, isActive: isActive)
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .clipped()
+            }
             .overlayPreferenceValue(CoinSourceAnchorKey.self) { anchor in
-                if let anchor {
+                if let anchor, isActive {
                     TimelineView(.periodic(from: .now, by: 1)) { context in
                         let day = state.liveDay(at: context.date)
                         HomeCoinDropLayer(
@@ -137,7 +159,57 @@ private struct HeroHomePage: View {
                     }
                 }
             }
+            .overlayPreferenceValue(MoneyBlockAnchorKey.self) { anchor in
+                if let anchor, !fountainBursts.isEmpty {
+                    CoinFountainLayer(
+                        bursts: fountainBursts,
+                        origin: CGPoint(x: proxy[anchor].midX, y: proxy[anchor].midY),
+                        pageSize: proxy.size
+                    ) { finished in
+                        fountainBursts.removeAll { $0.id == finished }
+                    }
+                }
+            }
         }
+        .onChange(of: isActive) { _, nowActive in
+            guard nowActive else { return }
+            // The page may have missed a status flip while parked off-screen.
+            let current = state.liveDay(at: Date()).status
+            if current != displayedStatus {
+                displayedStatus = current
+                quoteEngine.setStatus(current)
+            }
+        }
+    }
+
+    private func readout(at date: Date, contentWidth: CGFloat) -> some View {
+        let day = state.liveDay(at: date)
+        return LiveWageReadout(
+            day: day,
+            statusChipLabel: statusChipLabel,
+            privacyMode: state.privacyMode,
+            workStartText: state.workStart.clockText,
+            workEndText: state.workEnd.clockText,
+            isActive: isActive,
+            contentWidth: contentWidth,
+            onMoneyLongPress: launchFountain
+        )
+        .onChange(of: day.status) { _, newStatus in
+            displayedStatus = newStatus
+            quoteEngine.setStatus(newStatus)
+        }
+    }
+
+    /// Easter egg: long-pressing the big number "shakes the tree" — a burst of
+    /// coins erupts from the readout and rains off the page. Purely cosmetic,
+    /// deliberately a little absurd.
+    private func launchFountain() {
+        guard !reduceMotion else { return }
+        fountainBursts.append(CoinFountainBurst())
+        if fountainBursts.count > 2 {
+            fountainBursts.removeFirst(fountainBursts.count - 2)
+        }
+        WNFHaptics.medium(intensity: 1.0)
     }
 
     private func coinCollisionY(in size: CGSize) -> CGFloat {
@@ -154,6 +226,12 @@ private struct LiveWageReadout: View {
     var privacyMode: Bool
     var workStartText: String
     var workEndText: String
+    var isActive: Bool
+    var contentWidth: CGFloat
+    var onMoneyLongPress: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var charging = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -166,7 +244,31 @@ private struct LiveWageReadout: View {
                     .tracking(5)
                     .foregroundStyle(WNFTheme.inkSoft)
 
-                BigMoneyText(value: day.earnedToday, privacy: privacyMode)
+                OdometerMoneyText(value: day.earnedToday, privacy: privacyMode, isActive: isActive, maxWidth: contentWidth)
+                    // Charge-up squish: pressing compresses the number like a
+                    // spring being loaded; release (the long-press firing)
+                    // lets it pop back while the fountain erupts.
+                    .scaleEffect(
+                        x: charging ? 1.025 : 1,
+                        y: charging ? 0.93 : 1,
+                        anchor: .bottomLeading
+                    )
+                    .anchorPreference(key: MoneyBlockAnchorKey.self, value: .bounds) { $0 }
+                    .contentShape(Rectangle())
+                    .onLongPressGesture(minimumDuration: 0.42, maximumDistance: 30) {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.45)) {
+                            charging = false
+                        }
+                        onMoneyLongPress()
+                    } onPressingChanged: { pressing in
+                        if reduceMotion { return }
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                            charging = pressing
+                        }
+                        if pressing {
+                            WNFHaptics.soft(intensity: 0.45)
+                        }
+                    }
             }
 
             HStack(spacing: 18) {
@@ -177,8 +279,16 @@ private struct LiveWageReadout: View {
             .font(.system(size: 13, weight: .heavy))
             .foregroundStyle(WNFTheme.inkSoft)
 
-            ProgressTrack(day: day, startText: workStartText, endText: workEndText)
+            ProgressTrack(day: day, startText: workStartText, endText: workEndText, isActive: isActive)
         }
+    }
+}
+
+private struct MoneyBlockAnchorKey: PreferenceKey {
+    static var defaultValue: Anchor<CGRect>?
+
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = nextValue() ?? value
     }
 }
 
@@ -194,6 +304,9 @@ private struct HomeMascotStage: View {
     var quote: String
     var bubbleOffset: CGSize
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var floating = false
+
     private let stageHeight: CGFloat = 285
 
     var body: some View {
@@ -201,19 +314,50 @@ private struct HomeMascotStage: View {
             .frame(width: stageHeight, height: stageHeight)
             .frame(maxWidth: .infinity)
             .overlay(alignment: .topLeading) {
-                Text(quote)
-                    .font(.system(size: 14, weight: .heavy))
-                    .foregroundStyle(WNFTheme.ink)
-                    .padding(.horizontal, 15)
-                    .padding(.vertical, 11)
-                    .background(Color.white, in: RoundedRectangle(cornerRadius: 17))
-                    .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
-                    .offset(x: bubbleOffset.width, y: bubbleOffset.height)
+                ThoughtBubble(quote: quote)
+                    .offset(x: bubbleOffset.width, y: bubbleOffset.height + (floating ? -3 : 3))
                     .id(quote)
-                    .transition(.opacity)
+                    .transition(
+                        reduceMotion
+                            ? .opacity
+                            : .scale(scale: 0.65, anchor: .bottomLeading).combined(with: .opacity)
+                    )
             }
             .frame(maxWidth: .infinity)
             .frame(height: stageHeight)
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.easeInOut(duration: 2.6).repeatForever(autoreverses: true)) {
+                    floating = true
+                }
+            }
+    }
+}
+
+/// The cow's inner monologue: a comic thought bubble with trailing dots
+/// descending toward its head, gently bobbing while it idles.
+private struct ThoughtBubble: View {
+    var quote: String
+
+    var body: some View {
+        Text(quote)
+            .font(.system(size: 14, weight: .heavy))
+            .foregroundStyle(WNFTheme.ink)
+            .padding(.horizontal, 15)
+            .padding(.vertical, 11)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 17))
+            .overlay(alignment: .bottomLeading) {
+                // Trailing thought dots, outside the bubble's own bounds.
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 8, height: 8)
+                    .offset(x: 9, y: 13)
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 5, height: 5)
+                    .offset(x: 3, y: 22)
+            }
+            .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
     }
 }
 
@@ -396,35 +540,200 @@ private struct HomeMascotVideoClip: Equatable {
     ]
 }
 
-private struct BigMoneyText: View {
-    var value: Double
-    var privacy: Bool
+// MARK: - Ambient backdrop
+
+/// A pair of huge, soft radial-gradient glows that drift slowly behind the
+/// readout and re-tint with the workday phase — cool before dawn, fresh in
+/// the morning, peach over lunch, deep gold through the afternoon slog, and
+/// a relieved dusk teal after clock-out. Static film grain on top keeps the
+/// big cream field from reading as flat digital paint.
+private struct HomeAmbientBackdrop: View {
+    var status: WorkStatus
+    var isActive: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var drifting = false
+
+    private var tint: Color {
+        switch status {
+        case .off:
+            Color(red: 0.62, green: 0.80, blue: 0.86)
+        case .before:
+            Color(red: 0.68, green: 0.66, blue: 0.92)
+        case .morning:
+            Color(red: 1.0, green: 0.84, blue: 0.36)
+        case .lunch:
+            Color(red: 1.0, green: 0.63, blue: 0.42)
+        case .afternoon:
+            Color(red: 1.0, green: 0.72, blue: 0.20)
+        case .done:
+            Color(red: 0.33, green: 0.80, blue: 0.72)
+        }
+    }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
-            Text("¥")
-                .foregroundStyle(WNFTheme.yellow)
-            if privacy {
-                Text("•••")
-                    .tracking(4)
-                Text(".••")
-                    .font(.system(size: 46, weight: .black, design: .rounded))
-                    .foregroundStyle(WNFTheme.muted)
-            } else {
-                let totalCents = max(0, Int((value * 100).rounded(.down)))
-                let integer = totalCents / 100
-                let cents = totalCents % 100
-                Text(integer.formatted(.number.grouping(.automatic)))
-                Text(String(format: ".%02d", cents))
-                    .font(.system(size: 46, weight: .black, design: .rounded))
-                    .foregroundStyle(WNFTheme.muted)
+        ZStack {
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [tint.opacity(0.34), tint.opacity(0)],
+                        center: .center,
+                        startRadius: 8,
+                        endRadius: 290
+                    )
+                )
+                .frame(width: 580, height: 580)
+                .offset(
+                    x: drifting ? -60 : -130,
+                    y: drifting ? -210 : -150
+                )
+
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [WNFTheme.gold.opacity(0.20), WNFTheme.gold.opacity(0)],
+                        center: .center,
+                        startRadius: 6,
+                        endRadius: 230
+                    )
+                )
+                .frame(width: 460, height: 460)
+                .offset(
+                    x: drifting ? 165 : 205,
+                    y: drifting ? 235 : 320
+                )
+        }
+        .animation(.easeInOut(duration: 2.4), value: status)
+        .paperGrain(0.024)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 9).repeatForever(autoreverses: true)) {
+                drifting = true
             }
         }
-        .font(.system(size: 86, weight: .black, design: .rounded))
-        .minimumScaleFactor(0.58)
-        .lineLimit(1)
-        .contentTransition(.numericText(value: value))
-        .animation(.linear(duration: 0.2), value: value)
+    }
+}
+
+// MARK: - Long-press coin fountain
+
+struct CoinFountainBurst: Identifiable, Equatable {
+    let id = UUID()
+    var coins: [FountainCoin] = (0..<14).map { FountainCoin(seed: $0) }
+
+    static func == (lhs: CoinFountainBurst, rhs: CoinFountainBurst) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
+struct FountainCoin: Identifiable {
+    let id = UUID()
+    var size: CGFloat
+    var launchX: CGFloat
+    var driftX: CGFloat
+    var peakY: CGFloat
+    var fallY: CGFloat
+    var upDuration: Double
+    var downDuration: Double
+    var spin: Double
+    var delay: Double
+
+    init(seed: Int) {
+        size = CGFloat(20 + (seed % 4) * 4)
+        launchX = CGFloat.random(in: -56...110)
+        driftX = CGFloat.random(in: -90...110)
+        peakY = -CGFloat.random(in: 110...230)
+        fallY = CGFloat.random(in: 380...520)
+        upDuration = Double.random(in: 0.3...0.44)
+        downDuration = Double.random(in: 0.52...0.72)
+        spin = Double.random(in: -540...540)
+        delay = Double(seed % 7) * 0.022
+    }
+}
+
+private struct CoinFountainLayer: View {
+    var bursts: [CoinFountainBurst]
+    var origin: CGPoint
+    var pageSize: CGSize
+    var onBurstFinished: (UUID) -> Void
+
+    var body: some View {
+        ZStack {
+            ForEach(bursts) { burst in
+                ForEach(burst.coins) { coin in
+                    FountainCoinView(coin: coin, origin: origin)
+                }
+                .task(id: burst.id) {
+                    let longest = burst.coins.map { $0.delay + $0.upDuration + $0.downDuration }.max() ?? 1.2
+                    try? await Task.sleep(nanoseconds: UInt64((longest + 0.25) * 1_000_000_000))
+                    onBurstFinished(burst.id)
+                }
+            }
+        }
+        .frame(width: pageSize.width, height: pageSize.height, alignment: .topLeading)
+        .clipped()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct FountainCoinPose {
+    var x: CGFloat = 0
+    var y: CGFloat = 0
+    var rotation: Double = 0
+    var scale: CGFloat = 0.3
+    var opacity: Double = 0
+}
+
+private struct FountainCoinView: View {
+    var coin: FountainCoin
+    var origin: CGPoint
+
+    @State private var launched = false
+
+    var body: some View {
+        YenCoin(size: coin.size)
+            .keyframeAnimator(initialValue: FountainCoinPose(), trigger: launched) { view, pose in
+                view
+                    .scaleEffect(pose.scale)
+                    .rotationEffect(.degrees(pose.rotation))
+                    .opacity(pose.opacity)
+                    .position(x: origin.x + coin.launchX + pose.x, y: origin.y + pose.y)
+            } keyframes: { _ in
+                KeyframeTrack(\.y) {
+                    MoveKeyframe(0)
+                    CubicKeyframe(0, duration: coin.delay)
+                    // Up fast with an ease-out, hang, then accelerate down.
+                    CubicKeyframe(coin.peakY, duration: coin.upDuration, startVelocity: coin.peakY / (coin.upDuration * 0.42))
+                    CubicKeyframe(coin.fallY, duration: coin.downDuration, endVelocity: coin.fallY / (coin.downDuration * 0.38))
+                }
+                KeyframeTrack(\.x) {
+                    MoveKeyframe(0)
+                    CubicKeyframe(0, duration: coin.delay)
+                    CubicKeyframe(coin.driftX * 0.55, duration: coin.upDuration)
+                    CubicKeyframe(coin.driftX, duration: coin.downDuration)
+                }
+                KeyframeTrack(\.rotation) {
+                    MoveKeyframe(0)
+                    CubicKeyframe(0, duration: coin.delay)
+                    LinearKeyframe(coin.spin, duration: coin.upDuration + coin.downDuration)
+                }
+                KeyframeTrack(\.scale) {
+                    MoveKeyframe(0.3)
+                    CubicKeyframe(0.3, duration: coin.delay)
+                    SpringKeyframe(1.06, duration: coin.upDuration, spring: .bouncy)
+                    CubicKeyframe(0.92, duration: coin.downDuration)
+                }
+                KeyframeTrack(\.opacity) {
+                    MoveKeyframe(0)
+                    CubicKeyframe(0, duration: coin.delay)
+                    LinearKeyframe(1, duration: 0.08)
+                    LinearKeyframe(1, duration: coin.upDuration + coin.downDuration * 0.62 - 0.08)
+                    LinearKeyframe(0, duration: coin.downDuration * 0.38)
+                }
+            }
+            .onAppear { launched = true }
     }
 }
 
@@ -432,21 +741,53 @@ private struct ProgressTrack: View {
     var day: WageDay
     var startText: String
     var endText: String
+    var isActive: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The molten fill only needs frames while it is visible, moving, and
+    /// non-empty; otherwise the shader freezes on its last frame for free.
+    private var animatesFill: Bool {
+        isActive && !reduceMotion && day.progress > 0.0005
+    }
 
     var body: some View {
         VStack(spacing: 8) {
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color(red: 0.95, green: 0.90, blue: 0.75))
-                    Capsule()
-                        .fill(LinearGradient(colors: [WNFTheme.gold, WNFTheme.yellow], startPoint: .leading, endPoint: .trailing))
-                        .frame(width: proxy.size.width * day.progress)
+
+                    // Molten-gold fill: a full-width rect whose visible body is
+                    // carved out by the shader — the leading edge is a lapping
+                    // wave with a bright meniscus, and highlight bands drift
+                    // toward the crest so the bar reads as slowly flowing metal
+                    // rather than a static gradient.
+                    TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !animatesFill)) { context in
+                        let t = animatesFill
+                            ? context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3600)
+                            : 0
+                        Rectangle()
+                            .fill(Color.white)
+                            .visualEffect { [progress = day.progress, reduceMotion] view, geometry in
+                                view.colorEffect(
+                                    ShaderLibrary.wnfMoltenGold(
+                                        .float2(geometry.size),
+                                        .float(t),
+                                        .float(progress),
+                                        .float(reduceMotion ? 0 : 5)
+                                    )
+                                )
+                            }
+                    }
+                    .clipShape(Capsule())
+
                     if day.progress > 0 && day.progress < 1 {
                         Circle()
                             .fill(Color.white)
                             .overlay(Circle().stroke(WNFTheme.ink, lineWidth: 3))
                             .frame(width: 15, height: 15)
                             .offset(x: max(0, proxy.size.width * day.progress - 7))
+                            .shadow(color: WNFTheme.gold.opacity(0.5), radius: 5)
                     }
                 }
             }
@@ -457,6 +798,8 @@ private struct ProgressTrack: View {
                 Text(startText)
                 Spacer()
                 Text("\(Int(day.progress * 100))%")
+                    .contentTransition(.numericText())
+                    .animation(.snappy(duration: 0.3), value: Int(day.progress * 100))
                 Spacer()
                 Text(endText)
             }

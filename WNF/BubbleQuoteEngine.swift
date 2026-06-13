@@ -59,7 +59,7 @@ final class BubbleQuoteEngine: ObservableObject {
         currentBase = nextBase
         let decorated = Self.decorate(nextBase, for: newStatus)
         let newOffset = Self.randomOffset()
-        withAnimation(.easeInOut(duration: 0.25)) {
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.66)) {
             currentQuote = decorated
             bubbleOffset = newOffset
         }
@@ -82,7 +82,7 @@ final class BubbleQuoteEngine: ObservableObject {
         currentBase = nextBase
         let decorated = Self.decorate(nextBase, for: status)
         let newOffset = Self.randomOffset()
-        withAnimation(.easeInOut(duration: 0.25)) {
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.66)) {
             currentQuote = decorated
             bubbleOffset = newOffset
         }

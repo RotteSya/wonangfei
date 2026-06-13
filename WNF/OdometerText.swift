@@ -175,10 +175,6 @@ struct OdometerMoneyText: View {
 
     private func handleYuanRollover(from oldYuan: Int?, to newYuan: Int) {
         defer { lastWholeYuan = newYuan }
-        // No celebration while the amount is hidden — the value keeps ticking
-        // up underneath, but a masked readout must stay perfectly still (no
-        // pulse, no `+¥1` chips, no haptic).
-        guard !privacy else { return }
         guard let oldYuan, newYuan > oldYuan else { return }
         // Ignore jumps from settings edits / day changes — only celebrate the
         // organic tick-up while watching money accrue.
@@ -186,9 +182,15 @@ struct OdometerMoneyText: View {
         guard gained <= 5 else { return }
 
         if !reduceMotion {
-            risingChips.append(RisingYuanChip(amount: gained))
-            if risingChips.count > 3 {
-                risingChips.removeFirst(risingChips.count - 3)
+            // In privacy mode the dots still pulse so "钱在涨" reads through the
+            // mask — but the `+¥1` chip prints a literal amount, so it stays
+            // hidden. (Font size and fitScale are pinned while masked, so this
+            // is a clean rhythmic bounce, not the old digit-jump flicker.)
+            if !privacy {
+                risingChips.append(RisingYuanChip(amount: gained))
+                if risingChips.count > 3 {
+                    risingChips.removeFirst(risingChips.count - 3)
+                }
             }
             rowPulse = true
             withAnimation(.spring(response: 0.32, dampingFraction: 0.5).delay(0.05)) {

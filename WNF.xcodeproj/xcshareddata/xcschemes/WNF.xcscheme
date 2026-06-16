@@ -34,6 +34,20 @@
                ReferencedContainer = "container:WNF.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "100000000000000000000B04"
+               BuildableName = "WNFUITests.xctest"
+               BlueprintName = "WNFUITests"
+               ReferencedContainer = "container:WNF.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -51,6 +65,16 @@
                BlueprintIdentifier = "100000000000000000000503"
                BuildableName = "WNFTests.xctest"
                BlueprintName = "WNFTests"
+               ReferencedContainer = "container:WNF.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "100000000000000000000B04"
+               BuildableName = "WNFUITests.xctest"
+               BlueprintName = "WNFUITests"
                ReferencedContainer = "container:WNF.xcodeproj">
             </BuildableReference>
          </TestableReference>

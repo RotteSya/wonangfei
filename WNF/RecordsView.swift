@@ -417,35 +417,50 @@ struct RecordsView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 14) {
-                TopBar()
-                    .padding(.top, 2)
+        // TopBar lives OUTSIDE the ScrollView so it's a fixed header. Keeping it
+        // inside the scroll content put its buttons in a UIScrollView whose
+        // delayed-touch handling, combined with the pager's simultaneousGesture
+        // drag, swallowed their taps (the privacy eye stopped responding). A
+        // fixed header matches the home page and restores reliable hit-testing.
+        VStack(spacing: 0) {
+            TopBar()
+                .padding(.top, 2)
 
+            ScrollView {
                 VStack(spacing: 14) {
                     heroCard
+                        .cardEntrance(order: 0)
+
+                    // Chart sits right under the headline number — it's the
+                    // "show me my data" centerpiece and the home of the
+                    // scrub-to-read gesture, so it earns the top of the fold.
+                    chartCard
+                        .cardEntrance(order: 1)
 
                     HStack(spacing: 10) {
                         MetricTile(label: period == .week ? "本周日均" : period == .month ? "月日均" : "年日均", value: WNFFormat.money(periodAverage, privacy: state.privacyMode), subtitle: "来自已记录日期", big: true)
                         MetricTile(label: "本期最高", value: WNFFormat.money(periodPeak, privacy: state.privacyMode), subtitle: "单柱最高金额", accent: WNFTheme.coral, big: true)
                     }
+                    .cardEntrance(order: 2)
 
                     HStack(spacing: 10) {
                         MetricTile(label: "时薪", value: state.privacyMode ? "¥••/h" : "¥\(Int(day.hourlyRate))/h", subtitle: "基于税后月薪", accent: WNFTheme.cyan)
                         MetricTile(label: "已记录", value: "\(recordedDayCount) 天", subtitle: "含今日")
                     }
+                    .cardEntrance(order: 3)
 
                     achievementCard
-
-                    chartCard
+                        .cardEntrance(order: 4)
 
                     badgeCard
+                        .cardEntrance(order: 5)
                 }
                 .padding(.horizontal, 18)
+                .padding(.top, 14)
+                .padding(.bottom, 105)
             }
-            .padding(.bottom, 105)
         }
-        .background(WNFTheme.bg)
+        .background(WNFTheme.bg.paperGrain(0.02))
         .onChange(of: period) { _, _ in
             selectedBarID = nil
         }
@@ -453,24 +468,22 @@ struct RecordsView: View {
 
     private var heroCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Picker("周期", selection: $period) {
-                ForEach(RecordPeriod.allCases) { item in
-                    Text(item.label).tag(item)
-                }
-            }
-            .pickerStyle(.segmented)
-            .tint(WNFTheme.yellow)
+            PeriodSwitcher(period: $period)
 
             Text(period.heroLabel)
                 .font(.system(size: 11, weight: .heavy))
                 .tracking(2)
                 .foregroundStyle(WNFTheme.ink.opacity(0.65))
+                .contentTransition(.numericText())
+                .animation(.snappy(duration: 0.3), value: period)
 
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(WNFFormat.money(total, privacy: state.privacyMode))
                     .font(.system(size: 56, weight: .black, design: .rounded))
                     .lineLimit(1)
                     .minimumScaleFactor(0.65)
+                    .contentTransition(.numericText(value: total))
+                    .animation(.spring(response: 0.55, dampingFraction: 0.8), value: total)
                 Spacer(minLength: 0)
             }
 
@@ -481,6 +494,8 @@ struct RecordsView: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                     .background(WNFTheme.ink, in: Capsule())
+                    .contentTransition(.numericText())
+                    .animation(.snappy(duration: 0.3), value: recordedDayCount)
                 Text("今日金额计入本期")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(WNFTheme.ink.opacity(0.6))
@@ -488,12 +503,16 @@ struct RecordsView: View {
         }
         .padding(22)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(WNFTheme.yellow, in: RoundedRectangle(cornerRadius: 28))
+        .background {
+            // Gold-card surface: brand yellow with printed grain and a slow
+            // glint sweeping the diagonal — the "membership card" feel.
+            RoundedRectangle(cornerRadius: 28)
+                .fill(WNFTheme.yellow)
+                .paperGrain(0.034)
+                .goldShimmer(period: 7.5, intensity: 0.2)
+        }
         .overlay(alignment: .topTrailing) {
-            Text("¥")
-                .font(.system(size: 190, weight: .black, design: .rounded))
-                .foregroundStyle(WNFTheme.ink.opacity(0.06))
-                .offset(x: 26, y: -42)
+            BreathingWatermark()
         }
         .clipShape(RoundedRectangle(cornerRadius: 28))
         .shadow(color: WNFTheme.yellow.opacity(0.24), radius: 20, y: 10)
@@ -501,20 +520,19 @@ struct RecordsView: View {
 
     private var achievementCard: some View {
         HStack(spacing: 14) {
-            Image("HeroMascot")
-                .resizable()
-                .scaledToFill()
-                .frame(width: 58, height: 58)
-                .clipShape(RoundedRectangle(cornerRadius: 18))
+            MascotPortrait()
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("本 月 成 就")
                     .font(.system(size: 11, weight: .heavy))
                     .tracking(1.5)
                     .foregroundStyle(WNFTheme.yellow)
+                    .goldShimmer(period: 6.0, intensity: 0.6)
                 Text("本月已记录 \(currentMonthSummary.recordedDays) 天")
                     .font(.system(size: 22, weight: .black, design: .rounded))
                     .foregroundStyle(Color.white)
+                    .contentTransition(.numericText())
+                    .animation(.snappy(duration: 0.3), value: currentMonthSummary.recordedDays)
                 Text("累计到账 \(WNFFormat.money(currentMonthSummary.amount, privacy: state.privacyMode))")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Color.white.opacity(0.55))
@@ -522,7 +540,11 @@ struct RecordsView: View {
             Spacer()
         }
         .padding(16)
-        .background(WNFTheme.ink, in: RoundedRectangle(cornerRadius: 22))
+        .background {
+            RoundedRectangle(cornerRadius: 22)
+                .fill(WNFTheme.ink)
+                .paperGrain(0.05)
+        }
     }
 
     private var chartCard: some View {
@@ -530,13 +552,20 @@ struct RecordsView: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(period == .week ? "本周每日窝囊费" : period == .month ? "本月每周窝囊费" : "本年每月窝囊费")
                     .font(.system(size: 19, weight: .black, design: .rounded))
+                    .contentTransition(.numericText())
+                    .animation(.snappy(duration: 0.3), value: period)
                 Spacer()
                 Text(chartRangeLabel)
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(WNFTheme.muted)
             }
 
+            Text("按住图表左右滑动查数")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(WNFTheme.muted.opacity(0.75))
+
             BarChart(bars: bars, selectedBarID: $selectedBarID, privacy: state.privacyMode)
+                .id(period)
         }
         .padding(16)
         .background(Color.white, in: RoundedRectangle(cornerRadius: 22))
@@ -571,42 +600,238 @@ struct RecordsView: View {
     }
 }
 
+// MARK: - Entrance choreography
+
+/// Cards rise into place one after another on the page's first appearance —
+/// a single welcome, not a recurring effect (scroll back up never replays it).
+private struct CardEntrance: ViewModifier {
+    var order: Int
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var shown = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(shown ? 1 : 0)
+            .offset(y: shown ? 0 : 22)
+            .onAppear {
+                guard !shown else { return }
+                if reduceMotion {
+                    shown = true
+                    return
+                }
+                withAnimation(.spring(response: 0.55, dampingFraction: 0.8).delay(Double(order) * 0.06)) {
+                    shown = true
+                }
+            }
+    }
+}
+
+private extension View {
+    func cardEntrance(order: Int) -> some View {
+        modifier(CardEntrance(order: order))
+    }
+}
+
+// MARK: - Period switcher
+
+/// Hand-rolled segmented control: an ink pill slides between the three
+/// periods with a spring, riding on the hero card's yellow.
+private struct PeriodSwitcher: View {
+    @Binding var period: RecordPeriod
+    @Namespace private var pillSpace
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(RecordPeriod.allCases) { item in
+                let isOn = period == item
+                Button {
+                    guard !isOn else { return }
+                    WNFHaptics.selection()
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.72)) {
+                        period = item
+                    }
+                } label: {
+                    Text(item.label)
+                        .font(.system(size: 13, weight: .heavy))
+                        .foregroundStyle(isOn ? Color.white : WNFTheme.ink.opacity(0.62))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 34)
+                        .background {
+                            if isOn {
+                                Capsule()
+                                    .fill(WNFTheme.ink)
+                                    .matchedGeometryEffect(id: "period-pill", in: pillSpace)
+                            }
+                        }
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.squish(0.94))
+                .accessibilityLabel("按\(item.label)查看")
+                .accessibilityIdentifier("records.period.\(item.rawValue)")
+                .accessibilityAddTraits(isOn ? [.isSelected] : [])
+            }
+        }
+        .padding(4)
+        .background(Color.white.opacity(0.45), in: Capsule())
+        .overlay(Capsule().stroke(WNFTheme.ink.opacity(0.08), lineWidth: 1))
+    }
+}
+
+/// The big ¥ watermark on the hero card, breathing almost imperceptibly so
+/// the card feels alive even when the totals aren't changing.
+private struct BreathingWatermark: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var swollen = false
+
+    var body: some View {
+        Text("¥")
+            .font(.system(size: 190, weight: .black, design: .rounded))
+            .foregroundStyle(WNFTheme.ink.opacity(0.06))
+            .scaleEffect(swollen ? 1.045 : 1, anchor: .topTrailing)
+            .offset(x: 26, y: -42)
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.easeInOut(duration: 5.5).repeatForever(autoreverses: true)) {
+                    swollen = true
+                }
+            }
+            .accessibilityHidden(true)
+    }
+}
+
+/// The achievement card's cow: tap for a indignant little wiggle.
+private struct MascotPortrait: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var wiggles = 0
+
+    var body: some View {
+        Image("HeroMascot")
+            .resizable()
+            .scaledToFill()
+            .frame(width: 58, height: 58)
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+            .keyframeAnimator(initialValue: 0.0, trigger: wiggles) { view, angle in
+                view.rotationEffect(.degrees(angle))
+            } keyframes: { _ in
+                KeyframeTrack {
+                    CubicKeyframe(0, duration: 0.0001)
+                    CubicKeyframe(-7, duration: 0.07)
+                    CubicKeyframe(6, duration: 0.11)
+                    CubicKeyframe(-3.5, duration: 0.11)
+                    CubicKeyframe(1.6, duration: 0.10)
+                    CubicKeyframe(0, duration: 0.10)
+                }
+            }
+            .onTapGesture {
+                guard !reduceMotion else { return }
+                wiggles += 1
+                WNFHaptics.soft(intensity: 0.7)
+            }
+            .accessibilityLabel("窝囊牛")
+    }
+}
+
 private struct BarChart: View {
     var bars: [RecordBar]
     @Binding var selectedBarID: RecordBar.ID?
     var privacy: Bool
+
+    @EnvironmentObject private var gestureArbiter: HorizontalGestureArbiter
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var grown = false
+    @State private var scrubbing = false
+    @State private var scrubMoved = false
+    @State private var scrubStartID: RecordBar.ID?
 
     private var maxAmount: Double {
         max(bars.map(\.amount).max() ?? 1, 1)
     }
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: bars.count > 8 ? 4 : 10) {
-            ForEach(bars) { bar in
-                let selected = selectedBarID == bar.id
-                Group {
-                    if bar.isFuture {
-                        barColumn(bar: bar, selected: selected)
-                    } else {
-                        Button {
-                            withAnimation(.snappy(duration: 0.2)) {
-                                selectedBarID = selected ? nil : bar.id
-                            }
-                        } label: {
-                            barColumn(bar: bar, selected: selected)
-                        }
-                        .buttonStyle(.plain)
+        GeometryReader { proxy in
+            HStack(alignment: .bottom, spacing: bars.count > 8 ? 4 : 10) {
+                ForEach(bars) { bar in
+                    barColumn(bar: bar, selected: selectedBarID == bar.id)
+                        .frame(maxWidth: .infinity)
                         .accessibilityLabel("\(bar.title) \(WNFFormat.money(bar.amount, privacy: privacy))")
-                        .accessibilityValue(selected ? "已选中" : "未选中")
-                    }
+                        .accessibilityValue(selectedBarID == bar.id ? "已选中" : "未选中")
+                        .accessibilityAction {
+                            selectedBarID = selectedBarID == bar.id ? nil : bar.id
+                        }
                 }
-                .frame(maxWidth: .infinity)
+            }
+            .contentShape(Rectangle())
+            // Scrub to read: touch lands on a bar, dragging sweeps the
+            // selection across with a haptic tick per boundary — like running
+            // a finger along a row of piano keys. A no-move tap toggles.
+            .gesture(scrubGesture(width: proxy.size.width))
+            .accessibilityIdentifier("records.chart")
+        }
+        .frame(height: 152)
+        .onAppear {
+            guard !grown else { return }
+            if reduceMotion {
+                grown = true
+            } else {
+                withAnimation(nil) { grown = false }
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.68)) {
+                    grown = true
+                }
             }
         }
     }
 
+    private func scrubGesture(width: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                guard gestureArbiter.claim(.chartScrub) else { return }
+                let index = barIndex(at: value.location.x, width: width)
+                guard bars.indices.contains(index) else { return }
+                let bar = bars[index]
+
+                if !scrubbing {
+                    scrubbing = true
+                    scrubMoved = false
+                    scrubStartID = selectedBarID
+                }
+                if abs(value.translation.width) > 6 || abs(value.translation.height) > 6 {
+                    scrubMoved = true
+                }
+
+                guard !bar.isFuture else { return }
+                if selectedBarID != bar.id {
+                    selectedBarID = bar.id
+                    WNFHaptics.selection()
+                }
+            }
+            .onEnded { value in
+                defer {
+                    scrubbing = false
+                    gestureArbiter.release(.chartScrub)
+                }
+                guard scrubbing else { return }
+                // A stationary tap on the already-selected bar deselects it.
+                if !scrubMoved {
+                    let index = barIndex(at: value.location.x, width: width)
+                    if bars.indices.contains(index), bars[index].id == scrubStartID {
+                        selectedBarID = nil
+                    }
+                }
+            }
+    }
+
+    private func barIndex(at x: CGFloat, width: CGFloat) -> Int {
+        guard width > 0, !bars.isEmpty else { return 0 }
+        let slot = width / CGFloat(bars.count)
+        return min(bars.count - 1, max(0, Int(x / slot)))
+    }
+
     private func barColumn(bar: RecordBar, selected: Bool) -> some View {
-        VStack(spacing: 6) {
+        let index = bars.firstIndex { $0.id == bar.id } ?? 0
+        let height = bar.isFuture ? 6 : max(8, 100 * bar.amount / maxAmount)
+
+        return VStack(spacing: 6) {
             ZStack(alignment: .bottom) {
                 if selected {
                     Text("\(bar.title) \(WNFFormat.money(bar.amount, privacy: privacy))")
@@ -617,13 +842,20 @@ private struct BarChart: View {
                         .background(WNFTheme.ink, in: Capsule())
                         .offset(y: -104)
                         .fixedSize()
+                        .transition(.scale(scale: 0.7, anchor: .bottom).combined(with: .opacity))
+                        .animation(.spring(response: 0.32, dampingFraction: 0.7), value: selectedBarID)
                 }
 
-                RoundedRectangle(cornerRadius: bars.count > 8 ? 4 : 8)
-                    .fill(barColor(bar: bar, selected: selected))
-                    .frame(width: bars.count > 8 ? 16 : 24, height: bar.isFuture ? 6 : max(8, 100 * bar.amount / maxAmount))
-                    .offset(y: selected ? -2 : 0)
-                    .shadow(color: selected ? .black.opacity(0.24) : .clear, radius: 9, y: 5)
+                barBody(bar: bar, selected: selected, height: height)
+                    // Grow from the floor with a per-bar stagger when the
+                    // period changes (`.id(period)` upstream resets `grown`).
+                    .scaleEffect(y: grown ? 1 : 0.04, anchor: .bottom)
+                    .animation(
+                        reduceMotion
+                            ? .easeOut(duration: 0.2)
+                            : .spring(response: 0.5, dampingFraction: 0.62).delay(Double(index) * 0.038),
+                        value: grown
+                    )
             }
             .frame(height: 130, alignment: .bottom)
 
@@ -633,10 +865,51 @@ private struct BarChart: View {
         }
     }
 
-    private func barColor(bar: RecordBar, selected: Bool) -> Color {
-        if selected { return WNFTheme.ink }
-        if bar.isFuture { return Color(red: 0.95, green: 0.92, blue: 0.82) }
-        return WNFTheme.yellow
+    @ViewBuilder
+    private func barBody(bar: RecordBar, selected: Bool, height: CGFloat) -> some View {
+        let radius: CGFloat = bars.count > 8 ? 4 : 8
+        let width: CGFloat = bars.count > 8 ? 16 : 24
+
+        let base = RoundedRectangle(cornerRadius: radius)
+            .fill(barFill(bar: bar, selected: selected))
+            .frame(width: width, height: height)
+            .offset(y: selected ? -2 : 0)
+            .shadow(color: selected ? .black.opacity(0.24) : .clear, radius: 9, y: 5)
+
+        if bar.isToday && !selected && !reduceMotion {
+            // Today's bar breathes a soft gold halo — "this one is still
+            // filling up" — without stealing the chart's calm.
+            base.phaseAnimator([false, true]) { view, glowing in
+                view.shadow(
+                    color: WNFTheme.gold.opacity(glowing ? 0.65 : 0.15),
+                    radius: glowing ? 10 : 4,
+                    y: 2
+                )
+            } animation: { _ in
+                .easeInOut(duration: 1.4)
+            }
+        } else {
+            base
+        }
+    }
+
+    private func barFill(bar: RecordBar, selected: Bool) -> AnyShapeStyle {
+        if selected {
+            return AnyShapeStyle(WNFTheme.ink)
+        }
+        if bar.isFuture {
+            return AnyShapeStyle(Color(red: 0.95, green: 0.92, blue: 0.82))
+        }
+        if bar.isToday {
+            return AnyShapeStyle(
+                LinearGradient(
+                    colors: [Color(red: 1.0, green: 0.88, blue: 0.45), WNFTheme.yellow],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+        }
+        return AnyShapeStyle(WNFTheme.yellow)
     }
 }
 
@@ -645,15 +918,37 @@ private struct Badge: View {
     var label: String
     var unlocked: Bool
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var wiggles = 0
+
     var body: some View {
         VStack(spacing: 6) {
             Image(systemName: symbol)
                 .font(.system(size: 20, weight: .bold))
                 .foregroundStyle(WNFTheme.ink)
                 .frame(width: 50, height: 50)
-                .background(unlocked ? WNFTheme.yellow : Color(red: 0.95, green: 0.92, blue: 0.82), in: RoundedRectangle(cornerRadius: 16))
+                .background {
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(unlocked ? WNFTheme.yellow : Color(red: 0.95, green: 0.92, blue: 0.82))
+                        // Earned badges glint like enamel pins; locked ones
+                        // stay matte (the shimmer clock never runs for them).
+                        .goldShimmer(period: 4.8, intensity: 0.5, isActive: unlocked)
+                }
                 .saturation(unlocked ? 1 : 0)
                 .opacity(unlocked ? 1 : 0.48)
+                .keyframeAnimator(initialValue: 0.0, trigger: wiggles) { view, angle in
+                    view.rotationEffect(.degrees(angle))
+                } keyframes: { _ in
+                    KeyframeTrack {
+                        CubicKeyframe(0, duration: 0.0001)
+                        CubicKeyframe(-9, duration: 0.07)
+                        CubicKeyframe(7.5, duration: 0.11)
+                        CubicKeyframe(-4, duration: 0.11)
+                        CubicKeyframe(2, duration: 0.10)
+                        CubicKeyframe(0, duration: 0.10)
+                    }
+                }
+                .animation(.spring(response: 0.5, dampingFraction: 0.6), value: unlocked)
             Text(label)
                 .font(.system(size: 10, weight: .heavy))
                 .foregroundStyle(WNFTheme.muted)
@@ -661,10 +956,19 @@ private struct Badge: View {
                 .minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard !reduceMotion else { return }
+            wiggles += 1
+            WNFHaptics.soft(intensity: unlocked ? 0.8 : 0.4)
+        }
+        .accessibilityLabel("\(label)徽章")
+        .accessibilityValue(unlocked ? "已解锁" : "未解锁")
     }
 }
 
 #Preview {
     RecordsView()
         .environmentObject(WageState())
+        .environmentObject(HorizontalGestureArbiter())
 }

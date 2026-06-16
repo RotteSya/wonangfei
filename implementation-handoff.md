@@ -7,6 +7,7 @@ The runnable entry and live prototype files are:
 - `WNF.xcodeproj` / `WNF/`：native SwiftUI iOS implementation of the current app design.
 - `WNFWidget/`：Widget extension for desktop and lock-screen widgets.
 - `WNFTests/`：unit tests.
+- `WNFUITests/`：XCUITest UI tour (`JellyTourUITests`) that drives and films every interaction.
 - `.xcodebuildmcp/config.yaml`：persisted XcodeBuildMCP defaults for the native app, including project, scheme, simulator, and bundle id.
 - `index.html`：implemented static app shell. It renders the actual product screens, keeps the iPhone frame as the primary surface, exposes desktop/mobile control panels, persists local state, and links back to the handoff docs.
 - `窝囊费.html`：entry shell, tweak state, iPhone frame, three core screens and comparison boards.
@@ -21,6 +22,21 @@ The runnable entry and live prototype files are:
 - `tweaks-panel.jsx`：internal preview controls.
 
 Current `main` note: The app target ships with `WNFWidget` and `WNFTests`. The wage/settings core remains in the app target; there is still no `WageCore.swift` or `WageDisplayModel.swift` split. Settings and daily-record lifecycle stay in `WNF/WageState.swift`, while SQLite daily-record storage, wage calculation, formatting, and Widget snapshot writing are split into dedicated Swift files.
+
+## Motion & Visual FX (feat/jelly-shell-and-gold-shaders)
+
+A dedicated FX layer drives the home/records polish and the interactive shell. New sources:
+
+- `WNF/WNFShaders.metal` — stitchable shaders: `wnfGoldShimmer` (diagonal glint sweep), `wnfPaperGrain` (static printed-paper grain), `wnfMoltenGold` (progress-bar liquid fill, carves the visible body + lapping crest out of a full-width rect). `GenieEffect.metal` (share-card warp) is unchanged.
+- `WNF/ShaderFX.swift` — SwiftUI wrappers: `.goldShimmer/.paperGrain` modifiers, `JellyStretch` (`.jellyStretch(_:)`, a squash-&-stretch *transform* — deliberately not a `distortionEffect` so it composes over the mascot's `AVPlayerLayer`), `SquishButtonStyle` (`.buttonStyle(.squish)`), and the shared `WNFHaptics` generators. All shimmer/grain/molten clocks are `TimelineView(paused:)`, gated by page visibility (`isActive`) and `accessibilityReduceMotion`.
+- `WNF/OdometerText.swift` — `OdometerMoneyText`, the home money readout: per-digit gas-pump wheels, `+¥1` rollover chips + soft haptic, gold shimmer. Sized by digit-count font tiers plus a deterministic `fitScale`/`maxWidth` layout cap so a large salary never clips or stretches the TopBar.
+- `WNF/PagerShell.swift` — continuous `AppTabBar(progress:onSelect:)` (pill tracks fractional pager position 0…2, squishes at the rubber-band walls) and `HorizontalGestureArbiter` (resolves pager-swipe vs. chart-scrub for one touch).
+
+Interactive shell (`WNF/RootView.swift`): the three tabs are one mounted `HStack` strip steered by a `simultaneousGesture` drag — directional axis lock, rubber-banded ends, velocity-seeded `interpolatingSpring` settle, jelly squash via `jellyStretch`, and `@GestureState` cancel recovery. Tab taps and swipes share `commitPager`/`selectTab` (rigid haptic + mascot-session forwarding). `HorizontalGestureArbiter` is injected as an `environmentObject`; `RecordsView`/`BarChart` previews must supply one.
+
+Home (`WNF/HomeView.swift`): molten-gold progress bar, long-press coin fountain (reduce-motion gated), rotating thought bubble, pulsing live-status dot, over a plain `WNFTheme.bg` (the earlier drifting ambient glow was removed at the user's request). Records (`WNF/RecordsView.swift`): chart promoted under the hero, `PeriodSwitcher` matched-geometry segmented control, springy staggered bar grow-in, scrub-to-read with per-bar haptics, today-bar glow, grain hero card with breathing watermark, staggered card entrance.
+
+UI driver/guard: `WNFUITests/JellyTourUITests.swift` (`testGrandTour`) walks every interaction with `TOUR-MARK` log markers; run under `simctl io recordVideo` to film. It depends on the accessibility identifiers listed in `AGENTS.md`.
 
 ## Native Onboarding
 

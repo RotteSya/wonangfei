@@ -28,11 +28,14 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                TopBar()
-                    .padding(.top, 2)
+        // Fixed TopBar outside the ScrollView — same fix as RecordsView: a
+        // scroll-embedded TopBar's buttons lost taps under the pager's
+        // simultaneousGesture drag.
+        VStack(spacing: 0) {
+            TopBar()
+                .padding(.top, 2)
 
+            ScrollView {
                 VStack(spacing: 16) {
                     profileBanner
 
@@ -125,8 +128,9 @@ struct SettingsView: View {
                     footer
                 }
                 .padding(.horizontal, 18)
+                .padding(.top, 16)
+                .padding(.bottom, 105)
             }
-            .padding(.bottom, 105)
         }
         .background(WNFTheme.bg)
         .sheet(item: $legalDocument) { document in

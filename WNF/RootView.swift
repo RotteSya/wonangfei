@@ -63,10 +63,20 @@ enum AppTab: String, CaseIterable, Identifiable {
 struct RootView: View {
     @Environment(\.displayScale) private var displayScale
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var state: WageState
     @StateObject private var homeMascotVideoSession = HomeMascotVideoSessionCoordinator()
+    @StateObject private var gestureArbiter = HorizontalGestureArbiter()
     @State private var selectedTab: AppTab = .home
-    @State private var tabTransitionDirection = 1
+    @State private var pagerDragOffset: CGFloat = 0
+    @State private var pagerAxisLock: Axis?
+    @State private var jellyStretch: CGFloat = 0
+    @State private var pageWidth: CGFloat = 390
+    /// True while a pager touch is down. `@GestureState` resets on BOTH end
+    /// and cancellation, so watching it flip false catches the cancels where
+    /// `onEnded` never runs (system gesture steal, incoming banner, app
+    /// switcher) — otherwise the strip would stay frozen mid-drag.
+    @GestureState private var pagerTouchActive = false
     @State private var entryAnimating = false
     @State private var entryExpanded = false
     @State private var homeSharePresented = false
@@ -167,6 +177,16 @@ struct RootView: View {
                 selectedTab: selectedTab,
                 isHomeSessionVisible: isHomeMascotSessionVisible
             )
+            // A gesture interrupted by app switching never delivers onEnded;
+            // make sure the strip and the jelly land somewhere sane.
+            if newPhase != .active {
+                pagerAxisLock = nil
+                gestureArbiter.release(.pager)
+                withAnimation(.easeOut(duration: 0.2)) {
+                    pagerDragOffset = 0
+                    jellyStretch = 0
+                }
+            }
         }
     }
 
@@ -200,17 +220,24 @@ struct RootView: View {
         }
     }
 
+    /// Continuous pager position in pages (0 = home … 2 = settings). Drives
+    /// the tab bar pill and per-page depth treatment so everything tracks the
+    /// finger 1:1 during a swipe.
+    private var pagerProgress: CGFloat {
+        CGFloat(selectedTab.order) - pagerDragOffset / max(pageWidth, 1)
+    }
+
+    private var pagerGesturesEnabled: Bool {
+        onboardingCompleted && !entryAnimating && !homeSharePresented && !settlementPresented
+    }
+
     private var appShell: some View {
         ZStack(alignment: .bottom) {
             WNFTheme.bg.ignoresSafeArea()
 
-            currentTabContent
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .id(selectedTab)
-            .transition(tabContentTransition)
-            .clipped()
+            tabPager
 
-            AppTabBar(selectedTab: tabSelection)
+            AppTabBar(progress: pagerProgress, onSelect: selectTab)
                 .padding(.bottom, 10)
                 .background(
                     GeometryReader { proxy in
@@ -273,50 +300,194 @@ struct RootView: View {
         }
     }
 
-    private var tabSelection: Binding<AppTab> {
-        Binding(
-            get: { selectedTab },
-            set: { selectTab($0) }
-        )
-    }
+    // MARK: Interactive jelly pager
+    //
+    // All three pages stay mounted side by side; the shell slides them as one
+    // strip. A horizontal drag anywhere steers it 1:1 (with directional lock
+    // so vertical scrolling inside pages wins diagonal fights), the release
+    // spring inherits the fling velocity, and the whole strip shears like
+    // soft pudding while it moves — `jellyStretch` follows drag velocity and
+    // wobbles back to zero through a low-damping spring on settle.
+    private var tabPager: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
 
-    @ViewBuilder
-    private var currentTabContent: some View {
-        switch selectedTab {
-        case .home:
-            HomeView(
-                isShareCardPresented: $homeSharePresented,
-                onShare: presentShareCard,
-                onClockOut: presentSettlement
-            )
-            .environmentObject(homeMascotVideoSession.controller)
-        case .records:
-            RecordsView()
-        case .settings:
-            SettingsView {
-                onboardingCompleted = false
-                syncHomeMascotVideoSession()
+            HStack(spacing: 0) {
+                HomeView(
+                    isShareCardPresented: $homeSharePresented,
+                    isActive: abs(pagerProgress) < 0.999,
+                    onShare: presentShareCard,
+                    onClockOut: presentSettlement
+                )
+                .environmentObject(homeMascotVideoSession.controller)
+                .environment(\.pagerJellyStretch, jellyStretch)
+                .jellyStretch(jellyStretch)
+                .frame(width: width, height: proxy.size.height)
+                .modifier(PageDepthFX(rel: pagerProgress - 0))
+
+                RecordsView()
+                    .jellyStretch(jellyStretch)
+                    .frame(width: width, height: proxy.size.height)
+                    .modifier(PageDepthFX(rel: pagerProgress - 1))
+
+                SettingsView {
+                    onboardingCompleted = false
+                    syncHomeMascotVideoSession()
+                }
+                .jellyStretch(jellyStretch)
+                .frame(width: width, height: proxy.size.height)
+                .modifier(PageDepthFX(rel: pagerProgress - 2))
             }
+            .frame(width: width * 3, alignment: .leading)
+            .offset(x: -CGFloat(selectedTab.order) * width + pagerDragOffset)
+            .onAppear { pageWidth = width }
+            .onChange(of: width) { _, newWidth in pageWidth = newWidth }
+        }
+        .clipped()
+        .environmentObject(gestureArbiter)
+        .simultaneousGesture(pagerDragGesture)
+        .onChange(of: pagerTouchActive) { _, touchDown in
+            // Touch lifted. If onEnded already ran it cleared the axis lock;
+            // a still-set horizontal lock means the gesture was CANCELLED
+            // mid-drag — settle the strip to the nearest page so nothing is
+            // left hanging askew.
+            guard !touchDown, pagerAxisLock == .horizontal else { return }
+            pagerAxisLock = nil
+            gestureArbiter.release(.pager)
+            let nearestOrder = Int(pagerProgress.rounded())
+            let target = AppTab.allCases.first { $0.order == min(max(nearestOrder, 0), 2) } ?? selectedTab
+            commitPager(to: target, velocityX: 0)
         }
     }
 
-    private var tabContentTransition: AnyTransition {
-        let insertionEdge: Edge = tabTransitionDirection >= 0 ? .trailing : .leading
-        let removalEdge: Edge = tabTransitionDirection >= 0 ? .leading : .trailing
+    private var pagerDragGesture: some Gesture {
+        DragGesture(minimumDistance: 12, coordinateSpace: .local)
+            .updating($pagerTouchActive) { _, isActive, _ in
+                isActive = true
+            }
+            .onChanged { value in
+                guard pagerGesturesEnabled else { return }
 
-        return .asymmetric(
-            insertion: .move(edge: insertionEdge).combined(with: .opacity),
-            removal: .move(edge: removalEdge).combined(with: .opacity)
-        )
+                if pagerAxisLock == nil {
+                    let t = value.translation
+                    if abs(t.width) > abs(t.height) * 1.15 {
+                        guard gestureArbiter.claim(.pager) else {
+                            pagerAxisLock = .vertical
+                            return
+                        }
+                        pagerAxisLock = .horizontal
+                    } else {
+                        pagerAxisLock = .vertical
+                    }
+                }
+                guard pagerAxisLock == .horizontal else { return }
+
+                pagerDragOffset = rubberBandedOffset(for: value.translation.width)
+
+                if !reduceMotion {
+                    let target = max(-JellyStretch.maxStretch, min(JellyStretch.maxStretch, value.velocity.width * 0.02))
+                    withAnimation(.interactiveSpring(response: 0.16, dampingFraction: 0.86)) {
+                        jellyStretch = target
+                    }
+                }
+            }
+            .onEnded { value in
+                defer {
+                    pagerAxisLock = nil
+                    gestureArbiter.release(.pager)
+                }
+                guard pagerAxisLock == .horizontal else { return }
+
+                let width = max(pageWidth, 1)
+                let order = CGFloat(selectedTab.order)
+                let predictedProgress = order - value.predictedEndTranslation.width / width
+                var targetOrder = Int(predictedProgress.rounded())
+
+                // A confident flick always moves at least one page, even if
+                // the predicted offset rounds back to where we started.
+                if targetOrder == selectedTab.order, abs(value.velocity.width) > 260 {
+                    targetOrder += value.velocity.width < 0 ? 1 : -1
+                }
+
+                let target = AppTab.allCases.first { $0.order == min(max(targetOrder, 0), 2) } ?? selectedTab
+                commitPager(to: target, velocityX: value.velocity.width)
+            }
+    }
+
+    /// Full strip travel inside [home…settings] is 1:1; beyond the ends the
+    /// offset compresses like a scroll view hitting its bounds.
+    private func rubberBandedOffset(for translation: CGFloat) -> CGFloat {
+        let width = max(pageWidth, 1)
+        let order = CGFloat(selectedTab.order)
+        let minOffset = -(2 - order) * width   // dragging toward settings
+        let maxOffset = order * width          // dragging toward home
+
+        if translation > maxOffset {
+            let over = translation - maxOffset
+            return maxOffset + over / (1 + over / (width * 0.45)) * 0.5
+        }
+        if translation < minOffset {
+            let over = minOffset - translation
+            return minOffset - over / (1 + over / (width * 0.45)) * 0.5
+        }
+        return translation
+    }
+
+    private func commitPager(to tab: AppTab, velocityX: CGFloat) {
+        let width = max(pageWidth, 1)
+        let currentOffset = -CGFloat(selectedTab.order) * width + pagerDragOffset
+        let targetOffset = -CGFloat(tab.order) * width
+        let delta = targetOffset - currentOffset
+        // interpolatingSpring's initialVelocity is normalized to the travel
+        // distance, so the settle picks up exactly where the finger left off.
+        let normalizedVelocity = abs(delta) > 1 ? velocityX / delta : 0
+
+        let landed = tab != selectedTab
+        withAnimation(
+            reduceMotion
+                ? .easeInOut(duration: 0.3)
+                : .interpolatingSpring(stiffness: 270, damping: 30, initialVelocity: normalizedVelocity)
+        ) {
+            selectedTab = tab
+            pagerDragOffset = 0
+        }
+        releaseJellyWobble()
+
+        if landed {
+            WNFHaptics.rigid(intensity: 0.65)
+            homeMascotVideoSession.handleTabChange(to: tab, isHomeSessionVisible: isHomeMascotSessionVisible)
+        }
+    }
+
+    /// Lets the current shear spring back through a deliberately under-damped
+    /// curve — that residual oscillation IS the jelly wobble.
+    private func releaseJellyWobble() {
+        guard jellyStretch != 0 else { return }
+        withAnimation(.spring(response: 0.55, dampingFraction: 0.34)) {
+            jellyStretch = 0
+        }
     }
 
     private func selectTab(_ tab: AppTab) {
         guard tab != selectedTab else { return }
-        tabTransitionDirection = tab.order > selectedTab.order ? 1 : -1
+        guard pagerGesturesEnabled else { return }
 
-        withAnimation(.snappy(duration: 0.32, extraBounce: 0.02)) {
-            selectedTab = tab
+        // Tab-bar taps get the same physicality as swipes: kick the jelly in
+        // the travel direction, then let it wobble out on arrival.
+        if !reduceMotion {
+            jellyStretch = tab.order > selectedTab.order ? -11 : 11
         }
+        withAnimation(
+            reduceMotion
+                ? .easeInOut(duration: 0.3)
+                : .interpolatingSpring(stiffness: 240, damping: 27)
+        ) {
+            selectedTab = tab
+            pagerDragOffset = 0
+        }
+        releaseJellyWobble()
+
+        WNFHaptics.rigid(intensity: 0.65)
         homeMascotVideoSession.handleTabChange(to: tab, isHomeSessionVisible: isHomeMascotSessionVisible)
     }
 
@@ -568,52 +739,6 @@ private struct WindowSceneScaleReader: UIViewRepresentable {
             lastReportedScale = scale
             onScaleChange?(scale)
         }
-    }
-}
-
-struct AppTabBar: View {
-    @Binding var selectedTab: AppTab
-
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(AppTab.allCases) { tab in
-                Button {
-                    selectedTab = tab
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: tab.symbol)
-                            .font(.system(size: 15, weight: .bold))
-                        if selectedTab == tab {
-                            Text(tab.title)
-                                .font(.system(size: 13, weight: .heavy))
-                        }
-                    }
-                    .foregroundStyle(selectedTab == tab ? Color.white : WNFTheme.inkSoft)
-                    .padding(.horizontal, selectedTab == tab ? 17 : 13)
-                    .frame(height: 44)
-                    .background {
-                        if selectedTab == tab {
-                            Capsule().fill(WNFTheme.ink)
-                        }
-                    }
-                    .overlay {
-                        if selectedTab == tab {
-                            Image(systemName: tab.symbol)
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundStyle(WNFTheme.yellow)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.leading, 17)
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(tab.title)
-            }
-        }
-        .padding(6)
-        .background(.ultraThinMaterial, in: Capsule())
-        .overlay(Capsule().stroke(.white.opacity(0.8), lineWidth: 0.5))
-        .shadow(color: .black.opacity(0.16), radius: 18, y: 10)
     }
 }
 

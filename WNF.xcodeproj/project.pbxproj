@@ -24,6 +24,10 @@
 		100000000000000000000115 /* WageFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000215 /* WageFormatting.swift */; };
 		100000000000000000000116 /* ShareCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000216 /* ShareCard.swift */; };
 		100000000000000000000A01 /* GenieEffect.metal in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000A02 /* GenieEffect.metal */; };
+		100000000000000000000A03 /* WNFShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000A04 /* WNFShaders.metal */; };
+		100000000000000000000A05 /* ShaderFX.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000A06 /* ShaderFX.swift */; };
+		100000000000000000000A07 /* OdometerText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000A08 /* OdometerText.swift */; };
+		100000000000000000000A09 /* PagerShell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000A0A /* PagerShell.swift */; };
 		100000000000000000000117 /* HomeMascotVideoSessionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000217 /* HomeMascotVideoSessionCoordinator.swift */; };
 		100000000000000000000118 /* WorkStatusPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000218 /* WorkStatusPresentation.swift */; };
 		100000000000000000000119 /* WidgetShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000219 /* WidgetShared.swift */; };
@@ -35,9 +39,12 @@
 		100000000000000000000128 /* ClockOutReminder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000237 /* ClockOutReminder.swift */; };
 		100000000000000000000129 /* BubbleQuoteEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000238 /* BubbleQuoteEngine.swift */; };
 		100000000000000000000125 /* PlaceholderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000234 /* PlaceholderTests.swift */; };
+		100000000000000000000B01 /* JellyTourUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000B02 /* JellyTourUITests.swift */; };
 		100000000000000000000130 /* Legal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000239 /* Legal.swift */; };
 		100000000000000000000131 /* WidgetShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000219 /* WidgetShared.swift */; };
 		100000000000000000000132 /* WidgetSnapshotWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000240 /* WidgetSnapshotWriter.swift */; };
+		100000000000000000000133 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000241 /* PrivacyInfo.xcprivacy */; };
+		100000000000000000000134 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000241 /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -49,6 +56,13 @@
 			remoteInfo = WNFWidget;
 		};
 		100000000000000000000902 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 100000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 100000000000000000000501;
+			remoteInfo = WNF;
+		};
+		100000000000000000000B12 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 100000000000000000000001 /* Project object */;
 			proxyType = 1;
@@ -90,6 +104,10 @@
 		100000000000000000000215 /* WageFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WageFormatting.swift; sourceTree = "<group>"; };
 		100000000000000000000216 /* ShareCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareCard.swift; sourceTree = "<group>"; };
 		100000000000000000000A02 /* GenieEffect.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = GenieEffect.metal; sourceTree = "<group>"; };
+		100000000000000000000A04 /* WNFShaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = WNFShaders.metal; sourceTree = "<group>"; };
+		100000000000000000000A06 /* ShaderFX.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShaderFX.swift; sourceTree = "<group>"; };
+		100000000000000000000A08 /* OdometerText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OdometerText.swift; sourceTree = "<group>"; };
+		100000000000000000000A0A /* PagerShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PagerShell.swift; sourceTree = "<group>"; };
 		100000000000000000000217 /* HomeMascotVideoSessionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeMascotVideoSessionCoordinator.swift; sourceTree = "<group>"; };
 		100000000000000000000218 /* WorkStatusPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkStatusPresentation.swift; sourceTree = "<group>"; };
 		100000000000000000000219 /* WidgetShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetShared.swift; sourceTree = "<group>"; };
@@ -106,8 +124,11 @@
 		100000000000000000000237 /* ClockOutReminder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockOutReminder.swift; sourceTree = "<group>"; };
 		100000000000000000000238 /* BubbleQuoteEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BubbleQuoteEngine.swift; sourceTree = "<group>"; };
 		100000000000000000000234 /* PlaceholderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceholderTests.swift; sourceTree = "<group>"; };
+		100000000000000000000B02 /* JellyTourUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JellyTourUITests.swift; sourceTree = "<group>"; };
+		100000000000000000000B03 /* WNFUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WNFUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		100000000000000000000239 /* Legal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Legal.swift; sourceTree = "<group>"; };
 		100000000000000000000240 /* WidgetSnapshotWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetSnapshotWriter.swift; sourceTree = "<group>"; };
+		100000000000000000000241 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -132,6 +153,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		100000000000000000000B06 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -141,6 +169,7 @@
 				100000000000000000000402 /* WNF */,
 				100000000000000000000404 /* WNFWidget */,
 				100000000000000000000405 /* WNFTests */,
+				100000000000000000000B13 /* WNFUITests */,
 				100000000000000000000403 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -151,6 +180,7 @@
 				100000000000000000000201 /* WNFApp.swift */,
 				100000000000000000000223 /* Info.plist */,
 				100000000000000000000222 /* WNF.entitlements */,
+				100000000000000000000241 /* PrivacyInfo.xcprivacy */,
 				100000000000000000000202 /* WageState.swift */,
 				100000000000000000000213 /* DailyRecordStorage.swift */,
 				100000000000000000000214 /* WageCalculator.swift */,
@@ -166,6 +196,10 @@
 				100000000000000000000217 /* HomeMascotVideoSessionCoordinator.swift */,
 				100000000000000000000216 /* ShareCard.swift */,
 				100000000000000000000A02 /* GenieEffect.metal */,
+				100000000000000000000A04 /* WNFShaders.metal */,
+				100000000000000000000A06 /* ShaderFX.swift */,
+				100000000000000000000A08 /* OdometerText.swift */,
+				100000000000000000000A0A /* PagerShell.swift */,
 				100000000000000000000238 /* BubbleQuoteEngine.swift */,
 				100000000000000000000236 /* DailySettlement.swift */,
 				100000000000000000000237 /* ClockOutReminder.swift */,
@@ -199,12 +233,21 @@
 			path = WNFTests;
 			sourceTree = "<group>";
 		};
+		100000000000000000000B13 /* WNFUITests */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000B02 /* JellyTourUITests.swift */,
+			);
+			path = WNFUITests;
+			sourceTree = "<group>";
+		};
 		100000000000000000000403 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				100000000000000000000200 /* WNF.app */,
 				100000000000000000000233 /* WNFWidget.appex */,
 				100000000000000000000235 /* WNFTests.xctest */,
+				100000000000000000000B03 /* WNFUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -266,6 +309,24 @@
 			productReference = 100000000000000000000235 /* WNFTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		100000000000000000000B04 /* WNFUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 100000000000000000000B08 /* Build configuration list for PBXNativeTarget "WNFUITests" */;
+			buildPhases = (
+				100000000000000000000B05 /* Sources */,
+				100000000000000000000B06 /* Frameworks */,
+				100000000000000000000B07 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				100000000000000000000B11 /* PBXTargetDependency */,
+			);
+			name = WNFUITests;
+			productName = WNFUITests;
+			productReference = 100000000000000000000B03 /* WNFUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -283,6 +344,10 @@
 						CreatedOnToolsVersion = 26.5;
 					};
 					100000000000000000000503 = {
+						CreatedOnToolsVersion = 26.5;
+						TestTargetID = 100000000000000000000501;
+					};
+				100000000000000000000B04 = {
 						CreatedOnToolsVersion = 26.5;
 						TestTargetID = 100000000000000000000501;
 					};
@@ -306,6 +371,7 @@
 				100000000000000000000501 /* WNF */,
 				100000000000000000000502 /* WNFWidget */,
 				100000000000000000000503 /* WNFTests */,
+				100000000000000000000B04 /* WNFUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -316,6 +382,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				100000000000000000000109 /* Assets.xcassets in Resources */,
+				100000000000000000000133 /* PrivacyInfo.xcprivacy in Resources */,
 				100000000000000000000122 /* terms.html in Resources */,
 				100000000000000000000123 /* privacy.html in Resources */,
 				100000000000000000000111 /* home-typing.mov in Resources */,
@@ -327,10 +394,18 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				100000000000000000000134 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		100000000000000000000607 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		100000000000000000000B07 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -360,6 +435,10 @@
 				100000000000000000000117 /* HomeMascotVideoSessionCoordinator.swift in Sources */,
 				100000000000000000000116 /* ShareCard.swift in Sources */,
 				100000000000000000000A01 /* GenieEffect.metal in Sources */,
+				100000000000000000000A03 /* WNFShaders.metal in Sources */,
+				100000000000000000000A05 /* ShaderFX.swift in Sources */,
+				100000000000000000000A07 /* OdometerText.swift in Sources */,
+				100000000000000000000A09 /* PagerShell.swift in Sources */,
 				100000000000000000000129 /* BubbleQuoteEngine.swift in Sources */,
 				100000000000000000000127 /* DailySettlement.swift in Sources */,
 				100000000000000000000128 /* ClockOutReminder.swift in Sources */,
@@ -386,6 +465,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		100000000000000000000B05 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000B01 /* JellyTourUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -398,6 +485,11 @@
 			isa = PBXTargetDependency;
 			target = 100000000000000000000501 /* WNF */;
 			targetProxy = 100000000000000000000902 /* PBXContainerItemProxy */;
+		};
+		100000000000000000000B11 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 100000000000000000000501 /* WNF */;
+			targetProxy = 100000000000000000000B12 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -536,7 +628,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-					MARKETING_VERSION = 0.1;
+					MARKETING_VERSION = 1.0;
 					OTHER_LDFLAGS = (
 						"$(inherited)",
 						"-lsqlite3",
@@ -574,7 +666,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-					MARKETING_VERSION = 0.1;
+					MARKETING_VERSION = 1.0;
 					OTHER_LDFLAGS = (
 						"$(inherited)",
 						"-lsqlite3",
@@ -604,7 +696,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.1;
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.wonangfei.app.widget;
 				PRODUCT_BUNDLE_PACKAGE_TYPE = "XPC!";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -632,7 +724,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.1;
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.wonangfei.app.widget;
 				PRODUCT_BUNDLE_PACKAGE_TYPE = "XPC!";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -657,7 +749,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1;
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.wonangfei.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -680,12 +772,56 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1;
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.wonangfei.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/WNF.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/WNF";
+			};
+			name = Release;
+		};
+		100000000000000000000B09 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = TZ2T95MG29;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wonangfei.app.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = WNF;
+			};
+			name = Debug;
+		};
+		100000000000000000000B10 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = TZ2T95MG29;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wonangfei.app.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = WNF;
 			};
 			name = Release;
 		};
@@ -724,6 +860,15 @@
 			buildConfigurations = (
 				100000000000000000000807 /* Debug */,
 				100000000000000000000808 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		100000000000000000000B08 /* Build configuration list for PBXNativeTarget "WNFUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				100000000000000000000B09 /* Debug */,
+				100000000000000000000B10 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

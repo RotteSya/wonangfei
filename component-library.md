@@ -38,7 +38,15 @@
 - Inactive state: transparent item, ink-soft label/icon.
 - Position: absolute bottom `18px`.
 - Interaction: tap target is the full button, active item expands horizontally.
-- Native transition: tab content slides horizontally by tab order and crossfades; bottom selected state animates with the same snappy timing.
+- Native (current): `AppTabBar(progress:onSelect:)` in `WNF/PagerShell.swift`. The ink pill is driven by a *continuous* pager position (`0…2`), so it glides, stretches, and squishes against the wall in lock-step with an in-progress swipe rather than snapping between discrete tabs. Tabs are an interactive jelly pager (see Jelly Pager Shell), not a slide+crossfade.
+
+### Jelly Pager Shell
+
+- Owner: `WNF/RootView.swift` (`tabPager`, `pagerDragGesture`, `commitPager`, `selectTab`).
+- All three pages stay mounted in one horizontal strip; a `simultaneousGesture` drag steers it 1:1 with a directional axis lock (vertical scrolls inside a page win), rubber-banded ends, and a velocity-seeded `interpolatingSpring` settle.
+- Feel: the strip squashes/stretches via `JellyStretch` while moving and wobbles out on arrival; outgoing pages get `PageDepthFX` parallax + dim + scale; landing fires a `rigid` haptic.
+- `HorizontalGestureArbiter` resolves the swipe vs. the records chart-scrub for a single touch. `@GestureState` recovers cancelled gestures (system steal / app switch).
+- Reduce Motion: swaps springs for short eases and drops the jelly/parallax.
 
 ## Brand
 
@@ -250,24 +258,31 @@ The Settings (`我的`) scroll, top to bottom:
 
 ## Controls
 
-### SegTabs
+### SegTabs / PeriodSwitcher
 
 - Current use: 周 / 月 / 年 on record page.
-- Container: ink pill, `padding: 3px`, radius `999px`.
-- Active item: yellow fill, ink text.
-- Inactive item: transparent, white at 65%.
+- Native (current): `PeriodSwitcher` in `WNF/RecordsView.swift` — a hand-rolled segmented control where the ink pill slides between items via `matchedGeometryEffect` + spring (not a system `Picker`), riding on the hero card's yellow with a translucent track. Selection changes fire a `selection` haptic and a `.squish` press.
 - Interaction: active tab changes chart dataset and resets selected bar.
+
+### Odometer Money (home)
+
+- Owner: `OdometerMoneyText` in `WNF/OdometerText.swift`; the home page's primary number.
+- Each digit is an independent slot-machine wheel that rolls up gas-pump style on increase, with a per-wheel stagger cascading from the cents. Whole-yuan rollovers pop a `+¥1` chip and pulse the row; a gold shimmer sweeps the glyphs.
+- Sizing: font tiers by integer-digit count plus a deterministic `fitScale` and a hard `maxWidth` layout cap (callers pass the readout column width). The cap is mandatory — a scaled view still claims its natural width, so without it a large salary clips and stretches the TopBar.
+- Privacy mode renders masked dots; Reduce Motion swaps wheel rolls for crossfades and disables chips/shimmer.
 
 ### BarChart
 
 - Current use: record page weekly/monthly/yearly data derived from a memoized `RecordsView` aggregation snapshot. The snapshot reads retained daily SQLite rows plus folded monthly summaries when rebuilt, but cache equality is keyed by `WageState.currentDateKey`, `WageState.recordsRevision`, live-day wage settings, `includeOvertime`, and `selectedWeekdays` rather than comparing the full storage dictionaries.
 - Data contract: `RecordBar.amount` is an already-aggregated currency value; do not use visual-only multipliers for production records.
-- Bars: yellow for completed/current periods until selected, ink only for selected, pale cream for future.
+- Placement: promoted directly under the hero card (above the metric tiles) so the scrub gesture sits above the fold.
+- Bars: yellow for completed/current periods until selected, ink only for selected, pale cream for future; today's bar carries a soft gold top-gradient + breathing glow.
+- Entrance: on period change (`.id(period)`) bars grow from the floor with a per-bar spring stagger.
 - Interaction:
-  - tap available bar to select;
-  - selected bar jumps by `-2px`;
-  - callout appears above selected bar;
-  - tap the selected bar again to clear state.
+  - scrub-to-read — press and drag across the chart to sweep the selection, with a `selection` haptic per bar boundary (arbitrated against the pager swipe via `HorizontalGestureArbiter`);
+  - selected bar jumps by `-2px` with a spring callout above it;
+  - a stationary tap on the already-selected bar clears state.
+- Reduce Motion: skips the staggered grow-in and the today-bar glow.
 - Week view groups Monday through Sunday, month view groups current-month 7-day buckets, and year view groups calendar months. Year bars include folded monthly summaries and replace today's persisted row with the current live-day calculation.
 - Year view: compact bar gaps and smaller labels.
 

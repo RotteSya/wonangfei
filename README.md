@@ -46,9 +46,10 @@
 
 ## Current Product Surfaces
 
-- 首页：一个核心数字，不再提供上下分页或明细下页；右上角为分享入口，弹出今日窝囊战报卡片。
-- 记录页：周 / 月 / 年分段控件、按本机每日记录聚合的可点柱状图、成就卡、徽章区；记录聚合读取 SQLite 中近 400 天每日明细和更早的月汇总，但缓存 key 使用日期键、`recordsRevision` 和 live-day 设置，避免每次 body 重算都比较整份记录字典，也不订阅首页的秒级刷新；非选中工作日的今日 live record 记为 0。
+- 首页：一个核心数字（滑轮式 odometer 实时滚动），熔金色液态进度条、长按数字爆金币彩蛋；右上角为分享入口，弹出今日窝囊战报卡片。
+- 记录页：自绘 周 / 月 / 年 分段控件（胶囊 matchedGeometry 滑动）、提到 hero 卡正下方的可滑动手指刮取柱状图（逐柱触感、今日柱发光、切换时弹性逐柱长出）、成就卡、徽章区；记录聚合读取 SQLite 中近 400 天每日明细和更早的月汇总，但缓存 key 使用日期键、`recordsRevision` 和 live-day 设置，避免每次 body 重算都比较整份记录字典，也不订阅首页的秒级刷新；非选中工作日的今日 live record 记为 0。
 - 我的页：月薪编辑、每月工作日编辑、周工作日选择、上下班时间、午休开关、加班开关。
+- 三页之间是可交互的「果冻」分页器：整条页带跟手拖动、方向锁、边缘橡皮筋、按手势速度回弹，并带软体挤压形变；底部胶囊选中态随分页进度连续滑动/拉伸。
 
 ## iOS App
 
@@ -64,13 +65,15 @@ XcodeBuildMCP 已在 `.xcodebuildmcp/config.yaml` 持久化默认值：project `
 
 已实现：
 
-- 首页工资实时计算、隐私打码、进度条。
+- 首页工资实时计算、隐私打码、进度条。`OdometerMoneyText`（`WNF/OdometerText.swift`）逐位滑轮滚动 + 满元 `+¥1` 弹片 + 金色流光；进度条是 `wnfMoltenGold` Metal 着色器液态填充；长按数字触发 `CoinFountainBurst` 爆金币彩蛋（reduce-motion 下关闭）。主页背景为纯奶油白 `WNFTheme.bg`。视觉/动效层集中在 `WNF/WNFShaders.metal`、`WNF/ShaderFX.swift`、`WNF/OdometerText.swift`、`WNF/PagerShell.swift`。注意：不要给主页加尺寸超过页面的背景/同层装饰，否则会撑大布局把 TopBar 按钮挤出屏幕。
+- 三页果冻分页器：`WNF/RootView.swift` 把首页/记录/我的挂成一条横向页带，`simultaneousGesture` 拖动跟手、方向锁、橡皮筋边缘、按速度注入的 `interpolatingSpring` 回弹、`JellyStretch` 软体挤压、`@GestureState` 兜底被系统打断的手势；`AppTabBar(progress:onSelect:)`（`WNF/PagerShell.swift`）胶囊按分页进度连续移动/拉伸/撞墙挤压。`HorizontalGestureArbiter` 仲裁分页滑动与记录页图表刮取的同一次触摸。所有着色器/微动效时钟都是 `TimelineView(paused:)`，按页面可见性和 `accessibilityReduceMotion` 关停，离屏页与 reduce-motion 用户零额外帧。
 - 首页吉祥物位使用透明循环视频序列：`home-typing.mov` 和 `home-bored.mov` 每轮随机排序后连续播放；视频控制器由 `HomeMascotVideoSessionCoordinator` 稳定持有，`RootView` 只转发 scene phase 和 tab 切换事件；切换 tab 或进入短暂 inactive 时只暂停/恢复，不重建 AVQueuePlayer 队列；进入后台或收到内存警告时才会清空队列，回到首页活跃态再重新装载。
 - 首页分享卡片：背景虚化、今日窝囊费/上班时长、卡片内隐藏敏感信息、系统分享和退出；系统分享渲图期间分享按钮会显示 loading 并防重复点击。该处理是 UX/感知反馈修复，不减少主线程栅格化开销：渲图前会先让出一帧刷新 UI，再用当前 `UIWindowScene.screen.scale` 驱动 SwiftUI `ImageRenderer.render(rasterizationScale:)` 输出系统分享图；`UIActivityViewController` 由根视图背景中的 presenter 呈现，并配置 popover source view，避免 iPad / Mac Catalyst 分享弹窗崩溃；分享卡组件集中在 `WNF/ShareCard.swift`。
 - 下班结算：产品语义是“数据自动保存，仪式手动触发”。下班前首页不显示结算 CTA；下班后未结算时，progress track 下方显示「下班！领今天的窝囊费」，但不自动弹窗、不红点追赶、不连续催。点击进入全屏 settlement overlay，三阶段动画 — 中心金币雨爆开（heavy 触感）→ 结算卡 spring-in、金额从 0 滚到今日金额 → 「存入资产 / 分享卡片」action 行 ease-in；可随时跳过。卡片含金额、忍耐指数（1-4 星）、已忍时长、连续打工天数（封顶 60）、动态文案、今日最佳忍耐时刻、累积窝囊费总额。「今日最佳忍耐时刻」quote 卡支持长按 0.4s 撕碎换文案（rigid 触感 + id-driven transition）。每日记录会照常自动持久化；只有「存入资产」会额外执行 `markTodaySettled()` 并触发个人时间状态。App 启动或回到前台不会自动结算；用户不点也不会丢当天数据。「分享卡片」复用已有 `ImageRenderer` 管线，输出 `DailySettlementShareCard` 系统分享图。结算文件集中在 `WNF/DailySettlement.swift`。
 - 个人时间模式：用户完成「存入资产」后当天首页切换为个人时间态 — StatusChip 文案改为「今日已下班 · 个人时间」，CTA 改为「今日已下班 · 再看一眼 / 今日窝囊费已入账，剩下都是你的时间」（带 ✓ 图标）；其它数字（金额 / 进度 / 时长）保持实时同步。状态来自 `WageState.isTodaySettled`，跨日自动重置。持久化键 `wnf.settlement.lastCompletedDateKey`。
 - 下班结算提醒（可选 / 默认关闭）：「我的」页 `提醒` section 提供开关；开启后 `ClockOutReminderService` 会按选中工作日 + 下班时间调度 `UNCalendarNotificationTrigger` 本地通知；权限被系统拒绝时 Settings 内会展示打开系统通知设置的引导。提醒文件集中在 `WNF/ClockOutReminder.swift`。
-- 底部 tab 切换：页面内容按 tab 顺序横向滑入/滑出，并与胶囊选中态同步过渡。
+- 记录页改造：自绘 `PeriodSwitcher`（胶囊 matchedGeometry 滑动 + 触感）、图表提到 hero 卡下方、按手指刮取选中（逐柱触感）、切换周期时逐柱弹性长出、今日柱发光、hero 卡纸纹 + 呼吸 ¥ 水印、卡片入场逐张上浮。`RecordsView` / `BarChart` 依赖 `HorizontalGestureArbiter`，预览需注入。
+- UI 巡演测试：`WNFUITests/JellyTourUITests.swift` 的 `testGrandTour` 驱动并验证每个交互（长按爆金币、隐私切换、果冻滑页、图表刮取、周期切换、tab 胶囊、分享卡 genie 进出），打印 `TOUR-MARK` 时间标记，可配合 `simctl io recordVideo` 录像。它也是布局护栏：当主页背景尺寸过大撑坏布局、把 TopBar 按钮挤出屏幕时，这个测试会以「按钮不可见」失败。
 - 首次启动引导：4 屏 SwiftUI onboarding、第一页参考大图优先的 intro 布局、跳过/返回/分页控制、月薪/作息/午休设置和最终确认。
 - 记录页周 / 月 / 年切换、柱状图选中态、成就和徽章模块；金额来自 `WageState` 暴露的 SQLite 每日明细 + 月汇总，今日金额按记录页聚合快照计入，跨日或 App 离开活跃前台时按日期 upsert 本机 SQLite，并暂停跨日计时器；回到活跃前台会刷新日期并重建计时器，多天未打开时会补齐中间日期。
 - 我的页月薪和每月工作日支持 `- / +` 微调，也支持点中间数字弹出快速输入框；时间、午休和加班状态可编辑，上下班时间会保持“下班晚于上班”的有效组合。

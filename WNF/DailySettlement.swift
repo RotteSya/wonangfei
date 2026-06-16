@@ -1236,6 +1236,8 @@ struct ClockOutCTA: View {
     var isSettled: Bool = false
     var action: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     private var title: String {
         if isSettled { return "今日已下班 · 再看一眼" }
         switch status {
@@ -1285,18 +1287,38 @@ struct ClockOutCTA: View {
 
                 Spacer(minLength: 8)
 
-                Image(systemName: "arrow.right")
-                    .font(.system(size: 13, weight: .heavy))
-                    .foregroundStyle(WNFTheme.ink.opacity(0.7))
+                arrowGlyph
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity)
             .background(WNFTheme.yellow, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .paperGrain(0.03)
             .shadow(color: WNFTheme.yellow.opacity(0.4), radius: 14, y: 6)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.squish(0.96))
         .accessibilityLabel(title)
         .accessibilityHint(subtitle)
+    }
+
+    @ViewBuilder
+    private var arrowGlyph: some View {
+        let glyph = Image(systemName: "arrow.right")
+            .font(.system(size: 13, weight: .heavy))
+            .foregroundStyle(WNFTheme.ink.opacity(0.7))
+
+        if reduceMotion {
+            glyph
+        } else {
+            glyph.phaseAnimator([0, 1]) { view, phase in
+                // Periodic "let's go" nudge so the CTA quietly waves without
+                // ever flashing or demanding attention.
+                view.offset(x: phase == 1 ? 4 : 0)
+            } animation: { phase in
+                phase == 1
+                    ? .spring(response: 0.4, dampingFraction: 0.5).delay(2.2)
+                    : .spring(response: 0.5, dampingFraction: 0.7)
+            }
+        }
     }
 }

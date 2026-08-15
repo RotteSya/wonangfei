@@ -8,3 +8,6 @@ xcuserdata/
 *.moved-aside
 .swiftpm/
 .claude/
+
+# asc CLI run reports (artifacts)
+.asc/reports/

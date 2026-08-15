@@ -225,7 +225,7 @@ private struct RisingYuanChipView: View {
             .foregroundStyle(WNFTheme.yellow)
             .padding(.horizontal, 9)
             .padding(.vertical, 4)
-            .background(WNFTheme.ink, in: Capsule())
+            .background(WNFTheme.inkSurface, in: Capsule())
             .opacity(risen ? 0 : 1)
             .scaleEffect(risen ? 1.0 : 0.6, anchor: .bottom)
             .offset(x: chip.drift, y: risen ? -46 : -6)

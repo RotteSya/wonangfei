@@ -116,7 +116,7 @@ struct AppTabBar: View {
         .background(alignment: .leading) {
             let p = pill
             Capsule()
-                .fill(WNFTheme.ink)
+                .fill(WNFTheme.inkSurface)
                 .frame(width: p.width, height: Self.itemHeight)
                 .offset(x: p.x)
         }

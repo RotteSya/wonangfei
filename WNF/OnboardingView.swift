@@ -115,7 +115,7 @@ struct OnboardingView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(
                 LinearGradient(
-                    colors: [Color.white, WNFTheme.bg, WNFTheme.bgWarm.opacity(0.82)],
+                    colors: [WNFTheme.surface, WNFTheme.bg, WNFTheme.bgWarm.opacity(0.82)],
                     startPoint: .top,
                     endPoint: .bottom
                 )
@@ -216,7 +216,7 @@ private struct OnboardingPage<Visual: View, Accessory: View>: View {
 
             VStack(alignment: .leading, spacing: 9) {
                 Text(title)
-                    .font(.system(size: 30, weight: .black, design: .rounded))
+                    .font(WNFTheme.display(30))
                     .foregroundStyle(WNFTheme.ink)
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -257,7 +257,7 @@ private struct OnboardingIntroPage: View {
 
             VStack(alignment: .leading, spacing: 11) {
                 Text(title)
-                    .font(.system(size: 31, weight: .black, design: .rounded))
+                    .font(WNFTheme.display(31))
                     .foregroundStyle(WNFTheme.ink)
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -402,7 +402,7 @@ private struct SalarySetupCard: View {
                     .foregroundStyle(WNFTheme.muted)
                 Spacer()
                 Text("\(Int(state.monthlySalary / 1000))k")
-                    .font(.system(size: 12, weight: .black, design: .monospaced))
+                    .font(WNFTheme.mono(12))
                     .foregroundStyle(WNFTheme.inkSoft)
             }
 
@@ -416,7 +416,7 @@ private struct SalarySetupCard: View {
                     .minimumScaleFactor(0.68)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, minHeight: 48)
-                    .background(WNFTheme.ink, in: RoundedRectangle(cornerRadius: 18))
+                    .background(WNFTheme.inkSurface, in: RoundedRectangle(cornerRadius: 18))
                 IconControlButton(systemName: "plus") {
                     updateSalary(by: 500)
                 }
@@ -427,7 +427,7 @@ private struct SalarySetupCard: View {
                 .accessibilityLabel("月薪")
         }
         .padding(14)
-        .background(Color.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 24))
+        .background(WNFTheme.surface.opacity(0.92), in: RoundedRectangle(cornerRadius: 24))
         .overlay(RoundedRectangle(cornerRadius: 24).stroke(WNFTheme.hairline, lineWidth: 0.5))
     }
 
@@ -510,7 +510,7 @@ private struct WorkTimeSetupCard: View {
             .animation(.easeInOut(duration: 0.24), value: state.hasLunchBreak)
         }
         .padding(10)
-        .background(Color.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 24))
+        .background(WNFTheme.surface.opacity(0.92), in: RoundedRectangle(cornerRadius: 24))
         .overlay(RoundedRectangle(cornerRadius: 24).stroke(WNFTheme.hairline, lineWidth: 0.5))
     }
 }
@@ -552,29 +552,32 @@ private struct OnboardingTimePicker: View {
     var title: String
     @Binding var components: DateComponents
 
-    private var date: Binding<Date> {
-        Binding {
-            DateComponents.calendar.date(from: components) ?? .now
-        } set: { value in
-            components = DateComponents.calendar.dateComponents([.hour, .minute], from: value)
-        }
-    }
+    @State private var isPickerPresented = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(.system(size: 10, weight: .black))
-                .foregroundStyle(WNFTheme.muted)
-            DatePicker("", selection: date, displayedComponents: .hourAndMinute)
-                .labelsHidden()
-                .datePickerStyle(.compact)
-                .tint(WNFTheme.yellow)
-                .environment(\.locale, Locale(identifier: "zh_Hans"))
-                .frame(maxWidth: .infinity, alignment: .leading)
+        Button {
+            isPickerPresented = true
+        } label: {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 10, weight: .black))
+                    .foregroundStyle(WNFTheme.muted)
+                Text(components.clockText)
+                    .font(WNFTheme.mono(17))
+                    .foregroundStyle(WNFTheme.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(WNFTheme.surfaceSoft.opacity(0.72), in: RoundedRectangle(cornerRadius: 16))
+            .contentShape(RoundedRectangle(cornerRadius: 16))
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(WNFTheme.surfaceSoft.opacity(0.72), in: RoundedRectangle(cornerRadius: 16))
+        .buttonStyle(.squish(0.96))
+        .accessibilityLabel("\(title)时间")
+        .accessibilityValue(components.clockText)
+        .sheet(isPresented: $isPickerPresented) {
+            WNFTimePickerSheet(title: "设置\(title)时间", components: $components)
+        }
     }
 }
 
@@ -609,7 +612,7 @@ private struct SummarySetupCard: View {
             SummaryLine(title: "午休状态", value: state.hasLunchBreak ? "有午休" : "没有午休")
         }
         .padding(16)
-        .background(Color.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 24))
+        .background(WNFTheme.surface.opacity(0.92), in: RoundedRectangle(cornerRadius: 24))
         .overlay(RoundedRectangle(cornerRadius: 24).stroke(WNFTheme.hairline, lineWidth: 0.5))
     }
 }
@@ -625,7 +628,7 @@ private struct SummaryLine: View {
                 .foregroundStyle(WNFTheme.inkSoft)
             Spacer()
             Text(value)
-                .font(.system(size: 13, weight: .black, design: .monospaced))
+                .font(WNFTheme.mono(13))
                 .foregroundStyle(WNFTheme.ink)
         }
         .frame(height: 31)
@@ -664,7 +667,7 @@ private struct OnboardingFooter: View {
                             .font(.system(size: 15, weight: .black))
                             .foregroundStyle(WNFTheme.ink)
                             .frame(width: 92, height: 54)
-                            .background(Color.white, in: Capsule())
+                            .background(WNFTheme.surface, in: Capsule())
                             .overlay(Capsule().stroke(WNFTheme.hairline, lineWidth: 0.5))
                     }
                     .buttonStyle(.plain)
@@ -677,7 +680,7 @@ private struct OnboardingFooter: View {
                         .font(.system(size: 16, weight: .black))
                         .foregroundStyle(Color.white)
                         .frame(maxWidth: .infinity, minHeight: 54)
-                        .background(WNFTheme.ink, in: Capsule())
+                        .background(WNFTheme.inkSurface, in: Capsule())
                         .overlay(alignment: .trailing) {
                             Image(systemName: page == pageCount - 1 ? "checkmark" : "arrow.right")
                                 .font(.system(size: 15, weight: .black))

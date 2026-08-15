@@ -471,15 +471,16 @@ struct RecordsView: View {
             PeriodSwitcher(period: $period)
 
             Text(period.heroLabel)
-                .font(.system(size: 11, weight: .heavy))
+                .font(WNFTheme.display(12))
                 .tracking(2)
-                .foregroundStyle(WNFTheme.ink.opacity(0.65))
+                .foregroundStyle(WNFTheme.inkFixed.opacity(0.65))
                 .contentTransition(.numericText())
                 .animation(.snappy(duration: 0.3), value: period)
 
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(WNFFormat.money(total, privacy: state.privacyMode))
                     .font(.system(size: 56, weight: .black, design: .rounded))
+                    .foregroundStyle(WNFTheme.inkFixed)
                     .lineLimit(1)
                     .minimumScaleFactor(0.65)
                     .contentTransition(.numericText(value: total))
@@ -493,12 +494,12 @@ struct RecordsView: View {
                     .foregroundStyle(WNFTheme.yellow)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
-                    .background(WNFTheme.ink, in: Capsule())
+                    .background(WNFTheme.inkFixed, in: Capsule())
                     .contentTransition(.numericText())
                     .animation(.snappy(duration: 0.3), value: recordedDayCount)
                 Text("今日金额计入本期")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(WNFTheme.ink.opacity(0.6))
+                    .foregroundStyle(WNFTheme.inkFixed.opacity(0.6))
             }
         }
         .padding(22)
@@ -524,7 +525,7 @@ struct RecordsView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("本 月 成 就")
-                    .font(.system(size: 11, weight: .heavy))
+                    .font(WNFTheme.display(12))
                     .tracking(1.5)
                     .foregroundStyle(WNFTheme.yellow)
                     .goldShimmer(period: 6.0, intensity: 0.6)
@@ -542,7 +543,7 @@ struct RecordsView: View {
         .padding(16)
         .background {
             RoundedRectangle(cornerRadius: 22)
-                .fill(WNFTheme.ink)
+                .fill(WNFTheme.inkSurface)
                 .paperGrain(0.05)
         }
     }
@@ -551,7 +552,7 @@ struct RecordsView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
                 Text(period == .week ? "本周每日窝囊费" : period == .month ? "本月每周窝囊费" : "本年每月窝囊费")
-                    .font(.system(size: 19, weight: .black, design: .rounded))
+                    .font(WNFTheme.display(19))
                     .contentTransition(.numericText())
                     .animation(.snappy(duration: 0.3), value: period)
                 Spacer()
@@ -568,7 +569,7 @@ struct RecordsView: View {
                 .id(period)
         }
         .padding(16)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 22))
+        .background(WNFTheme.surface, in: RoundedRectangle(cornerRadius: 22))
         .overlay(RoundedRectangle(cornerRadius: 22).stroke(WNFTheme.hairline, lineWidth: 0.5))
     }
 
@@ -591,7 +592,7 @@ struct RecordsView: View {
             }
         }
         .padding(16)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 22))
+        .background(WNFTheme.surface, in: RoundedRectangle(cornerRadius: 22))
         .overlay(RoundedRectangle(cornerRadius: 22).stroke(WNFTheme.hairline, lineWidth: 0.5))
     }
 
@@ -654,13 +655,13 @@ private struct PeriodSwitcher: View {
                 } label: {
                     Text(item.label)
                         .font(.system(size: 13, weight: .heavy))
-                        .foregroundStyle(isOn ? Color.white : WNFTheme.ink.opacity(0.62))
+                        .foregroundStyle(isOn ? Color.white : WNFTheme.inkFixed.opacity(0.62))
                         .frame(maxWidth: .infinity)
                         .frame(height: 34)
                         .background {
                             if isOn {
                                 Capsule()
-                                    .fill(WNFTheme.ink)
+                                    .fill(WNFTheme.inkFixed)
                                     .matchedGeometryEffect(id: "period-pill", in: pillSpace)
                             }
                         }
@@ -674,7 +675,7 @@ private struct PeriodSwitcher: View {
         }
         .padding(4)
         .background(Color.white.opacity(0.45), in: Capsule())
-        .overlay(Capsule().stroke(WNFTheme.ink.opacity(0.08), lineWidth: 1))
+        .overlay(Capsule().stroke(WNFTheme.inkFixed.opacity(0.08), lineWidth: 1))
     }
 }
 
@@ -687,7 +688,7 @@ private struct BreathingWatermark: View {
     var body: some View {
         Text("¥")
             .font(.system(size: 190, weight: .black, design: .rounded))
-            .foregroundStyle(WNFTheme.ink.opacity(0.06))
+            .foregroundStyle(WNFTheme.inkFixed.opacity(0.06))
             .scaleEffect(swollen ? 1.045 : 1, anchor: .topTrailing)
             .offset(x: 26, y: -42)
             .onAppear {
@@ -839,7 +840,7 @@ private struct BarChart: View {
                         .foregroundStyle(Color.white)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)
-                        .background(WNFTheme.ink, in: Capsule())
+                        .background(WNFTheme.inkSurface, in: Capsule())
                         .offset(y: -104)
                         .fixedSize()
                         .transition(.scale(scale: 0.7, anchor: .bottom).combined(with: .opacity))
@@ -929,7 +930,7 @@ private struct Badge: View {
                 .frame(width: 50, height: 50)
                 .background {
                     RoundedRectangle(cornerRadius: 16)
-                        .fill(unlocked ? WNFTheme.yellow : Color(red: 0.95, green: 0.92, blue: 0.82))
+                        .fill(unlocked ? WNFTheme.yellow : WNFTheme.surfaceSoft)
                         // Earned badges glint like enamel pins; locked ones
                         // stay matte (the shimmer clock never runs for them).
                         .goldShimmer(period: 4.8, intensity: 0.5, isActive: unlocked)

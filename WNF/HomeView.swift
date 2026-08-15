@@ -136,7 +136,10 @@ private struct HeroHomePage: View {
                     .padding(.bottom, mascotBottomPadding)
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
-            .overlayPreferenceValue(CoinSourceAnchorKey.self) { anchor in
+            // Coins live BEHIND the page content (backgroundPreferenceValue, not
+            // overlay): a falling coin must never cover the progress labels or
+            // the mascot bubble text.
+            .backgroundPreferenceValue(CoinSourceAnchorKey.self) { anchor in
                 if let anchor, isActive {
                     TimelineView(.periodic(from: .now, by: 1)) { context in
                         let day = state.liveDay(at: context.date)
@@ -231,7 +234,7 @@ private struct LiveWageReadout: View {
 
             VStack(alignment: .leading, spacing: 5) {
                 Text("今 日 窝 囊 费")
-                    .font(.system(size: 13, weight: .heavy))
+                    .font(WNFTheme.display(14))
                     .tracking(5)
                     .foregroundStyle(WNFTheme.inkSoft)
 
@@ -336,15 +339,15 @@ private struct ThoughtBubble: View {
             .foregroundStyle(WNFTheme.ink)
             .padding(.horizontal, 15)
             .padding(.vertical, 11)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 17))
+            .background(WNFTheme.surface, in: RoundedRectangle(cornerRadius: 17))
             .overlay(alignment: .bottomLeading) {
                 // Trailing thought dots, outside the bubble's own bounds.
                 Circle()
-                    .fill(Color.white)
+                    .fill(WNFTheme.surface)
                     .frame(width: 8, height: 8)
                     .offset(x: 9, y: 13)
                 Circle()
-                    .fill(Color.white)
+                    .fill(WNFTheme.surface)
                     .frame(width: 5, height: 5)
                     .offset(x: 3, y: 22)
             }
@@ -670,7 +673,7 @@ private struct ProgressTrack: View {
         VStack(spacing: 8) {
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color(red: 0.95, green: 0.90, blue: 0.75))
+                    Capsule().fill(WNFTheme.track)
 
                     // Molten-gold fill: a full-width rect whose visible body is
                     // carved out by the shader — the leading edge is a lapping
@@ -699,7 +702,7 @@ private struct ProgressTrack: View {
                     if day.progress > 0 && day.progress < 1 {
                         Circle()
                             .fill(Color.white)
-                            .overlay(Circle().stroke(WNFTheme.ink, lineWidth: 3))
+                            .overlay(Circle().stroke(WNFTheme.inkFixed, lineWidth: 3))
                             .frame(width: 15, height: 15)
                             .offset(x: max(0, proxy.size.width * day.progress - 7))
                             .shadow(color: WNFTheme.gold.opacity(0.5), radius: 5)
@@ -718,7 +721,7 @@ private struct ProgressTrack: View {
                 Spacer()
                 Text(endText)
             }
-            .font(.system(size: 11, weight: .bold, design: .monospaced))
+            .font(WNFTheme.mono(11))
             .foregroundStyle(WNFTheme.muted)
         }
     }

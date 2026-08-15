@@ -66,6 +66,36 @@ It relies on accessibility identifiers (`home.money`, `home.share`, `home.privac
 - `WNF/DailySettlement.swift` owns the下班结算 feature: pure-function snapshot derivation (`DailySettlement.derive`), 爆金币 burst animation, full-screen overlay, settlement share card, and home CTA. `RootView` is the only owner of overlay presentation state and reuses the existing share-render / `ActivityView` pipeline for system share. The settlement flow must not be triggered from anywhere other than the home Clock-Out CTA, and must not introduce new persistence keys — `存入资产` reuses `WageState.persistCurrentDaySnapshot()`, plus sets `WageState.lastSettlementDateKey` via `markTodaySettled()`. Personal-time mode keys off `WageState.isTodaySettled` (`lastSettlementDateKey == currentDateKey`); the only persistence key it adds is `wnf.settlement.lastCompletedDateKey`. Long-press tear on the two quote cards swaps content via `DailySettlement.alternate*` static helpers — pool entries are static data, no persistence.
 - `WNF/ClockOutReminder.swift` owns the optional 下班结算提醒 local-notification service. The feature is **off by default** (`wnf.settings.clockOutReminderEnabled = false`) and can only be enabled from the Settings 提醒 section. `WageState.reconcileClockOutReminder()` must be called from any setting change that affects the schedule (`clockOutReminderEnabled` / `workEnd` / `selectedWeekdays`) and from `scenePhase == .active`. Do not schedule from view code directly — always go through `WageState`.
 
+## Theme, Fonts, Dark Mode (feat/payslip-voucher-round)
+
+- `WNF/Theme.swift` tokens are **dynamic colors** (light = original brand palette, dark = warm brown-black "熄灯的工位" scheme; never neutral gray). Semantics matter:
+  - `ink` is TEXT (flips to cream in dark). `inkSurface` is the "black card" SURFACE (stays dark in dark mode: profile banner, achievement card, tab pill, `+¥1` chip). `inkFixed` is constant 反思黑 — required for anything sitting on the constant brand yellow (gold hero card text, ClockOutCTA content, 时薪 pill text, PeriodSwitcher pill) and for voucher ink.
+  - `surface` replaces hard-coded `Color.white` card backgrounds; `track` is the progress trough; `paper` is voucher white (never theme-dependent).
+  - New yellow-surface content MUST use `inkFixed`, not `ink`, or dark mode washes it out.
+- Brand fonts are bundled in `WNF/Fonts/` and registered via `UIAppFonts`: 站酷庆科黄油体 (`WNFTheme.display(_:)` — headers/wordmarks only) and JetBrains Mono (`WNFTheme.mono(_:weight:)` — "工资条" numbers: progress labels, metric tiles, voucher figures, steppers). The hero odometer intentionally stays system rounded. ZCOOL full-glyph TTF is ~8.3MB; subsetting is a known follow-up.
+- The paper overlays (share card genie, settlement overlay) force `.environment(\.colorScheme, .light)` — 纸就是纸, exports and on-screen cards never dim.
+- Home coin layer is mounted with `backgroundPreferenceValue` (BEHIND content) so falling coins can never cover the progress labels or bubble text. Do not move it back to an overlay.
+
+## Voucher Share System
+
+- `WNF/Voucher.swift` owns the 「窝囊费办公室」 stationery family: `VoucherEdgeShape` (sawtooth ticket edges), `VoucherHeader` (黄头文件 band + 文号), `VoucherRow` (dotted-leader ledger line), `VoucherSeal` (coral rubber stamp; `progress` 0→1 animates the drop), `VoucherBarcode`, `VoucherTearLine`, `VoucherStationery` (deterministic 文号/serial/date), and `WNFConversion` (金额→实物 units; **deterministic per calendar day** — no render-time randomness).
+- `WonangfeiShareCard` = 实时对账单 (mid-day; empty 盖章处 that "下班后凭此领取"), `DailySettlementShareCard` = 发放凭证 (stamped; seal placed bottom-trailing over date/serial — 骑年压月, never over amounts). Both render on `WNFTheme.paper` + `paperGrain` and are clipped by `VoucherEdgeShape`.
+- The settlement overlay drives `sealProgress` after the amount ramp (heavy haptic + `stampDip` paper recoil); Reduce Motion sets it to 1 with no animation. Exports pass the default `sealProgress: 1`.
+- `WNFTests/VoucherSnapshotTests.swift` renders both cards through the real `ImageRenderer` path. Set `TEST_RUNNER_WNF_SNAPSHOT_DIR=<dir>` (as an ENVIRONMENT variable on `xcodebuild test`, not a build setting) to write the PNGs for visual review — the fastest card-design iteration loop; no UI driving needed.
+
+## Live Activity
+
+- Schema: `WNFLiveActivityAttributes` lives at the bottom of `WNF/WidgetShared.swift` (shared app+widget). Time-driven UI (离下班 countdown, progress) uses `Text(timerInterval:)` / `ProgressView(timerInterval:)` so the island stays alive between updates; the money figure is exact at `refDate` and shown with a `≈` until `isDone`.
+- `WNF/LiveActivityController.swift` (app target) mirrors the `ClockOutReminderService` pattern: `reconcile(state:)` is funneled through `WNFApp.writeWidgetSnapshot()` (every settings change + scene transitions), plus `WageState.markTodaySettled()` and the `liveActivityEnabled` didSet. A 60s foreground timer (`beginMinuteRefresh`) keeps the figure fresh while the app is active. One activity per `dateKey`; stale-day activities are ended and replaced.
+- Setting `wnf.settings.liveActivityEnabled` is **on by default**; the toggle lives in Settings 提醒 section. `WNF/Info.plist` carries `NSSupportsLiveActivities`.
+- The LA UI (`WNFLiveActivity` in `WNFWidget/WNFWidget.swift`) is the scheme-independent "black work badge" — do not make it follow light/dark.
+
+## Custom Controls (no stock chrome)
+
+- `WNFNumberPadSheet` (SharedViews) replaces the old `.alert`+TextField quick editor: branded 3×4 keypad, prefill acts as select-all (first keystroke replaces). Pass `initialText` by calling the provider closure inside the `.sheet` content — never a captured `@State` (stale-capture bug).
+- `WNFTimePickerSheet` + `WNFSnapColumn` (SharedViews) replace every `DatePicker`: hours 0–23, minutes in 5-min steps (the current off-step minute is inserted so existing values round-trip), `.viewAligned` snapping with selection haptics. Used by Settings `TimePickerRow` and `OnboardingTimePicker`.
+- All toggles are `WNFToggle` (off-track uses `WNFTheme.track`). Remaining stock surfaces (onboarding `TabView(.page)`, legal `NavigationStack` sheet) are accepted for now.
+
 ## Onboarding Asset Rules
 
 Hero art source folder: `/Users/shelingzhao/Documents/窝囊费素材/引导/`.

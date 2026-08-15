@@ -157,7 +157,6 @@ struct RootView: View {
                     .transition(.opacity)
             }
         }
-        .preferredColorScheme(.light)
         .environment(\.tabBarFloorHeight, tabBarFloorHeight)
         .onPreferenceChange(TabBarFloorHeightKey.self) { value in
             tabBarFloorHeight = value

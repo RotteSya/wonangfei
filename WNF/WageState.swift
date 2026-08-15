@@ -72,6 +72,15 @@ final class WageState: ObservableObject {
         }
     }
 
+    @Published var liveActivityEnabled: Bool {
+        didSet {
+            userDefaults.set(liveActivityEnabled, forKey: StorageKey.liveActivityEnabled)
+            Task { @MainActor in
+                WNFLiveActivityController.reconcile(state: self)
+            }
+        }
+    }
+
     @Published var clockOutReminderEnabled: Bool {
         didSet {
             userDefaults.set(clockOutReminderEnabled, forKey: StorageKey.clockOutReminderEnabled)
@@ -103,6 +112,9 @@ final class WageState: ObservableObject {
 
     func markTodaySettled() {
         lastSettlementDateKey = currentDateKey
+        Task { @MainActor in
+            WNFLiveActivityController.reconcile(state: self)
+        }
     }
 
     let userDefaults: UserDefaults
@@ -132,6 +144,7 @@ final class WageState: ObservableObject {
         privacyMode = userDefaults.boolValue(forKey: StorageKey.privacyMode) ?? Default.privacyMode
         selectedWeekdays = userDefaults.weekdaySet(forKey: StorageKey.selectedWeekdays) ?? Default.selectedWeekdays
         clockOutReminderEnabled = userDefaults.boolValue(forKey: StorageKey.clockOutReminderEnabled) ?? Default.clockOutReminderEnabled
+        liveActivityEnabled = userDefaults.boolValue(forKey: StorageKey.liveActivityEnabled) ?? Default.liveActivityEnabled
         lastSettlementDateKey = userDefaults.string(forKey: StorageKey.lastSettlementDateKey)
         let now = Date()
         currentDateKey = Self.dateKey(for: now)
@@ -537,6 +550,7 @@ final class WageState: ObservableObject {
         userDefaults.set(privacyMode, forKey: StorageKey.privacyMode)
         userDefaults.set(selectedWeekdays.sorted(), forKey: StorageKey.selectedWeekdays)
         userDefaults.set(clockOutReminderEnabled, forKey: StorageKey.clockOutReminderEnabled)
+        userDefaults.set(liveActivityEnabled, forKey: StorageKey.liveActivityEnabled)
     }
 
     func reconcileClockOutReminder() {
@@ -693,6 +707,7 @@ private enum Default {
     static let privacyMode = false
     static let selectedWeekdays: Set<Int> = [0, 1, 2, 3, 4]
     static let clockOutReminderEnabled = false
+    static let liveActivityEnabled = true
 }
 
 private extension UserDefaults {

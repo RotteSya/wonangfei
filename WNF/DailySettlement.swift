@@ -350,6 +350,9 @@ struct DailySettlementOverlay: View {
     @State private var displayedAmount: Double = 0
     @State private var revealCardVisible = false
     @State private var revealActionsVisible = false
+    @State private var sealProgress: CGFloat = 0
+    @State private var stampDip = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var currentBestMoment: String = ""
     @State private var tearSnapshot: UIImage?
     @State private var tearNormalizedY: CGFloat = 0.5
@@ -371,6 +374,8 @@ struct DailySettlementOverlay: View {
             burstLayer
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // 结算卡同样是纸质物件：黑幕上的白纸，两种外观下都成立。
+        .environment(\.colorScheme, .light)
         .onAppear {
             if currentBestMoment.isEmpty { currentBestMoment = settlement.bestMoment }
             startBurstSequence()
@@ -418,6 +423,7 @@ struct DailySettlementOverlay: View {
                 hidesSensitiveInfo: hidesSensitiveInfo,
                 showsControls: true,
                 isPreparingShare: isPreparingShare,
+                sealProgress: sealProgress,
                 onTogglePrivacy: {
                     withAnimation(.snappy(duration: 0.18)) {
                         hidesSensitiveInfo.toggle()
@@ -428,6 +434,8 @@ struct DailySettlementOverlay: View {
                 onDismiss: onDismiss
             )
             .scaleEffect(revealCardVisible ? 1 : 0.86)
+            // 盖章的落印反冲：纸面被章体压得轻轻一沉。
+            .scaleEffect(stampDip ? 0.982 : 1)
             .opacity(phase == .tearing ? 0 : (revealCardVisible ? 1 : 0))
             .allowsHitTesting(revealCardVisible && phase != .tearing)
             .shadow(color: .black.opacity(0.32), radius: 28, y: 18)
@@ -575,6 +583,28 @@ struct DailySettlementOverlay: View {
             try? await sleep(seconds: 0.18)
             withAnimation(.easeOut(duration: 0.32)) {
                 revealActionsVisible = true
+            }
+
+            // 盖章：金额滚定后，公章从半空落到纸面。
+            try? await sleep(seconds: max(0, amountRampDuration - 0.18) + 0.12)
+            guard phase == .reveal else { return }
+            if reduceMotion {
+                sealProgress = 1
+                return
+            }
+            let stamp = UIImpactFeedbackGenerator(style: .heavy)
+            stamp.prepare()
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.62)) {
+                sealProgress = 1
+            }
+            try? await sleep(seconds: 0.1)
+            stamp.impactOccurred()
+            withAnimation(.spring(response: 0.16, dampingFraction: 0.5)) {
+                stampDip = true
+            }
+            try? await sleep(seconds: 0.12)
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.66)) {
+                stampDip = false
             }
         }
     }
@@ -792,6 +822,8 @@ struct DailySettlementShareCard: View {
     var hidesSensitiveInfo: Bool
     var showsControls: Bool
     var isPreparingShare: Bool = false
+    /// 0 = seal hovering (pre-stamp), 1 = pressed onto the paper. Exports use 1.
+    var sealProgress: CGFloat = 1
     var onTogglePrivacy: () -> Void = {}
     var onTearBestMoment: (() -> Void)? = nil
     var onShare: () -> Void = {}
@@ -805,91 +837,79 @@ struct DailySettlementShareCard: View {
         displayedBestMoment ?? settlement.bestMoment
     }
 
-    var body: some View {
-        VStack(spacing: 0) {
-            header
-            cardBody
-        }
-        .background(WNFTheme.bg, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .stroke(Color.white.opacity(0.72), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+    private var conversion: WNFConversion.Result {
+        WNFConversion.convert(amount: settlement.earnedToday)
     }
 
-    private var header: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Image("CowThreeQ")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 30, height: 30)
-                .padding(4)
-                .background(Color.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("窝囊费")
-                    .font(.system(size: 20, weight: .black, design: .rounded))
-                    .foregroundStyle(WNFTheme.ink)
-                Text("今日下班战绩")
-                    .font(.system(size: 10, weight: .heavy))
-                    .tracking(1.2)
-                    .foregroundStyle(WNFTheme.inkSoft)
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: 0) {
+                VoucherHeader(
+                    title: "窝囊费·发放凭证",
+                    subtitle: "已核准 · 全额发放",
+                    trailingInset: showsControls ? 128 : 0
+                )
+                cardBody
             }
-
-            Spacer(minLength: 8)
+            .background(WNFTheme.paper)
+            .paperGrain(0.032)
+            .clipShape(VoucherEdgeShape())
+            .overlay(VoucherEdgeShape().stroke(WNFTheme.inkFixed.opacity(0.1), lineWidth: 0.7))
+            .overlay(alignment: .bottomTrailing) {
+                // 骑年压月：公章压在右下角的日期与流水号上，不碰任何金额。
+                VoucherSeal(size: 88, progress: sealProgress)
+                    .offset(x: -10, y: -8)
+                    .opacity(sealProgress > 0.01 ? 1 : 0)
+                    .allowsHitTesting(false)
+            }
 
             if showsControls {
-                HStack(spacing: 8) {
-                    settlementHeaderButton(
-                        systemName: hidesSensitiveInfo ? "eye.slash" : "eye",
-                        accessibilityLabel: hidesSensitiveInfo ? "显示敏感信息" : "隐藏敏感信息",
-                        action: onTogglePrivacy
-                    )
-                    settlementHeaderButton(
-                        systemName: "square.and.arrow.up",
-                        accessibilityLabel: isPreparingShare ? "正在生成分享图" : "唤起系统分享",
-                        isLoading: isPreparingShare,
-                        isDisabled: isPreparingShare,
-                        action: onShare
-                    )
-                    settlementHeaderButton(
-                        systemName: "xmark",
-                        accessibilityLabel: "退出结算",
-                        action: onDismiss
-                    )
-                }
+                controls
+                    .padding(.top, 12)
+                    .padding(.trailing, 12)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 13)
-        .background(WNFTheme.gold)
+    }
+
+    private var controls: some View {
+        HStack(spacing: 8) {
+            settlementHeaderButton(
+                systemName: hidesSensitiveInfo ? "eye.slash" : "eye",
+                accessibilityLabel: hidesSensitiveInfo ? "显示敏感信息" : "隐藏敏感信息",
+                action: onTogglePrivacy
+            )
+            settlementHeaderButton(
+                systemName: "square.and.arrow.up",
+                accessibilityLabel: isPreparingShare ? "正在生成分享图" : "唤起系统分享",
+                isLoading: isPreparingShare,
+                isDisabled: isPreparingShare,
+                action: onShare
+            )
+            settlementHeaderButton(
+                systemName: "xmark",
+                accessibilityLabel: "退出结算",
+                action: onDismiss
+            )
+        }
     }
 
     private var cardBody: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Rectangle()
-                .fill(Color.clear)
-                .frame(height: 0)
-                .overlay(
-                    Rectangle()
-                        .stroke(WNFTheme.muted.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [8, 8]))
-                )
-                .padding(.horizontal, -18)
-                .padding(.top, -14)
-
-            VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("事由")
+                    .font(.system(size: 9.5, weight: .heavy))
+                    .tracking(2)
+                    .foregroundStyle(WNFTheme.inkFixed.opacity(0.4))
                 Text(settlement.headline)
-                    .font(.system(size: 26, weight: .black, design: .rounded))
-                    .foregroundStyle(WNFTheme.ink)
+                    .font(WNFTheme.display(24))
+                    .foregroundStyle(WNFTheme.inkFixed)
                     .lineLimit(2)
                     .minimumScaleFactor(0.78)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text(settlement.subCopy)
                     .font(.system(size: 12, weight: .heavy))
-                    .foregroundStyle(WNFTheme.inkSoft)
+                    .foregroundStyle(WNFTheme.inkFixed.opacity(0.52))
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -908,29 +928,36 @@ struct DailySettlementShareCard: View {
 
             cumulativeRow
 
-            HStack {
-                Text("丧萌有理 · 自嘲无罪")
-                    .font(.system(size: 12, weight: .heavy))
-                    .foregroundStyle(WNFTheme.inkSoft)
+            VoucherTearLine(caption: "沿虚线撕下 · 明天接着窝囊")
+
+            HStack(alignment: .bottom) {
+                VStack(alignment: .leading, spacing: 5) {
+                    VoucherBarcode(seedText: VoucherStationery.serial())
+                    HStack(spacing: 5) {
+                        YenBadge(size: 14)
+                        Text("来自窝囊费")
+                            .font(.system(size: 10.5, weight: .black))
+                            .foregroundStyle(WNFTheme.inkFixed)
+                        Text("· 丧萌有理 自嘲无罪")
+                            .font(.system(size: 9.5, weight: .heavy))
+                            .foregroundStyle(WNFTheme.inkFixed.opacity(0.45))
+                    }
+                }
 
                 Spacer(minLength: 8)
 
-                HStack(spacing: 5) {
-                    YenBadge(size: 16)
-                    Text("来自窝囊费")
-                        .font(.system(size: 12, weight: .black))
-                        .foregroundStyle(WNFTheme.ink)
+                VStack(alignment: .trailing, spacing: 3) {
+                    Text(VoucherStationery.serial())
+                        .font(WNFTheme.mono(7.5, weight: .regular))
+                        .foregroundStyle(WNFTheme.inkFixed.opacity(0.45))
+                    Text(VoucherStationery.dateLine())
+                        .font(WNFTheme.mono(9, weight: .regular))
+                        .foregroundStyle(WNFTheme.inkFixed.opacity(0.6))
                 }
+                .padding(.bottom, 1)
             }
         }
-        .padding(14)
-        .background(
-            LinearGradient(
-                colors: [WNFTheme.bg.opacity(0.98), WNFTheme.surfaceSoft.opacity(0.78)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
+        .padding(15)
     }
 
     private var cumulativeRow: some View {
@@ -943,8 +970,8 @@ struct DailySettlementShareCard: View {
                 .foregroundStyle(WNFTheme.inkSoft)
             Spacer(minLength: 12)
             Text(cumulativeText)
-                .font(.system(size: 14, weight: .black, design: .rounded))
-                .foregroundStyle(WNFTheme.ink)
+                .font(WNFTheme.mono(14))
+                .foregroundStyle(WNFTheme.inkFixed)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
@@ -983,16 +1010,27 @@ struct DailySettlementShareCard: View {
                             .foregroundStyle(WNFTheme.muted)
                     } else {
                         Text(formattedAmount)
-                            .foregroundStyle(WNFTheme.ink)
+                            .foregroundStyle(WNFTheme.inkFixed)
                             .contentTransition(.numericText(value: renderedAmount))
                             .animation(.easeOut(duration: 0.25), value: renderedAmount)
                     }
                 }
-                .font(.system(size: 44, weight: .black, design: .rounded))
+                .font(WNFTheme.mono(40))
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
                 Spacer(minLength: 0)
             }
+
+            VoucherRow(
+                label: "折合",
+                value: hidesSensitiveInfo
+                    ? "\(conversion.unit.name) •• \(conversion.unit.counter)"
+                    : conversion.line
+            )
+            Text("※ \(conversion.unit.quip)")
+                .font(.system(size: 8.5, weight: .bold))
+                .foregroundStyle(WNFTheme.inkFixed.opacity(0.38))
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -1075,8 +1113,8 @@ struct DailySettlementShareCard: View {
                 .tracking(1)
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(primary)
-                    .font(.system(size: 22, weight: .black, design: .rounded))
-                    .foregroundStyle(WNFTheme.ink)
+                    .font(WNFTheme.mono(20))
+                    .foregroundStyle(WNFTheme.inkFixed)
                 Text(secondary)
                     .font(.system(size: 10, weight: .heavy))
                     .foregroundStyle(WNFTheme.muted)
@@ -1268,7 +1306,7 @@ struct ClockOutCTA: View {
             HStack(spacing: 12) {
                 ZStack {
                     Circle()
-                        .fill(WNFTheme.ink)
+                        .fill(WNFTheme.inkFixed)
                         .frame(width: 36, height: 36)
                     Image(systemName: iconName)
                         .font(.system(size: 16, weight: .heavy))
@@ -1278,10 +1316,10 @@ struct ClockOutCTA: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(.system(size: 15, weight: .black, design: .rounded))
-                        .foregroundStyle(WNFTheme.ink)
+                        .foregroundStyle(WNFTheme.inkFixed)
                     Text(subtitle)
                         .font(.system(size: 11, weight: .heavy))
-                        .foregroundStyle(WNFTheme.inkSoft)
+                        .foregroundStyle(WNFTheme.inkFixed.opacity(0.78))
                         .lineLimit(1)
                 }
 
@@ -1305,7 +1343,7 @@ struct ClockOutCTA: View {
     private var arrowGlyph: some View {
         let glyph = Image(systemName: "arrow.right")
             .font(.system(size: 13, weight: .heavy))
-            .foregroundStyle(WNFTheme.ink.opacity(0.7))
+            .foregroundStyle(WNFTheme.inkFixed.opacity(0.7))
 
         if reduceMotion {
             glyph

@@ -13,6 +13,18 @@ struct ShareCardCopy: Equatable {
     static let pool: [ShareCardCopy] = [
         .default,
         ShareCardCopy(
+            title: "兹证明：\n本人今日窝囊属实。",
+            subtitle: "经办人：我自己。复核人：还是我。"
+        ),
+        ShareCardCopy(
+            title: "经审核，\n今日忍耐符合标准。",
+            subtitle: "准予按秒发放窝囊费，下班领取。"
+        ),
+        ShareCardCopy(
+            title: "本单位确认：\n该同志今日未发疯。",
+            subtitle: "特此发放全额窝囊费以资鼓励。"
+        ),
+        ShareCardCopy(
             title: "人在工位，\n钱在路上。",
             subtitle: "今天又把生活按时熬过一段。"
         ),
@@ -256,6 +268,8 @@ struct ShareCardOverlay: View {
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
         }
+        // 纸就是纸：战报卡是白纸质物件，不随深色模式变色。
+        .environment(\.colorScheme, .light)
         .ignoresSafeArea(.container, edges: .all)
         .allowsHitTesting(isPresented)
         .onChange(of: isPresented) { _, presented in
@@ -521,92 +535,75 @@ struct WonangfeiShareCard: View {
         WorkStatusPresentation(status: day.status)
     }
 
-    var body: some View {
-        VStack(spacing: 0) {
-            header
-            bodyContent
-        }
-        .background(WNFTheme.bg, in: RoundedRectangle(cornerRadius: 29, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 29, style: .continuous).stroke(Color.white.opacity(0.72), lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: 29, style: .continuous))
+    private var conversion: WNFConversion.Result {
+        WNFConversion.convert(amount: day.earnedToday)
     }
 
-    private var header: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Image("CowThreeQ")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 30, height: 30)
-                .padding(4)
-                .background(Color.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("窝囊费")
-                    .font(.system(size: 20, weight: .black, design: .rounded))
-                    .foregroundStyle(WNFTheme.ink)
-                Text("今日窝囊战报")
-                    .font(.system(size: 10, weight: .heavy))
-                    .tracking(1.2)
-                    .foregroundStyle(WNFTheme.inkSoft)
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: 0) {
+                VoucherHeader(
+                    title: "窝囊费·实时对账单",
+                    subtitle: "结算中 · 未到账",
+                    trailingInset: showsControls ? 128 : 0
+                )
+                voucherBody
             }
-
-            Spacer(minLength: 8)
+            .background(WNFTheme.paper)
+            .paperGrain(0.032)
+            .clipShape(VoucherEdgeShape())
+            .overlay(VoucherEdgeShape().stroke(WNFTheme.inkFixed.opacity(0.1), lineWidth: 0.7))
 
             if showsControls {
-                HStack(spacing: 8) {
-                    ShareCardIconButton(
-                        systemName: hidesSensitiveInfo ? "eye.slash" : "eye",
-                        accessibilityLabel: hidesSensitiveInfo ? "显示敏感信息" : "隐藏敏感信息",
-                        action: onTogglePrivacy
-                    )
-                    if showsShareButton {
-                        ShareCardIconButton(
-                            systemName: "square.and.arrow.up",
-                            accessibilityLabel: isPreparingShare ? "正在生成分享图" : "唤起系统分享",
-                            isLoading: isPreparingShare,
-                            isDisabled: isPreparingShare,
-                            action: onShare
-                        )
-                    }
-                    ShareCardIconButton(
-                        systemName: "xmark",
-                        accessibilityLabel: "退出分享卡片",
-                        action: onDismiss
-                    )
-                }
+                controls
+                    .padding(.top, 12)
+                    .padding(.trailing, 12)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 13)
-        .background(WNFTheme.gold)
     }
 
-    private var bodyContent: some View {
-        VStack(alignment: .leading, spacing: 13) {
-            Rectangle()
-                .fill(Color.clear)
-                .frame(height: 0)
-                .overlay(
-                    Rectangle()
-                        .stroke(WNFTheme.muted.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [8, 8]))
+    private var controls: some View {
+        HStack(spacing: 8) {
+            ShareCardIconButton(
+                systemName: hidesSensitiveInfo ? "eye.slash" : "eye",
+                accessibilityLabel: hidesSensitiveInfo ? "显示敏感信息" : "隐藏敏感信息",
+                action: onTogglePrivacy
+            )
+            if showsShareButton {
+                ShareCardIconButton(
+                    systemName: "square.and.arrow.up",
+                    accessibilityLabel: isPreparingShare ? "正在生成分享图" : "唤起系统分享",
+                    isLoading: isPreparingShare,
+                    isDisabled: isPreparingShare,
+                    action: onShare
                 )
-                .padding(.horizontal, -18)
-                .padding(.top, -13)
+            }
+            ShareCardIconButton(
+                systemName: "xmark",
+                accessibilityLabel: "退出分享卡片",
+                action: onDismiss
+            )
+        }
+    }
 
+    private var voucherBody: some View {
+        VStack(alignment: .leading, spacing: 11) {
             HStack(alignment: .top, spacing: 10) {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("事由")
+                        .font(.system(size: 9.5, weight: .heavy))
+                        .tracking(2)
+                        .foregroundStyle(WNFTheme.inkFixed.opacity(0.4))
                     Text(copy.title)
-                        .font(.system(size: 27, weight: .black, design: .rounded))
-                        .foregroundStyle(WNFTheme.ink)
-                        .lineSpacing(-2)
+                        .font(WNFTheme.display(22))
+                        .foregroundStyle(WNFTheme.inkFixed)
+                        .lineSpacing(1)
                         .lineLimit(2)
-                        .minimumScaleFactor(0.82)
+                        .minimumScaleFactor(0.8)
                         .fixedSize(horizontal: false, vertical: true)
-
                     Text(copy.subtitle)
-                        .font(.system(size: 12, weight: .heavy))
-                        .foregroundStyle(WNFTheme.inkSoft)
+                        .font(.system(size: 11, weight: .heavy))
+                        .foregroundStyle(WNFTheme.inkFixed.opacity(0.52))
                         .lineLimit(2)
                 }
 
@@ -615,83 +612,86 @@ struct WonangfeiShareCard: View {
                 Image(statusPresentation.mascotAssetName)
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 66, height: 66)
-                    .padding(.top, 8)
+                    .frame(width: 62, height: 62)
+                    .padding(.top, 10)
             }
 
-            statsPanel
+            VStack(alignment: .leading, spacing: 8) {
+                VoucherRow(
+                    label: "今日窝囊费",
+                    value: WNFFormat.moneyDecimal(day.earnedToday, privacy: hidesSensitiveInfo),
+                    big: true
+                )
+                VoucherRow(
+                    label: "已忍时长",
+                    value: hidesSensitiveInfo ? "••h••min" : WNFFormat.duration(day.elapsedPaidMinutes),
+                    valueColor: WNFTheme.coral
+                )
+                VoucherRow(
+                    label: "窝囊单价",
+                    value: hidesSensitiveInfo ? "¥••.•/h" : String(format: "¥%.1f/h", day.hourlyRate)
+                )
+                VoucherRow(
+                    label: "折合",
+                    value: hidesSensitiveInfo
+                        ? "\(conversion.unit.name) •• \(conversion.unit.counter)"
+                        : conversion.line
+                )
+                Text("※ \(conversion.unit.quip)")
+                    .font(.system(size: 8.5, weight: .bold))
+                    .foregroundStyle(WNFTheme.inkFixed.opacity(0.38))
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            .padding(12)
+            .background(WNFTheme.surfaceSoft.opacity(0.5), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .stroke(WNFTheme.inkFixed.opacity(0.14), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+            )
+            .environment(\.colorScheme, .light)
+
+            VoucherTearLine()
+
+            HStack(alignment: .bottom, spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    VoucherBarcode(seedText: VoucherStationery.serial())
+                    Text("\(VoucherStationery.serial())  \(VoucherStationery.dateLine())")
+                        .font(WNFTheme.mono(7.5, weight: .regular))
+                        .foregroundStyle(WNFTheme.inkFixed.opacity(0.45))
+                }
+
+                Spacer(minLength: 6)
+
+                // 盖章处：留白给下班结算 — 白天的对账单永远盖不了章。
+                VStack(spacing: 2) {
+                    Text("盖章处")
+                        .font(.system(size: 8.5, weight: .heavy))
+                        .foregroundStyle(WNFTheme.inkFixed.opacity(0.32))
+                    Text("下班后凭此领取")
+                        .font(.system(size: 7, weight: .bold))
+                        .foregroundStyle(WNFTheme.inkFixed.opacity(0.26))
+                }
+                .frame(width: 74, height: 46)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9)
+                        .stroke(WNFTheme.inkFixed.opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                )
+            }
 
             HStack {
                 Text("丧萌有理 · 自嘲无罪")
-                    .font(.system(size: 12, weight: .heavy))
-                    .foregroundStyle(WNFTheme.inkSoft)
-
+                    .font(.system(size: 10.5, weight: .heavy))
+                    .foregroundStyle(WNFTheme.inkFixed.opacity(0.5))
                 Spacer(minLength: 8)
-
                 HStack(spacing: 5) {
-                    YenBadge(size: 16)
+                    YenBadge(size: 15)
                     Text("来自窝囊费")
-                        .font(.system(size: 12, weight: .black))
-                        .foregroundStyle(WNFTheme.ink)
+                        .font(.system(size: 10.5, weight: .black))
+                        .foregroundStyle(WNFTheme.inkFixed)
                 }
             }
         }
-        .padding(14)
-        .background(
-            LinearGradient(
-                colors: [WNFTheme.bg.opacity(0.98), WNFTheme.surfaceSoft.opacity(0.78)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
-    }
-
-    private var statsPanel: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("今日窝囊费")
-                    .font(.system(size: 13, weight: .heavy))
-                    .foregroundStyle(WNFTheme.inkSoft)
-                Spacer(minLength: 12)
-                Text(WNFFormat.moneyDecimal(day.earnedToday, privacy: hidesSensitiveInfo))
-                    .font(.system(size: 35, weight: .black, design: .rounded))
-                    .foregroundStyle(WNFTheme.ink)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.62)
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 15)
-            .padding(.bottom, 10)
-
-            Rectangle()
-                .fill(WNFTheme.hairline)
-                .frame(height: 0.5)
-                .padding(.horizontal, 14)
-
-            HStack(alignment: .firstTextBaseline) {
-                Text("上班上了多久")
-                    .font(.system(size: 13, weight: .heavy))
-                    .foregroundStyle(WNFTheme.inkSoft)
-                Spacer(minLength: 12)
-                Text(hidesSensitiveInfo ? "••h••min" : WNFFormat.duration(day.elapsedPaidMinutes))
-                    .font(.system(size: 22, weight: .black, design: .rounded))
-                    .foregroundStyle(WNFTheme.coral)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 10)
-            .padding(.bottom, 14)
-        }
-        .background(WNFTheme.surfaceSoft.opacity(0.72), in: RoundedRectangle(cornerRadius: 19, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 19, style: .continuous)
-                .stroke(WNFTheme.muted.opacity(0.28), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
-                .padding(9)
-        )
-        .padding(8)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 25, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 25, style: .continuous).stroke(WNFTheme.hairline, lineWidth: 0.5))
+        .padding(15)
     }
 }
 

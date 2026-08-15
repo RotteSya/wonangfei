@@ -44,7 +44,7 @@ struct SettingsView: View {
                             ValueStepper(
                                 valueText: state.privacyMode ? "¥••,•••" : "¥\(Int(state.monthlySalary).formatted())",
                                 editTitle: "设置月薪",
-                                editPlaceholder: "输入月薪",
+                                editUnit: "元 / 月",
                                 editInitialText: { "\(Int(state.monthlySalary))" },
                                 width: 172,
                                 decrementAccessibilityLabel: "减少月薪",
@@ -61,7 +61,7 @@ struct SettingsView: View {
                             ValueStepper(
                                 valueText: "\(state.workdaysPerMonth) 天",
                                 editTitle: "设置每月工作日",
-                                editPlaceholder: "输入工作日",
+                                editUnit: "天",
                                 editInitialText: { "\(state.workdaysPerMonth)" },
                                 width: 136,
                                 decrementAccessibilityLabel: "减少每月工作日",
@@ -76,7 +76,8 @@ struct SettingsView: View {
                         }
                         SettingsRow(title: "时薪 · 自动算", isLast: true) {
                             Text(state.privacyMode ? "¥••.•/h" : String(format: "¥%.1f/h", day.hourlyRate))
-                                .font(.system(size: 13, weight: .black, design: .monospaced))
+                                .font(WNFTheme.mono(13))
+                                .foregroundStyle(WNFTheme.inkFixed)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 5)
                                 .background(WNFTheme.yellow, in: Capsule())
@@ -118,7 +119,7 @@ struct SettingsView: View {
                                 .foregroundStyle(Color.white)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 8)
-                                .background(WNFTheme.ink, in: Capsule())
+                                .background(WNFTheme.inkSurface, in: Capsule())
                             }
                             .buttonStyle(.plain)
                         }
@@ -189,6 +190,27 @@ struct SettingsView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
 
+                Rectangle()
+                    .fill(WNFTheme.hairline)
+                    .frame(height: 0.5)
+                    .padding(.leading, 16)
+
+                HStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("灵动岛实时窝囊费")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(WNFTheme.ink)
+                        Text("上班时把今日窝囊费和离下班倒计时挂在灵动岛和锁屏上。")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(WNFTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 12)
+                    WNFToggle(isOn: $state.liveActivityEnabled)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+
                 if clockOutReminderShouldShowSystemHint {
                     Rectangle()
                         .fill(WNFTheme.hairline)
@@ -228,6 +250,13 @@ struct SettingsView: View {
         UIApplication.shared.open(url)
     }
 
+    private static func dailyHoursText(paidMinutes: Int) -> String {
+        let hours = Double(paidMinutes) / 60
+        return hours.truncatingRemainder(dividingBy: 1) == 0
+            ? "\(Int(hours))"
+            : String(format: "%.1f", hours)
+    }
+
     private var profileBanner: some View {
         HStack(spacing: 14) {
             Image("HeroMascot")
@@ -239,11 +268,11 @@ struct SettingsView: View {
 
             VStack(alignment: .leading, spacing: 5) {
                 Text("窝囊费打工人")
-                    .font(.system(size: 27, weight: .black, design: .rounded))
+                    .font(WNFTheme.display(26))
                     .foregroundStyle(Color.white)
                 HStack(spacing: 6) {
                     YenBadge(size: 13)
-                    Text("时薪 \(state.privacyMode ? "¥••" : "¥\(Int(day.hourlyRate))") · \(state.hasLunchBreak ? "已忍 \(Int(Double(day.workdayMinutes) / 60 * 9.4)) 小时" : "不午休")")
+                    Text("时薪 \(state.privacyMode ? "¥••" : "¥\(Int(day.hourlyRate))") · 每天窝囊 \(Self.dailyHoursText(paidMinutes: day.workdayMinutes)) 小时")
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(Color.white.opacity(0.58))
                 }
@@ -253,7 +282,7 @@ struct SettingsView: View {
         }
         .padding(22)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(WNFTheme.ink, in: RoundedRectangle(cornerRadius: 28))
+        .background(WNFTheme.inkSurface, in: RoundedRectangle(cornerRadius: 28))
         .overlay(alignment: .topTrailing) {
             Text("¥")
                 .font(.system(size: 210, weight: .black, design: .rounded))
@@ -321,7 +350,7 @@ struct SettingsView: View {
 private struct ValueStepper: View {
     var valueText: String
     var editTitle: String
-    var editPlaceholder: String
+    var editUnit: String
     var editInitialText: () -> String
     var width: CGFloat
     var decrementAccessibilityLabel: String
@@ -350,7 +379,7 @@ private struct ValueStepper: View {
                 isQuickEditorPresented = true
             } label: {
                 Text(valueText)
-                    .font(.system(size: 14, weight: .black, design: .monospaced))
+                    .font(WNFTheme.mono(14))
                     .foregroundStyle(WNFTheme.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
@@ -369,17 +398,16 @@ private struct ValueStepper: View {
             )
         }
         .frame(width: width, height: 38)
-        .background(Color.black.opacity(0.06), in: Capsule())
+        .background(WNFTheme.hairline, in: Capsule())
         .accessibilityElement(children: .contain)
-        .alert(editTitle, isPresented: $isQuickEditorPresented) {
-            TextField(editPlaceholder, text: $draftText)
-                .keyboardType(.numberPad)
-            Button("取消", role: .cancel) {}
-            Button("确定") {
-                onCommitText(draftText)
-            }
-        } message: {
-            Text("直接输入数字即可")
+        .sheet(isPresented: $isQuickEditorPresented) {
+            WNFNumberPadSheet(
+                title: editTitle,
+                unit: editUnit,
+                // Evaluated at presentation time — never a stale @State capture.
+                initialText: editInitialText(),
+                onCommit: onCommitText
+            )
         }
     }
 
@@ -412,21 +440,26 @@ private struct TimePickerRow: View {
     @Binding var components: DateComponents
     var isLast = false
 
-    private var date: Binding<Date> {
-        Binding {
-            DateComponents.calendar.date(from: components) ?? .now
-        } set: { value in
-            components = DateComponents.calendar.dateComponents([.hour, .minute], from: value)
-        }
-    }
+    @State private var isPickerPresented = false
 
     var body: some View {
         SettingsRow(title: title, isLast: isLast) {
-            DatePicker("", selection: date, displayedComponents: .hourAndMinute)
-                .labelsHidden()
-                .datePickerStyle(.compact)
-                .tint(WNFTheme.yellow)
-                .environment(\.locale, Locale(identifier: "zh_Hans"))
+            Button {
+                isPickerPresented = true
+            } label: {
+                Text(components.clockText)
+                    .font(WNFTheme.mono(14))
+                    .foregroundStyle(WNFTheme.ink)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(WNFTheme.hairline, in: Capsule())
+            }
+            .buttonStyle(.squish(0.95))
+            .accessibilityLabel("\(title)时间")
+            .accessibilityValue(components.clockText)
+        }
+        .sheet(isPresented: $isPickerPresented) {
+            WNFTimePickerSheet(title: "设置\(title)时间", components: $components)
         }
     }
 }

@@ -359,3 +359,30 @@ enum WNFWidgetTimeline {
             ?? now.addingTimeInterval(6 * 60 * 60)
     }
 }
+
+#if canImport(ActivityKit)
+import ActivityKit
+
+/// Live Activity schema shared by the app (starts/updates) and the widget
+/// extension (renders). Everything time-driven (离下班 countdown, progress
+/// bar) uses `Text(timerInterval:)` / `ProgressView(timerInterval:)` so the
+/// island stays alive between content updates.
+struct WNFLiveActivityAttributes: ActivityAttributes {
+    struct ContentState: Codable, Hashable {
+        /// When this state was computed; the money figure is exact at this instant.
+        var refDate: Date
+        /// ¥ earned as of `refDate`.
+        var earnedAtRef: Double
+        /// Today's paid window, as concrete dates (for auto progress/countdown).
+        var workdayStart: Date
+        var workdayEnd: Date
+        /// 下班了（含结算前的"待领取"状态）。
+        var isDone: Bool
+        /// 隐私模式：金额打码。
+        var hidesAmount: Bool
+    }
+
+    /// One activity per calendar day.
+    var dateKey: String
+}
+#endif

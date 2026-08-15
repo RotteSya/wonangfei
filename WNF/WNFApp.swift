@@ -14,10 +14,12 @@ struct WNFApp: App {
                         state.resumeCalendarDayTimer()
                         writeWidgetSnapshot()
                         state.reconcileClockOutReminder()
+                        WNFLiveActivityController.beginMinuteRefresh(state: state)
                     } else {
                         state.persistCurrentDaySnapshot()
                         writeWidgetSnapshot()
                         state.pauseCalendarDayTimer()
+                        WNFLiveActivityController.endMinuteRefresh()
                     }
                 }
                 .onAppear {
@@ -74,5 +76,6 @@ struct WNFApp: App {
         if wrote {
             WNFWidgetReloader.scheduleReload()
         }
+        WNFLiveActivityController.reconcile(state: state)
     }
 }

@@ -43,7 +43,7 @@
 		100000000000000000000137 /* JetBrainsMono-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000244 /* JetBrainsMono-Bold.ttf */; };
 		100000000000000000000138 /* Voucher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000245 /* Voucher.swift */; };
 		100000000000000000000140 /* LiveActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000247 /* LiveActivityController.swift */; };
-		100000000000000000000125 /* PlaceholderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000234 /* PlaceholderTests.swift */; };
+		100000000000000000000125 /* WageEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000234 /* WageEngineTests.swift */; };
 		100000000000000000000139 /* VoucherSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000246 /* VoucherSnapshotTests.swift */; };
 		100000000000000000000B01 /* JellyTourUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000B02 /* JellyTourUITests.swift */; };
 		100000000000000000000130 /* Legal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000239 /* Legal.swift */; };
@@ -129,7 +129,7 @@
 		100000000000000000000236 /* DailySettlement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailySettlement.swift; sourceTree = "<group>"; };
 		100000000000000000000237 /* ClockOutReminder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockOutReminder.swift; sourceTree = "<group>"; };
 		100000000000000000000238 /* BubbleQuoteEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BubbleQuoteEngine.swift; sourceTree = "<group>"; };
-		100000000000000000000234 /* PlaceholderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceholderTests.swift; sourceTree = "<group>"; };
+		100000000000000000000234 /* WageEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WageEngineTests.swift; sourceTree = "<group>"; };
 		100000000000000000000246 /* VoucherSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoucherSnapshotTests.swift; sourceTree = "<group>"; };
 		100000000000000000000B02 /* JellyTourUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JellyTourUITests.swift; sourceTree = "<group>"; };
 		100000000000000000000B03 /* WNFUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WNFUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -253,7 +253,7 @@
 		100000000000000000000405 /* WNFTests */ = {
 			isa = PBXGroup;
 			children = (
-				100000000000000000000234 /* PlaceholderTests.swift */,
+				100000000000000000000234 /* WageEngineTests.swift */,
 				100000000000000000000246 /* VoucherSnapshotTests.swift */,
 			);
 			path = WNFTests;
@@ -492,7 +492,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				100000000000000000000125 /* PlaceholderTests.swift in Sources */,
+				100000000000000000000125 /* WageEngineTests.swift in Sources */,
 				100000000000000000000139 /* VoucherSnapshotTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

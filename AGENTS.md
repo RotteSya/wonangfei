@@ -178,7 +178,7 @@ xcodebuild test -project WNF.xcodeproj -scheme WNF \
 
 `VoucherSnapshotTests` 是 render-smoke，无参考图比对，不能当快照回归。设环境变量 `TEST_RUNNER_WNF_SNAPSHOT_DIR=<dir>`（`xcodebuild test` 会剥 `TEST_RUNNER_` 前缀，代码读 `WNF_SNAPSHOT_DIR`，`VoucherSnapshotTests.swift:13`）可把两张卡写成 PNG。
 
-`testGrandTour` 兼布局护栏（TopBar 被挤出屏会 "off-screen" 失败）。可配 `xcrun simctl io 'iPhone 17' recordVideo --codec h264 --force tour.mov`。七个 a11y identifier 重构必须保留：`home.money` · `home.share` · `home.privacy` · `tab.<home\|records\|settings>` · `records.period.<week\|month\|year>` · `records.chart` · `share.cancel`。
+`testGrandTour` 兼布局护栏（TopBar 被挤出屏会 "off-screen" 失败）。可配 `xcrun simctl io 'iPhone 17' recordVideo --codec h264 --force tour.mov`。七个 a11y identifier 重构必须保留：`home.money` · `home.share` · `home.privacy` · `tab.<home\|records\|settings>` · `records.period.<week\|month\|year>` · `records.chart` · `share.cancel`。法务入口：`settings.legal.privacy` / `settings.legal.terms`。
 
 ## 11. 发布与 App Store
 
@@ -198,7 +198,7 @@ xcodebuild test -project WNF.xcodeproj -scheme WNF \
 
 `metadata/` 是 asc CLI 的按版本分目录（`version/1.0/` 与 `1.1/` 都要留，差在 `whatsNew`）。**已知失败**（`.asc/reports/metadata-apply/failures-*.json`）：版本非可编辑态无法改 `privacyPolicyUrl` 与 `description`——`metadata apply` 必须跑在可编辑版本上。
 
-法务三副本：`WNF/Legal/{privacy,terms}.html`（App 内离线兜底，`Legal.swift:84-92`）与 `docs/{privacy,terms}.html`（GitHub Pages）必须**同时**改、保持字节一致。
+法务两处必须同时改、保持字节一致：`WNF/Legal/{privacy,terms}.html`（App 内唯一来源，`Legal.swift:52-62`）与 `docs/{privacy,terms}.html`（GitHub Pages / ASC 隐私 URL）。App 内不再请求 `wonangfei.app`。
 
 ## 12. 已知技术债与已接受的妥协
 

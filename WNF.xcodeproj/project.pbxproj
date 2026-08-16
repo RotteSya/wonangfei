@@ -46,6 +46,7 @@
 		100000000000000000000125 /* WageEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000234 /* WageEngineTests.swift */; };
 		100000000000000000000139 /* VoucherSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000246 /* VoucherSnapshotTests.swift */; };
 		100000000000000000000B01 /* JellyTourUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000B02 /* JellyTourUITests.swift */; };
+		100000000000000000000B20 /* LegalDocumentUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000B21 /* LegalDocumentUITests.swift */; };
 		100000000000000000000130 /* Legal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000239 /* Legal.swift */; };
 		100000000000000000000131 /* WidgetShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000219 /* WidgetShared.swift */; };
 		100000000000000000000132 /* WidgetSnapshotWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000240 /* WidgetSnapshotWriter.swift */; };
@@ -132,6 +133,7 @@
 		100000000000000000000234 /* WageEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WageEngineTests.swift; sourceTree = "<group>"; };
 		100000000000000000000246 /* VoucherSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoucherSnapshotTests.swift; sourceTree = "<group>"; };
 		100000000000000000000B02 /* JellyTourUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JellyTourUITests.swift; sourceTree = "<group>"; };
+		100000000000000000000B21 /* LegalDocumentUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalDocumentUITests.swift; sourceTree = "<group>"; };
 		100000000000000000000B03 /* WNFUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WNFUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		100000000000000000000239 /* Legal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Legal.swift; sourceTree = "<group>"; };
 		100000000000000000000240 /* WidgetSnapshotWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetSnapshotWriter.swift; sourceTree = "<group>"; };
@@ -263,6 +265,7 @@
 			isa = PBXGroup;
 			children = (
 				100000000000000000000B02 /* JellyTourUITests.swift */,
+				100000000000000000000B21 /* LegalDocumentUITests.swift */,
 			);
 			path = WNFUITests;
 			sourceTree = "<group>";
@@ -502,6 +505,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				100000000000000000000B01 /* JellyTourUITests.swift in Sources */,
+				100000000000000000000B20 /* LegalDocumentUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

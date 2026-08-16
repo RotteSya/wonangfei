@@ -322,8 +322,10 @@ struct SettingsView: View {
     private var legalFooter: some View {
         HStack(spacing: 14) {
             Button("Terms of Use") { legalDocument = .terms }
+                .accessibilityIdentifier("settings.legal.terms")
             Text("·").foregroundStyle(WNFTheme.muted)
             Button("Privacy Policy") { legalDocument = .privacy }
+                .accessibilityIdentifier("settings.legal.privacy")
         }
         .font(.system(size: 11, weight: .heavy))
         .foregroundStyle(WNFTheme.inkSoft)

@@ -14,13 +14,6 @@ enum LegalDocument: String, Identifiable {
         }
     }
 
-    var remoteURL: URL {
-        switch self {
-        case .terms: URL(string: "https://wonangfei.app/terms")!
-        case .privacy: URL(string: "https://wonangfei.app/privacy")!
-        }
-    }
-
     var localResourceName: String {
         switch self {
         case .terms: "terms"
@@ -49,46 +42,25 @@ struct LegalDocumentView: View {
     }
 }
 
+/// Loads the bundled HTML immediately. Public / ASC copies live at
+/// `docs/*.html` on GitHub Pages and must stay byte-identical with
+/// `WNF/Legal/*.html`. Do not restore a remote-first request —
+/// `wonangfei.app` does not resolve, and the wait is just a timeout.
 private struct LegalWebView: UIViewRepresentable {
     var document: LegalDocument
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator(document: document)
-    }
-
     func makeUIView(context: Context) -> WKWebView {
         let webView = WKWebView()
-        webView.navigationDelegate = context.coordinator
-        webView.load(URLRequest(url: document.remoteURL))
+        if let url = Bundle.main.url(forResource: document.localResourceName, withExtension: "html") {
+            webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+        } else {
+            webView.loadHTMLString(
+                "<html><body><h1>\(document.title)</h1><p>Legal document unavailable.</p></body></html>",
+                baseURL: nil
+            )
+        }
         return webView
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {}
-
-    final class Coordinator: NSObject, WKNavigationDelegate {
-        var document: LegalDocument
-        private var didLoadFallback = false
-
-        init(document: LegalDocument) {
-            self.document = document
-        }
-
-        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-            loadFallback(into: webView)
-        }
-
-        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-            loadFallback(into: webView)
-        }
-
-        private func loadFallback(into webView: WKWebView) {
-            guard !didLoadFallback else { return }
-            didLoadFallback = true
-            if let url = Bundle.main.url(forResource: document.localResourceName, withExtension: "html") {
-                webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
-            } else {
-                webView.loadHTMLString("<html><body><h1>\(document.title)</h1><p>Legal document unavailable offline.</p></body></html>", baseURL: nil)
-            }
-        }
-    }
 }

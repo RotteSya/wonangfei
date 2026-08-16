@@ -196,7 +196,7 @@ xcodebuild test -project WNF.xcodeproj -scheme WNF \
 | 分级 / 分类 | 4+ · 财务（`LSApplicationCategoryType` = `public.app-category.finance`） |
 | 截图 | 已提交在 `store/screenshots/`；6.9" 竖屏 `1320×2868` |
 
-`metadata/` 是 asc CLI 的按版本分目录（`version/1.0/` 与 `1.1/` 都要留，差在 `whatsNew`）。**已知失败**（`.asc/reports/metadata-apply/failures-*.json`）：版本非可编辑态无法改 `privacyPolicyUrl` 与 `description`——`metadata apply` 必须跑在可编辑版本上。
+`metadata/` 是 asc CLI 的按版本分目录（`version/1.0/`、`1.1/`、`1.2/` 都要留）。1.0 / 1.1 已 `READY_FOR_DISTRIBUTION`，商店 `description` 只能改可编辑版本（当前是 1.2）。仓库 `MARKETING_VERSION` 仍是 1.1 (2)，1.2 尚未绑 build、未提审。
 
 法务两处必须同时改、保持字节一致：`WNF/Legal/{privacy,terms}.html`（App 内唯一来源，`Legal.swift:52-62`）与 `docs/{privacy,terms}.html`（GitHub Pages / ASC 隐私 URL）。App 内不再请求 `wonangfei.app`。
 

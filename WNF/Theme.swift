@@ -33,9 +33,7 @@ enum WNFTheme {
     static let yellow = Color(red: 1.0, green: 0.7843, blue: 0.2392)
     static let gold = Color(red: 1.0, green: 0.8235, blue: 0.3020)
     static let cyan = Color(red: 0.0, green: 0.8980, blue: 1.0)
-    static let cyanSoft = dynamic(0xB6F5FB, 0x0E2C32)
     static let coral = Color(red: 1.0, green: 0.3608, blue: 0.3412)
-    static let coralSoft = dynamic(0xFFD7D2, 0x3D1915)
 
     // MARK: - Scheme-independent constants
     // 凭证永远是纸——导出的分享图不跟随深色模式，纸就是纸。

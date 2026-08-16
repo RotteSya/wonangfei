@@ -224,21 +224,6 @@ final class WageState: ObservableObject {
         )
     }
 
-    func dailyRecord(for date: Date, includingLiveToday: Bool = false) -> DailyWageRecord? {
-        let dateKey = Self.dateKey(for: date)
-        if includingLiveToday, dateKey == currentDateKey {
-            let now = Date()
-            return makeDailyRecord(
-                for: now,
-                capturedAt: now,
-                source: .observed,
-                settings: currentSettingsSnapshot
-            )
-        }
-
-        return dailyRecords[dateKey]
-    }
-
     func persistCurrentDaySnapshot() {
         let now = Date()
         advanceCalendarDay(to: now)
@@ -258,21 +243,6 @@ final class WageState: ObservableObject {
 
     func resumeCalendarDayTimer(now: Date = Date()) {
         refreshCalendarDayIfNeeded(now: now)
-    }
-
-    func bindingForTime(_ keyPath: ReferenceWritableKeyPath<WageState, DateComponents>) -> Date {
-        DateComponents.calendar.date(from: self[keyPath: keyPath]) ?? .now
-    }
-
-    func updateTime(_ keyPath: ReferenceWritableKeyPath<WageState, DateComponents>, date: Date) {
-        let components = DateComponents.calendar.dateComponents([.hour, .minute], from: date)
-        if keyPath == \WageState.workStart {
-            setWorkStart(components)
-        } else if keyPath == \WageState.workEnd {
-            setWorkEnd(components)
-        } else {
-            self[keyPath: keyPath] = components
-        }
     }
 
     func adjustMonthlySalary(by delta: Double) {

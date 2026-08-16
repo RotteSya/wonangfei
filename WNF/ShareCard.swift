@@ -56,9 +56,7 @@ struct ShareCardCopy: Equatable {
     }
 }
 
-/// Every tunable knob of the Dynamic-Island genie emergence. Defaults are the
-/// shipping values; the DEBUG tuner mutates a copy live so the whole animation
-/// can be dialled in without rebuilding.
+/// Named constants for the Dynamic-Island genie emergence.
 struct GenieParams: Equatable {
     // Timing
     var duration: Double = 1.0           // emergence (present) seconds
@@ -348,8 +346,6 @@ private struct IslandMetrics {
     var hasIsland: Bool
     var topY: CGFloat
     var compactSize: CGSize
-    var expandedSize: CGSize
-    var detachGap: CGFloat
 
     init(topInset: CGFloat) {
         // Dynamic Island devices report a ~59pt top inset; notch devices ~44–50pt.
@@ -358,13 +354,9 @@ private struct IslandMetrics {
         if island {
             topY = 11
             compactSize = CGSize(width: 126, height: 37.33)
-            expandedSize = CGSize(width: 164, height: 41)   // opens just a little
-            detachGap = 18
         } else {
             topY = max(8, topInset * 0.4)
             compactSize = CGSize(width: 96, height: 30)
-            expandedSize = CGSize(width: 150, height: 34)
-            detachGap = 14
         }
     }
 

@@ -416,13 +416,6 @@ final class HomeMascotVideoController: ObservableObject {
         installMemoryWarningObserver()
     }
 
-    fileprivate init(clips: [HomeMascotVideoClip]) {
-        self.clips = clips
-        configurePlayer()
-        installEndObserver()
-        installMemoryWarningObserver()
-    }
-
     private func configurePlayer() {
         player.isMuted = true
         player.allowsExternalPlayback = false

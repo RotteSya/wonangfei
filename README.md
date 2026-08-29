@@ -1,30 +1,32 @@
 # 窝囊费 WNF
 
-上班时薪实时滚动的 iOS App。已上架 App Store，仓库当前版本 **1.1 (2)**。
+上班时薪实时滚动的原生 SwiftUI iOS App。打开首页就能看见今天已经挣到的钱，一秒一秒往上滚。
 
-[App Store](https://apps.apple.com/app/id6780135826) · 支持：<https://rottesya.github.io/wonangfei/support.html>
+- App Store：<https://apps.apple.com/app/id6780135826>
+- 支持：<https://rottesya.github.io/wonangfei/support.html>
 
-## 跑起来
+## 唯一启动命令
 
-- 前置：Xcode、iOS 26.5 runtime、`iPhone 17` 模拟器
-- 打开 `WNF.xcodeproj`，scheme 只用 `WNF`（widget 经隐式依赖一并构建）
-- 命令行构建 / 测试与环境自检见 [AGENTS.md](AGENTS.md) §2、§10
+需要 macOS、Xcode、以及 iOS 26.5 simulator runtime。在仓库根目录执行：
 
-## 仓库结构
+```sh
+./scripts/wnf verify
+```
 
-| 路径 | 内容 |
-|---|---|
-| `WNF/` | App 源码、Metal、字体、Asset Catalog、法务离线副本 |
-| `WNFWidget/` | Widget + Live Activity UI |
-| `WNFTests/` | 工资引擎与凭证渲染测试 |
-| `WNFUITests/` | `testGrandTour` 巡演 |
-| `docs/` | GitHub Pages（ASC 已提交的营销 / 隐私 / 支持页） |
-| `metadata/` | asc CLI 按版本分目录的商店文案 |
+这是唯一的 bootstrap：环境自检、必要时创建 iPhone 17 模拟器、静态门禁、Debug 构建、单元测试、UI 测试、静态分析、unsigned Release 模拟器构建和 bundle 审计。不要另写一份 xcodebuild 菜谱。
 
-## 给开发者（人或 AI）
+阶段失败时先跑：
 
-本项目的单一真理源是 [AGENTS.md](AGENTS.md)。架构、不变量、构建契约、发布流程全部在那里。本 README 不重复任何细节。
+```sh
+./scripts/wnf doctor
+```
 
-## 版权
+UI 测试经启动参数跳过引导，不必先手动点完 Onboarding。
+
+可选、且不计入 `verify`：`./scripts/wnf store-check` 只读核对 App Store 元数据（需要 ASC 凭据；缺失凭据会说明原因并退出。禁止 apply / submit / 远端删除）。
+
+## 交接
+
+[AGENTS.md](AGENTS.md) 是唯一的交接文档。身份、架构、不可破坏契约、验证矩阵、发布边界、资产与许可、技术债都在那里。本 README 只负责把人领进门。
 
 © 2026 SHE LINGZHAO

@@ -1,12 +1,9 @@
 .DS_Store
-node_modules/
-dist/
 build/
 DerivedData/
 *.xcuserstate
 xcuserdata/
 *.moved-aside
-.swiftpm/
 .claude/
 
 # asc CLI run reports (artifacts)

@@ -1,9 +1,8 @@
 schemaVersion: 1
 sessionDefaults:
-  projectPath: /Users/shelingzhao/Developer/AppleApps/wonangfei/WNF.xcodeproj
+  projectPath: WNF.xcodeproj
   scheme: WNF
   configuration: Debug
   simulatorName: iPhone 17
-  simulatorId: 1898891A-D11D-48D1-8680-EC662200DEBD
   simulatorPlatform: iOS Simulator
   bundleId: com.wonangfei.app

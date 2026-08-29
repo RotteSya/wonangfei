@@ -1,0 +1,855 @@
+#!/usr/bin/env bash
+# Portable WNF verification. Repo root is derived from this file, never cwd.
+set -euo pipefail
+
+_SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(cd "${_SCRIPT_DIR}/.." && pwd)
+cd "$REPO_ROOT"
+
+PROJECT="WNF.xcodeproj"
+SCHEME="WNF"
+DESTINATION="${WNF_DESTINATION:-platform=iOS Simulator,name=iPhone 17,OS=26.5}"
+IOS_RUNTIME_VERSION="26.5"
+SIM_NAME="iPhone 17"
+ASC_APP_ID="6780135826"
+EDITABLE_ASC_VERSION="1.2"
+
+VERIFY_DIR="${REPO_ROOT}/build/verification"
+DERIVED_DATA="${VERIFY_DIR}/DerivedData"
+LOG_DIR="${VERIFY_DIR}/logs"
+RESULT_DIR="${VERIFY_DIR}/results"
+PRODUCTS_DIR="${VERIFY_DIR}/products"
+
+SWIFT_FLAGS=(
+  SWIFT_TREAT_WARNINGS_AS_ERRORS=YES
+  SWIFT_STRICT_CONCURRENCY=complete
+)
+UNSIGNED_FLAGS=(
+  CODE_SIGNING_ALLOWED=NO
+  CODE_SIGNING_REQUIRED=NO
+  CODE_SIGN_IDENTITY=
+)
+
+IN_VERIFY=0
+SUMMARY_LINES=""
+STAGE_NAME=""
+STAGE_START=0
+STAGE_BUNDLE=""
+STAGE_LOG=""
+
+usage() {
+  cat <<'EOF'
+Usage: ./scripts/wnf <command>
+
+  doctor         Read-only environment check (Xcode, iOS 26.5, iPhone 17 type, 4 targets, tracked scheme)
+  bootstrap      Create an iPhone 17 simulator for iOS 26.5 if the runtime exists and none is present
+  build          Debug App+Widget
+  test-unit      WNFTests
+  test-ui        WNFUITests
+  analyze        xcodebuild analyze
+  release-check  Unsigned Release simulator build + bundle audit
+  verify         doctor → bootstrap → static-gate → build → test-unit → test-ui → analyze → release-check
+  store-check    OPTIONAL. Read-only ASC metadata pull/validate/plan + URL/screenshot presence.
+                 Never apply, submit, or remote-delete. Not part of verify.
+
+Logs and xcresults: build/verification/
+EOF
+}
+
+relpath() {
+  local p="$1"
+  case "$p" in
+    "${REPO_ROOT}"/*) printf '%s\n' "${p#"${REPO_ROOT}"/}" ;;
+    *) printf '%s\n' "$p" ;;
+  esac
+}
+
+now_s() {
+  date +%s
+}
+
+ensure_dirs() {
+  mkdir -p "$LOG_DIR" "$RESULT_DIR" "$PRODUCTS_DIR" "$DERIVED_DATA"
+}
+
+append_summary() {
+  local name="$1" status="$2" elapsed="$3" bundle="$4"
+  local bundle_disp="-"
+  if [[ -n "$bundle" ]]; then
+    bundle_disp=$(relpath "$bundle")
+  fi
+  SUMMARY_LINES="${SUMMARY_LINES}$(printf '%-14s %-4s %5ss  %s' "$name" "$status" "$elapsed" "$bundle_disp")"$'\n'
+}
+
+print_verify_summary() {
+  local rc=$?
+  local elapsed=0
+  if [[ -n "${VERIFY_START:-}" ]]; then
+    elapsed=$(( $(now_s) - VERIFY_START ))
+  fi
+  printf '\n======== WNF verify summary ========\n'
+  if [[ -n "$SUMMARY_LINES" ]]; then
+    printf '%s' "$SUMMARY_LINES"
+  fi
+  if [[ $rc -eq 0 && "$IN_VERIFY" -eq 1 ]]; then
+    printf 'ALL PASSED  (%ss)\n' "$elapsed"
+  else
+    printf 'FAILED  (%ss)\n' "$elapsed"
+  fi
+}
+
+stage_start() {
+  STAGE_NAME="$1"
+  STAGE_BUNDLE="${2:-}"
+  STAGE_LOG="${3:-}"
+  STAGE_START=$(now_s)
+  ensure_dirs
+  printf '\n==> %s\n' "$STAGE_NAME"
+  if [[ -n "$STAGE_LOG" ]]; then
+    printf '    log: %s\n' "$(relpath "$STAGE_LOG")"
+  fi
+  if [[ -n "$STAGE_BUNDLE" ]]; then
+    printf '    result-bundle: %s\n' "$(relpath "$STAGE_BUNDLE")"
+  fi
+}
+
+print_diag() {
+  local log="${1:-$STAGE_LOG}"
+  if [[ -z "$log" || ! -f "$log" ]]; then
+    printf '    (no log)\n'
+    return 0
+  fi
+  printf '%s\n' '--- diagnostic ---'
+  if grep -E 'error: |fatal error: |\*\* .*FAILED \*\*|Testing failed|ANALYZE FAILED|The following build commands failed|xcodebuild: error:' "$log" >/dev/null 2>&1; then
+    grep -E 'error: |fatal error: |\*\* .*FAILED \*\*|Testing failed|ANALYZE FAILED|The following build commands failed|xcodebuild: error:' "$log" | tail -n 40
+  else
+    tail -n 40 "$log"
+  fi
+  printf '%s\n' '-------------------'
+}
+
+stage_finish() {
+  local status="$1"
+  local rc="${2:-0}"
+  local elapsed=$(( $(now_s) - STAGE_START ))
+  local bundle_disp="-"
+  if [[ -n "$STAGE_BUNDLE" ]]; then
+    bundle_disp=$(relpath "$STAGE_BUNDLE")
+  fi
+  printf '%s  %s  %ss  result-bundle: %s\n' "$status" "$STAGE_NAME" "$elapsed" "$bundle_disp"
+  append_summary "$STAGE_NAME" "$status" "$elapsed" "$STAGE_BUNDLE"
+  if [[ "$status" != PASS ]]; then
+    print_diag "$STAGE_LOG"
+    exit "$rc"
+  fi
+}
+
+fail_stage() {
+  local rc="${1:-1}"
+  stage_finish FAIL "$rc"
+}
+
+require_cmd() {
+  local name="$1"
+  if ! command -v "$name" >/dev/null 2>&1; then
+    printf 'FAIL  missing command: %s\n' "$name"
+    exit 1
+  fi
+}
+
+xcode_common() {
+  # Args after configuration and log/bundle are forwarded to xcodebuild.
+  local configuration="$1"
+  local log="$2"
+  local bundle="$3"
+  shift 3
+
+  rm -rf "$bundle"
+  mkdir -p "$(dirname "$log")" "$(dirname "$bundle")" "$DERIVED_DATA"
+
+  set +e
+  xcodebuild \
+    -project "$PROJECT" \
+    -scheme "$SCHEME" \
+    -configuration "$configuration" \
+    -destination "$DESTINATION" \
+    -derivedDataPath "$DERIVED_DATA" \
+    -resultBundlePath "$bundle" \
+    "${SWIFT_FLAGS[@]}" \
+    "${UNSIGNED_FLAGS[@]}" \
+    COMPILER_INDEX_STORE_ENABLE=NO \
+    "$@" \
+    >"$log" 2>&1
+  local rc=$?
+  set -e
+  return $rc
+}
+
+run_xcodebuild_stage() {
+  local stage="$1"
+  local configuration="$2"
+  shift 2
+  local log="${LOG_DIR}/${stage}.log"
+  local bundle="${RESULT_DIR}/${stage}.xcresult"
+  stage_start "$stage" "$bundle" "$log"
+  local rc=0
+  xcode_common "$configuration" "$log" "$bundle" "$@" || rc=$?
+  if [[ $rc -ne 0 ]]; then
+    fail_stage "$rc"
+  fi
+  stage_finish PASS 0
+}
+
+tracked_scheme_files() {
+  git ls-files '*.xcscheme'
+}
+
+expected_scheme() {
+  printf '%s\n' 'WNF.xcodeproj/xcshareddata/xcschemes/WNF.xcscheme'
+}
+
+list_project_targets() {
+  xcodebuild -list -project "$PROJECT" | awk '
+    /^[[:space:]]*Targets:/ { p=1; next }
+    /^[[:space:]]*Build Configurations:/ { p=0 }
+    p {
+      gsub(/\r/, "")
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "")
+      if ($0 != "") print
+    }
+  ' | sort
+}
+
+expected_targets() {
+  printf '%s\n' WNF WNFTests WNFUITests WNFWidget
+}
+
+check_four_targets() {
+  local got expected
+  got=$(list_project_targets)
+  expected=$(expected_targets)
+  if [[ "$got" != "$expected" ]]; then
+    printf 'expected targets:\n%s\nactual:\n%s\n' "$expected" "$got"
+    return 1
+  fi
+  return 0
+}
+
+check_tracked_scheme() {
+  local got expected
+  got=$(tracked_scheme_files)
+  expected=$(expected_scheme)
+  if [[ "$got" != "$expected" ]]; then
+    printf 'expected tracked scheme:\n%s\nactual:\n%s\n' "$expected" "$got"
+    return 1
+  fi
+  return 0
+}
+
+# Needles are split so this file itself does not contain the forbidden substrings.
+forbidden_needles_python() {
+  python3 - "$REPO_ROOT" <<'PY'
+import subprocess, sys
+
+repo = sys.argv[1]
+needles = [
+    "/" + "Users" + "/",
+    "simulator" + "Id:",
+    "applinks" + ":" + "wonangfei.app",
+]
+failed = False
+for needle in needles:
+    proc = subprocess.run(
+        ["git", "grep", "-n", "-F", needle, "--", "."],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode == 0 and proc.stdout.strip():
+        failed = True
+        sys.stderr.write("forbidden substring %r in tracked files:\n%s\n" % (needle, proc.stdout))
+    elif proc.returncode not in (0, 1):
+        failed = True
+        sys.stderr.write(proc.stderr or proc.stdout or "git grep failed\n")
+sys.exit(1 if failed else 0)
+PY
+}
+
+parse_and_check_tree_python() {
+  python3 - "$REPO_ROOT" <<'PY'
+import json
+import os
+import plistlib
+import sys
+
+repo = sys.argv[1]
+errors = []
+
+def err(msg):
+    errors.append(msg)
+
+def load_plist(rel):
+    path = os.path.join(repo, rel)
+    if not os.path.isfile(path):
+        err("missing " + rel)
+        return None
+    with open(path, "rb") as fh:
+        return plistlib.load(fh)
+
+def load_json(rel):
+    path = os.path.join(repo, rel)
+    if not os.path.isfile(path):
+        err("missing " + rel)
+        return None
+    with open(path, "r", encoding="utf-8") as fh:
+        try:
+            return json.load(fh)
+        except json.JSONDecodeError as exc:
+            err("%s: invalid JSON (%s)" % (rel, exc))
+            return None
+
+info = load_plist("WNF/Info.plist")
+if info is not None:
+    if info.get("CFBundleDisplayName") != "窝囊费":
+        err("Info.plist CFBundleDisplayName")
+    if info.get("ITSAppUsesNonExemptEncryption") is not False:
+        err("Info.plist ITSAppUsesNonExemptEncryption must be false")
+    if info.get("NSSupportsLiveActivities") is not True:
+        err("Info.plist NSSupportsLiveActivities")
+    if info.get("LSApplicationCategoryType") != "public.app-category.finance":
+        err("Info.plist LSApplicationCategoryType")
+    fonts = info.get("UIAppFonts") or []
+    expected_fonts = [
+        "ZCOOLQingKeHuangYou-Regular.ttf",
+        "JetBrainsMono-Regular.ttf",
+        "JetBrainsMono-Bold.ttf",
+    ]
+    if list(fonts) != expected_fonts:
+        err("Info.plist UIAppFonts: %s" % (fonts,))
+    orients = info.get("UISupportedInterfaceOrientations") or []
+    if list(orients) != ["UIInterfaceOrientationPortrait"]:
+        err("Info.plist UISupportedInterfaceOrientations")
+    if not info.get("NSPhotoLibraryAddUsageDescription"):
+        err("Info.plist NSPhotoLibraryAddUsageDescription")
+
+widget_info = load_plist("WNFWidget/Info.plist")
+if widget_info is not None:
+    if widget_info.get("CFBundleDisplayName") != "窝囊费小组件":
+        err("WNFWidget Info.plist CFBundleDisplayName")
+    ext = (widget_info.get("NSExtension") or {}).get("NSExtensionPointIdentifier")
+    if ext != "com.apple.widgetkit-extension":
+        err("WNFWidget NSExtensionPointIdentifier")
+
+def check_entitlements(rel):
+    data = load_plist(rel)
+    if data is None:
+        return
+    groups = data.get("com.apple.security.application-groups") or []
+    if "group.com.wonangfei.app" not in list(groups):
+        err("%s missing App Group" % rel)
+    for key in data:
+        if "associated-domains" in str(key):
+            err("%s must not contain Associated Domains (%s)" % (rel, key))
+
+check_entitlements("WNF/WNF.entitlements")
+check_entitlements("WNFWidget/WNFWidget.entitlements")
+
+privacy = load_plist("WNF/PrivacyInfo.xcprivacy")
+if privacy is not None:
+    if privacy.get("NSPrivacyTracking") is not False:
+        err("PrivacyInfo NSPrivacyTracking")
+    if list(privacy.get("NSPrivacyTrackingDomains") or []) != []:
+        err("PrivacyInfo NSPrivacyTrackingDomains must be empty")
+    if list(privacy.get("NSPrivacyCollectedDataTypes") or []) != []:
+        err("PrivacyInfo NSPrivacyCollectedDataTypes must be empty")
+    reasons_ok = False
+    for entry in privacy.get("NSPrivacyAccessedAPITypes") or []:
+        if entry.get("NSPrivacyAccessedAPIType") == "NSPrivacyAccessedAPICategoryUserDefaults":
+            if "CA92.1" in list(entry.get("NSPrivacyAccessedAPITypeReasons") or []):
+                reasons_ok = True
+    if not reasons_ok:
+        err("PrivacyInfo missing UserDefaults CA92.1")
+
+marketing = "https://rottesya.github.io/wonangfei/"
+support = "https://rottesya.github.io/wonangfei/support.html"
+privacy_url = "https://rottesya.github.io/wonangfei/privacy.html"
+required_keys = ("description", "keywords", "marketingUrl", "supportUrl")
+for ver in ("1.0", "1.1", "1.2"):
+    rel = "metadata/version/%s/zh-Hans.json" % ver
+    payload = load_json(rel)
+    if payload is None:
+        continue
+    for key in required_keys:
+        if not payload.get(key):
+            err("%s missing %s" % (rel, key))
+    if payload.get("marketingUrl") != marketing:
+        err("%s marketingUrl" % rel)
+    if payload.get("supportUrl") != support:
+        err("%s supportUrl" % rel)
+
+app_info = load_json("metadata/app-info/zh-Hans.json")
+if app_info is not None and app_info.get("privacyPolicyUrl") != privacy_url:
+    err("metadata/app-info/zh-Hans.json privacyPolicyUrl")
+
+if errors:
+    sys.stderr.write("\n".join(errors) + "\n")
+    sys.exit(1)
+PY
+}
+
+sips_field() {
+  local file="$1"
+  local key="$2"
+  sips -g "$key" "$file" 2>/dev/null | awk -v k="$key" '$1 == k ":" { print $2; exit }'
+}
+
+check_onboarding_images() {
+  local names=(
+    OnboardingP1
+    OnboardingP2
+    OnboardingP4
+    OnboardingLunchSleep
+    OnboardingLunchWake
+  )
+  local name dir png w h alpha found
+  for name in "${names[@]}"; do
+    dir="WNF/Assets.xcassets/${name}.imageset"
+    if [[ ! -d "$dir" ]]; then
+      printf 'missing imageset %s\n' "$dir"
+      return 1
+    fi
+    found=0
+    for png in "$dir"/*.png; do
+      [[ -f "$png" ]] || continue
+      found=1
+      w=$(sips_field "$png" pixelWidth)
+      h=$(sips_field "$png" pixelHeight)
+      alpha=$(sips_field "$png" hasAlpha)
+      if [[ "$w" != 1536 || "$h" != 1024 || "$alpha" != yes ]]; then
+        printf '%s expected 1536x1024 + alpha, got %sx%s hasAlpha=%s\n' "$png" "$w" "$h" "$alpha"
+        return 1
+      fi
+    done
+    if [[ "$found" -eq 0 ]]; then
+      printf 'no PNG in %s\n' "$dir"
+      return 1
+    fi
+  done
+  return 0
+}
+
+check_canonical_files() {
+  local missing=0
+  local f
+  for f in \
+    docs/privacy.html \
+    docs/terms.html \
+    docs/acknowledgements.html \
+    WNF/Fonts/ZCOOLQingKeHuangYou-Regular.ttf \
+    WNF/Fonts/JetBrainsMono-Regular.ttf \
+    WNF/Fonts/JetBrainsMono-Bold.ttf
+  do
+    if [[ ! -f "$f" ]]; then
+      printf 'missing %s\n' "$f"
+      missing=1
+    fi
+  done
+  return "$missing"
+}
+
+git_diff_check() {
+  local out rc=0
+  set +e
+  out=$(git diff --check 2>&1)
+  rc=$?
+  set -e
+  if [[ $rc -ne 0 ]]; then
+    printf '%s\n' "$out"
+    return 1
+  fi
+  set +e
+  out=$(git diff --cached --check 2>&1)
+  rc=$?
+  set -e
+  if [[ $rc -ne 0 ]]; then
+    printf '%s\n' "$out"
+    return 1
+  fi
+  return 0
+}
+
+find_release_app() {
+  local products="${DERIVED_DATA}/Build/Products/Release-iphonesimulator"
+  if [[ -d "${products}/WNF.app" ]]; then
+    printf '%s\n' "${products}/WNF.app"
+    return 0
+  fi
+  local found=""
+  if [[ -d "$products" ]]; then
+    found=$(find "$products" -maxdepth 1 -name '*.app' -print 2>/dev/null | sed -n '1p')
+  fi
+  if [[ -n "$found" ]]; then
+    printf '%s\n' "$found"
+    return 0
+  fi
+  return 1
+}
+
+bundle_has() {
+  local app="$1"
+  local name="$2"
+  if [[ -e "${app}/${name}" ]]; then
+    return 0
+  fi
+  local hit=""
+  hit=$(find "$app" -name "$name" -print 2>/dev/null | sed -n '1p')
+  [[ -n "$hit" ]]
+}
+
+audit_release_bundle() {
+  local app="$1"
+  local missing=0
+  local name
+  if [[ ! -d "$app" ]]; then
+    printf 'Release .app not found: %s\n' "$app"
+    return 1
+  fi
+  for name in \
+    ZCOOLQingKeHuangYou-Regular.ttf \
+    JetBrainsMono-Regular.ttf \
+    JetBrainsMono-Bold.ttf \
+    home-typing.mov \
+    home-bored.mov \
+    privacy.html \
+    terms.html \
+    acknowledgements.html \
+    PrivacyInfo.xcprivacy
+  do
+    if ! bundle_has "$app" "$name"; then
+      printf 'bundle missing %s\n' "$name"
+      missing=1
+    fi
+  done
+  if [[ ! -d "${app}/PlugIns/WNFWidget.appex" ]]; then
+    printf 'bundle missing PlugIns/WNFWidget.appex\n'
+    missing=1
+  fi
+  local metallib=""
+  metallib=$(find "$app" -name '*.metallib' -print 2>/dev/null | sed -n '1p')
+  if [[ -z "$metallib" ]]; then
+    printf 'bundle missing metallib\n'
+    missing=1
+  fi
+  for name in privacy.html terms.html acknowledgements.html; do
+    if [[ ! -f "${app}/${name}" ]]; then
+      printf 'bundle %s not at app root (needed for cmp)\n' "$name"
+      missing=1
+      continue
+    fi
+    if ! cmp -s "${app}/${name}" "${REPO_ROOT}/docs/${name}"; then
+      printf 'bundle %s differs from docs/%s\n' "$name" "$name"
+      missing=1
+    fi
+  done
+  return "$missing"
+}
+
+bootstrap_simulator() {
+  python3 - "$SIM_NAME" "$IOS_RUNTIME_VERSION" <<'PY'
+import json, subprocess, sys
+
+name, version = sys.argv[1], sys.argv[2]
+
+def simctl_json(*args):
+    out = subprocess.check_output(["xcrun", "simctl", *args, "-j"])
+    return json.loads(out)
+
+runtimes = simctl_json("list", "runtimes").get("runtimes", [])
+runtime = None
+for item in runtimes:
+    ver = str(item.get("version", ""))
+    label = item.get("name", "")
+    available = item.get("isAvailable", True)
+    if not available:
+        continue
+    if version in ver or version in label:
+        if "iOS" in label or item.get("identifier", "").find("iOS") >= 0:
+            runtime = item
+            break
+if runtime is None:
+    sys.stderr.write(
+        "iOS %s runtime is not installed. Install it from Xcode Settings > Platforms. "
+        "This script will not download Xcode or runtimes.\n" % version
+    )
+    sys.exit(1)
+
+types = simctl_json("list", "devicetypes").get("devicetypes", [])
+devtype = next((t for t in types if t.get("name") == name), None)
+if devtype is None:
+    sys.stderr.write("Device type %s is not available in this Xcode.\n" % name)
+    sys.exit(1)
+
+rid = runtime["identifier"]
+devices = simctl_json("list", "devices", "available").get("devices", {})
+for dev in devices.get(rid, []):
+    if dev.get("name") == name and not dev.get("isUnavailable", False):
+        print("simulator already present: %s (%s)" % (name, rid))
+        sys.exit(0)
+
+subprocess.check_call(
+    ["xcrun", "simctl", "create", name, devtype["identifier"], rid]
+)
+print("created simulator %s for %s" % (name, rid))
+PY
+}
+
+cmd_doctor() {
+  local log="${LOG_DIR}/doctor.log"
+  local rc=0
+  ensure_dirs
+  stage_start doctor "" "$log"
+  set +e
+  (
+    set -euo pipefail
+    printf 'repo: %s\n' "$REPO_ROOT"
+    if ! command -v xcodebuild >/dev/null 2>&1; then
+      printf 'xcodebuild not found\n'
+      exit 1
+    fi
+    xcodebuild -version
+    echo
+    if ! xcrun simctl list runtimes available | grep -q "iOS ${IOS_RUNTIME_VERSION}"; then
+      printf 'iOS %s runtime not found (available runtimes):\n' "$IOS_RUNTIME_VERSION"
+      xcrun simctl list runtimes
+      exit 1
+    fi
+    printf 'runtime: iOS %s present\n' "$IOS_RUNTIME_VERSION"
+    if ! xcrun simctl list devicetypes | grep -F "iPhone 17 (" >/dev/null; then
+      printf 'iPhone 17 device type not found\n'
+      xcrun simctl list devicetypes
+      exit 1
+    fi
+    printf 'device type: %s present\n' "$SIM_NAME"
+    echo
+    xcodebuild -list -project "$PROJECT"
+    echo
+    check_four_targets
+    printf 'targets: WNF WNFWidget WNFTests WNFUITests\n'
+    check_tracked_scheme
+    printf 'tracked scheme: WNF.xcscheme only\n'
+  ) >"$log" 2>&1
+  rc=$?
+  set -e
+  cat "$log"
+  if [[ $rc -ne 0 ]]; then
+    fail_stage "$rc"
+  fi
+  stage_finish PASS 0
+}
+
+cmd_bootstrap() {
+  local log="${LOG_DIR}/bootstrap.log"
+  ensure_dirs
+  stage_start bootstrap "" "$log"
+  set +e
+  bootstrap_simulator >"$log" 2>&1
+  local rc=$?
+  set -e
+  cat "$log"
+  if [[ $rc -ne 0 ]]; then
+    fail_stage "$rc"
+  fi
+  stage_finish PASS 0
+}
+
+cmd_static_gate() {
+  local log="${LOG_DIR}/static-gate.log"
+  local rc=0
+  ensure_dirs
+  stage_start static-gate "" "$log"
+  set +e
+  (
+    set -euo pipefail
+    require_cmd git
+    require_cmd python3
+    require_cmd sips
+    require_cmd xcodebuild
+    printf 'git diff --check\n'
+    git_diff_check
+    printf 'forbidden substrings\n'
+    forbidden_needles_python
+    printf 'targets + tracked scheme\n'
+    check_four_targets
+    check_tracked_scheme
+    printf 'plist / entitlements / privacy / metadata JSON\n'
+    parse_and_check_tree_python
+    printf 'onboarding images 1536x1024 + alpha\n'
+    check_onboarding_images
+    printf 'canonical legal HTML + fonts\n'
+    check_canonical_files
+    printf 'metadata 1.0/1.1/1.2 present (parsed above)\n'
+  ) >"$log" 2>&1
+  rc=$?
+  set -e
+  cat "$log"
+  if [[ $rc -ne 0 ]]; then
+    fail_stage "$rc"
+  fi
+  stage_finish PASS 0
+}
+
+cmd_build() {
+  run_xcodebuild_stage build Debug build
+}
+
+cmd_test_unit() {
+  # UI tests in this scheme still compile; complete isolation trips XCTest APIs.
+  run_xcodebuild_stage test-unit Debug test -only-testing:WNFTests SWIFT_STRICT_CONCURRENCY=minimal
+}
+
+cmd_test_ui() {
+  run_xcodebuild_stage test-ui Debug test -only-testing:WNFUITests SWIFT_STRICT_CONCURRENCY=minimal
+}
+
+cmd_analyze() {
+  run_xcodebuild_stage analyze Debug analyze
+}
+
+cmd_release_check() {
+  local stage="release-check"
+  local log="${LOG_DIR}/${stage}.log"
+  local bundle="${RESULT_DIR}/${stage}.xcresult"
+  stage_start "$stage" "$bundle" "$log"
+  local rc=0
+  xcode_common Release "$log" "$bundle" build || rc=$?
+  if [[ $rc -ne 0 ]]; then
+    fail_stage "$rc"
+  fi
+  local app=""
+  set +e
+  app=$(find_release_app)
+  rc=$?
+  set -e
+  if [[ $rc -ne 0 || -z "$app" ]]; then
+    printf 'Release .app not found under DerivedData\n' >>"$log"
+    fail_stage 1
+  fi
+  printf 'Release app: %s\n' "$(relpath "$app")" >>"$log"
+  set +e
+  audit_release_bundle "$app" >>"$log" 2>&1
+  rc=$?
+  set -e
+  if [[ $rc -ne 0 ]]; then
+    fail_stage "$rc"
+  fi
+  stage_finish PASS 0
+}
+
+cmd_verify() {
+  IN_VERIFY=1
+  VERIFY_START=$(now_s)
+  ensure_dirs
+  trap 'print_verify_summary' EXIT
+  cmd_doctor
+  cmd_bootstrap
+  cmd_static_gate
+  cmd_build
+  cmd_test_unit
+  cmd_test_ui
+  cmd_analyze
+  cmd_release_check
+}
+
+store_check_local() {
+  local f
+  for f in \
+    store/screenshots/01-home.png \
+    store/screenshots/02-records.png \
+    store/screenshots/03-settings.png \
+    store/screenshots/04-share.png \
+    docs/privacy.html \
+    docs/terms.html \
+    docs/support.html \
+    docs/acknowledgements.html \
+    metadata/version/1.0/zh-Hans.json \
+    metadata/version/1.1/zh-Hans.json \
+    metadata/version/1.2/zh-Hans.json \
+    metadata/app-info/zh-Hans.json
+  do
+    if [[ ! -f "$f" ]]; then
+      printf 'missing %s\n' "$f"
+      return 1
+    fi
+  done
+  parse_and_check_tree_python
+}
+
+cmd_store_check() {
+  local log="${LOG_DIR}/store-check.log"
+  local review_dir="${VERIFY_DIR}/store-check/review"
+  local pull_dir="${VERIFY_DIR}/store-check/pull"
+  local rc=0
+  ensure_dirs
+  mkdir -p "$review_dir" "$pull_dir"
+  stage_start store-check "" "$log"
+  set +e
+  (
+    set -euo pipefail
+    printf 'local URL + screenshot presence\n'
+    store_check_local
+    if ! command -v asc >/dev/null 2>&1; then
+      printf 'store-check: asc CLI not found. Install and authenticate separately.\n'
+      printf 'This command is optional and is not part of ./scripts/wnf verify.\n'
+      printf 'Forbidden: metadata apply, submit, remote delete.\n'
+      exit 2
+    fi
+    printf 'asc metadata validate (offline)\n'
+    asc metadata validate --dir metadata --pretty
+    printf 'asc auth status\n'
+    if ! asc auth status; then
+      printf 'store-check: ASC authentication failed. Log in with `asc auth login` and retry.\n'
+      printf 'This command is optional and is not part of ./scripts/wnf verify.\n'
+      printf 'Forbidden: metadata apply, submit, remote delete.\n'
+      exit 2
+    fi
+    printf 'asc metadata pull (temp dir, does not write metadata/)\n'
+    asc metadata pull --app "$ASC_APP_ID" --version "$EDITABLE_ASC_VERSION" --platform IOS --dir "$pull_dir" --force
+    printf 'asc metadata plan (review artifact under build/verification)\n'
+    asc metadata plan --app "$ASC_APP_ID" --version "$EDITABLE_ASC_VERSION" --platform IOS --dir metadata --review-dir "$review_dir"
+    printf 'Forbidden operations were not invoked: apply, submit, remote delete.\n'
+  ) >"$log" 2>&1
+  rc=$?
+  set -e
+  cat "$log"
+  if [[ $rc -ne 0 ]]; then
+    fail_stage "$rc"
+  fi
+  stage_finish PASS 0
+}
+
+main() {
+  if [[ $# -lt 1 ]]; then
+    usage
+    exit 2
+  fi
+  case "$1" in
+    -h|--help|help) usage ;;
+    doctor) cmd_doctor ;;
+    bootstrap) cmd_bootstrap ;;
+    static-gate) cmd_static_gate ;;
+    build) cmd_build ;;
+    test-unit) cmd_test_unit ;;
+    test-ui) cmd_test_ui ;;
+    analyze) cmd_analyze ;;
+    release-check) cmd_release_check ;;
+    verify) cmd_verify ;;
+    store-check) cmd_store_check ;;
+    *)
+      printf 'unknown command: %s\n\n' "$1"
+      usage
+      exit 2
+      ;;
+  esac
+}
+
+main "$@"

@@ -5,6 +5,26 @@ enum WNFShared {
     static let widgetSnapshotKey = "wnf.widget.wage.snapshot.v1"
 }
 
+enum WorkStatus: CaseIterable {
+    case off
+    case before
+    case morning
+    case lunch
+    case afternoon
+    case done
+
+    var label: String {
+        switch self {
+        case .off: "今天不用窝囊"
+        case .before: "尚未开工"
+        case .morning: "上午搬砖中"
+        case .lunch: "午休回血"
+        case .afternoon: "下午挺挺"
+        case .done: "今日通关"
+        }
+    }
+}
+
 enum WNFWidgetDate {
     static let calendar: Calendar = {
         var calendar = Calendar(identifier: .gregorian)
@@ -202,7 +222,7 @@ extension WNFWidgetSnapshot {
                 at: date,
                 earnedToday: 0,
                 elapsedPaidMinutes: 0,
-                statusLabel: "今天不用窝囊"
+                statusLabel: WorkStatus.off.label
             )
         }
 
@@ -260,12 +280,12 @@ extension WNFWidgetSnapshot {
         let effectiveLunchEnd = min(workEndMinute, rawLunchEnd)
         let hasEffectiveLunch = effectiveLunchEnd > effectiveLunchStart
 
-        if nowMinute < workStartMinute { return "尚未开工" }
-        if hasEffectiveLunch == false, nowMinute < workEndMinute { return "上午搬砖中" }
-        if nowMinute < effectiveLunchStart { return "上午搬砖中" }
-        if nowMinute < effectiveLunchEnd { return "午休回血" }
-        if nowMinute < workEndMinute { return "下午挺挺" }
-        return "今日通关"
+        if nowMinute < workStartMinute { return WorkStatus.before.label }
+        if hasEffectiveLunch == false, nowMinute < workEndMinute { return WorkStatus.morning.label }
+        if nowMinute < effectiveLunchStart { return WorkStatus.morning.label }
+        if nowMinute < effectiveLunchEnd { return WorkStatus.lunch.label }
+        if nowMinute < workEndMinute { return WorkStatus.afternoon.label }
+        return WorkStatus.done.label
     }
 
     private func copy(

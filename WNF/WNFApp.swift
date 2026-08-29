@@ -60,7 +60,6 @@ struct WNFApp: App {
 
     private func writeWidgetSnapshot() {
         let day = state.liveDay
-        let presentation = WorkStatusPresentation(status: day.status)
         let wrote = WNFWidgetSnapshotWriter.write(
             day: day,
             workStartMinute: state.workStart.minutesInDay,
@@ -70,7 +69,7 @@ struct WNFApp: App {
             hasLunchBreak: state.hasLunchBreak,
             includeOvertime: state.includeOvertime,
             selectedWeekdays: state.selectedWeekdays,
-            statusLabel: presentation.label,
+            statusLabel: day.status.label,
             hidesSensitiveInfo: state.privacyMode
         )
         if wrote {

@@ -121,8 +121,8 @@
 		100000000000000000000219 /* WidgetShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetShared.swift; sourceTree = "<group>"; };
 		100000000000000000000222 /* WNF.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WNF.entitlements; sourceTree = "<group>"; };
 		100000000000000000000223 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		100000000000000000000224 /* terms.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = Legal/terms.html; sourceTree = "<group>"; };
-		100000000000000000000225 /* privacy.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = Legal/privacy.html; sourceTree = "<group>"; };
+		100000000000000000000224 /* terms.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = terms.html; path = ../docs/terms.html; sourceTree = "<group>"; };
+		100000000000000000000225 /* privacy.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = privacy.html; path = ../docs/privacy.html; sourceTree = "<group>"; };
 		100000000000000000000230 /* WNFWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WNFWidget.swift; sourceTree = "<group>"; };
 		100000000000000000000231 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		100000000000000000000232 /* WNFWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WNFWidget.entitlements; sourceTree = "<group>"; };

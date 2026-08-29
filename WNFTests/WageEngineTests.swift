@@ -524,6 +524,59 @@ struct WidgetSnapshotTests {
     }
 }
 
+struct WorkStatusLabelTests {
+    @Test("WorkStatus.label 覆盖六个状态文案")
+    func workStatusLabelsMatchContract() {
+        #expect(WorkStatus.off.label == "今天不用窝囊")
+        #expect(WorkStatus.before.label == "尚未开工")
+        #expect(WorkStatus.morning.label == "上午搬砖中")
+        #expect(WorkStatus.lunch.label == "午休回血")
+        #expect(WorkStatus.afternoon.label == "下午挺挺")
+        #expect(WorkStatus.done.label == "今日通关")
+        #expect(WorkStatus.allCases.count == 6)
+    }
+
+    @Test("Widget 工作日投影与 WorkStatus.label 同源")
+    func widgetProjectionUsesWorkStatusLabelsOnSelectedWorkday() throws {
+        let cases: [(hour: Int, minute: Int, status: WorkStatus)] = [
+            (8, 0, .before),
+            (10, 0, .morning),
+            (12, 30, .lunch),
+            (15, 0, .afternoon),
+            (19, 0, .done)
+        ]
+        for item in cases {
+            let now = try #require(dateOnFixedDay(hour: item.hour, minute: item.minute))
+            let snapshot = widgetSnapshot(
+                hidesSensitiveInfo: false,
+                capturedAt: now,
+                earningPerSecond: 1,
+                selectedWeekdays: [0, 1, 2, 3, 4]
+            )
+            #expect(snapshot.projected(at: now).statusLabel == item.status.label)
+        }
+    }
+
+    @Test("Widget 非选中工作日投影使用 WorkStatus.off.label")
+    func widgetProjectionUsesOffLabelOnUnselectedWeekday() throws {
+        let now = try #require(dateOnFixedDay(hour: 10, minute: 0))
+        let snapshot = widgetSnapshot(
+            hidesSensitiveInfo: false,
+            capturedAt: now,
+            earningPerSecond: 1,
+            selectedWeekdays: [1, 2, 3, 4]
+        )
+        #expect(snapshot.projected(at: now).statusLabel == WorkStatus.off.label)
+    }
+
+    @Test("WorkStatusPresentation.label 等于 WorkStatus.label")
+    func presentationLabelMatchesWorkStatus() {
+        for status in WorkStatus.allCases {
+            #expect(WorkStatusPresentation(status: status).label == status.label)
+        }
+    }
+}
+
 private enum TestSetupError: Error {
     case userDefaultsUnavailable
 }
@@ -569,7 +622,8 @@ private func widgetSnapshot(
     hidesSensitiveInfo: Bool,
     capturedAt: Date = Date(),
     earningPerSecond: Double = 0,
-    includeOvertime: Bool = false
+    includeOvertime: Bool = false,
+    selectedWeekdays: [Int] = Array(0...6)
 ) -> WNFWidgetSnapshot {
     WNFWidgetSnapshot(
         dateKey: WNFWidgetDate.dateKey(for: capturedAt),
@@ -584,7 +638,7 @@ private func widgetSnapshot(
         includeOvertime: includeOvertime,
         workdayMinutes: 480,
         earningPerSecond: earningPerSecond,
-        selectedWeekdays: Array(0...6),
+        selectedWeekdays: selectedWeekdays,
         statusLabel: "正在搬砖",
         hidesSensitiveInfo: hidesSensitiveInfo
     )

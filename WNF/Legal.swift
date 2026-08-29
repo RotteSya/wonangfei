@@ -42,10 +42,7 @@ struct LegalDocumentView: View {
     }
 }
 
-/// Loads the bundled HTML immediately. Public / ASC copies live at
-/// `docs/*.html` on GitHub Pages and must stay byte-identical with
-/// `WNF/Legal/*.html`. Do not restore a remote-first request —
-/// `wonangfei.app` does not resolve, and the wait is just a timeout.
+/// Canonical legal HTML is loaded from the app bundle with no network fallback.
 private struct LegalWebView: UIViewRepresentable {
     var document: LegalDocument
 

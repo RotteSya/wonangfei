@@ -4,9 +4,9 @@ struct WorkStatusPresentation: Equatable {
     var mascotAssetName: String
 
     init(status: WorkStatus) {
+        label = status.label
         switch status {
         case .off:
-            label = "今天不用窝囊"
             quotes = [
                 "今天不在工位上计薪。",
                 "工作日没选今天，钱也先躺平。",
@@ -16,7 +16,6 @@ struct WorkStatusPresentation: Equatable {
             ]
             mascotAssetName = "CowFrontSad"
         case .before:
-            label = "尚未开工"
             quotes = [
                 "别急，钱还没开始挣。",
                 "起床气和工位都还没暖。",
@@ -27,7 +26,6 @@ struct WorkStatusPresentation: Equatable {
             ]
             mascotAssetName = "CowFrontSad"
         case .morning:
-            label = "上午搬砖中"
             quotes = [
                 "早上的两小时最值钱。",
                 "工位坐稳，钱开始一点点掉。",
@@ -38,7 +36,6 @@ struct WorkStatusPresentation: Equatable {
             ]
             mascotAssetName = "CowThreeQ"
         case .lunch:
-            label = "午休回血"
             quotes = [
                 "吃饭的时候不发工资。",
                 "二十块的饭，半小时的命。",
@@ -49,7 +46,6 @@ struct WorkStatusPresentation: Equatable {
             ]
             mascotAssetName = "CowFrontSad"
         case .afternoon:
-            label = "下午挺挺"
             quotes = [
                 "再忍忍，钱在涨。",
                 "下午三点的会，是命运的一种。",
@@ -60,7 +56,6 @@ struct WorkStatusPresentation: Equatable {
             ]
             mascotAssetName = "CowFrontSad"
         case .done:
-            label = "今日通关"
             quotes = [
                 "今天又把房租挣回来了。",
                 "下班的脚步比早上轻了。",

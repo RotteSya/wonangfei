@@ -21,15 +21,6 @@ struct WageDay {
     }
 }
 
-enum WorkStatus {
-    case off
-    case before
-    case morning
-    case lunch
-    case afternoon
-    case done
-}
-
 enum WageCalculator {
     static func compute(
         monthlySalary: Double,

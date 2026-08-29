@@ -4,6 +4,7 @@ import WebKit
 enum LegalDocument: String, Identifiable {
     case terms
     case privacy
+    case acknowledgements
 
     var id: String { rawValue }
 
@@ -11,6 +12,7 @@ enum LegalDocument: String, Identifiable {
         switch self {
         case .terms: "Terms of Use"
         case .privacy: "Privacy Policy"
+        case .acknowledgements: "字体与开源许可"
         }
     }
 
@@ -18,6 +20,7 @@ enum LegalDocument: String, Identifiable {
         switch self {
         case .terms: "terms"
         case .privacy: "privacy"
+        case .acknowledgements: "acknowledgements"
         }
     }
 }

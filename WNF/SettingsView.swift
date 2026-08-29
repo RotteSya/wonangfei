@@ -320,12 +320,16 @@ struct SettingsView: View {
     }
 
     private var legalFooter: some View {
-        HStack(spacing: 14) {
-            Button("Terms of Use") { legalDocument = .terms }
-                .accessibilityIdentifier("settings.legal.terms")
-            Text("·").foregroundStyle(WNFTheme.muted)
-            Button("Privacy Policy") { legalDocument = .privacy }
-                .accessibilityIdentifier("settings.legal.privacy")
+        VStack(spacing: 8) {
+            HStack(spacing: 14) {
+                Button("Terms of Use") { legalDocument = .terms }
+                    .accessibilityIdentifier("settings.legal.terms")
+                Text("·").foregroundStyle(WNFTheme.muted)
+                Button("Privacy Policy") { legalDocument = .privacy }
+                    .accessibilityIdentifier("settings.legal.privacy")
+            }
+            Button("字体与开源许可") { legalDocument = .acknowledgements }
+                .accessibilityIdentifier("settings.legal.acknowledgements")
         }
         .font(.system(size: 11, weight: .heavy))
         .foregroundStyle(WNFTheme.inkSoft)

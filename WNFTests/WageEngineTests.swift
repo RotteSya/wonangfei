@@ -577,6 +577,18 @@ struct WorkStatusLabelTests {
     }
 }
 
+struct AcknowledgementsBundleTests {
+    @Test("App bundle includes OFL acknowledgements HTML")
+    func bundledAcknowledgementsContainsOFLAndFontFilenames() throws {
+        let url = try #require(Bundle.main.url(forResource: "acknowledgements", withExtension: "html"))
+        let html = try String(contentsOf: url, encoding: .utf8)
+        #expect(html.contains("SIL Open Font License"))
+        #expect(html.contains("JetBrainsMono-Regular.ttf"))
+        #expect(html.contains("JetBrainsMono-Bold.ttf"))
+        #expect(html.contains("ZCOOLQingKeHuangYou-Regular.ttf"))
+    }
+}
+
 private enum TestSetupError: Error {
     case userDefaultsUnavailable
 }

@@ -589,6 +589,17 @@ struct AcknowledgementsBundleTests {
     }
 }
 
+struct LegalWebNavigationPolicyTests {
+    @Test("In-app legal WebView allows file loads and cancels http(s)")
+    func cancelsHTTPAndHTTPS() {
+        #expect(LegalWebNavigationPolicy.allows(URL(string: "file:///tmp/acknowledgements.html")))
+        #expect(LegalWebNavigationPolicy.allows(URL(string: "about:blank")))
+        #expect(LegalWebNavigationPolicy.allows(nil))
+        #expect(!LegalWebNavigationPolicy.allows(URL(string: "https://github.com/JetBrains/JetBrainsMono")))
+        #expect(!LegalWebNavigationPolicy.allows(URL(string: "http://scripts.sil.org/OFL")))
+    }
+}
+
 private enum TestSetupError: Error {
     case userDefaultsUnavailable
 }

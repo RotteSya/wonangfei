@@ -45,12 +45,29 @@ struct LegalDocumentView: View {
     }
 }
 
+/// http(s) is cancelled so acknowledgements source links cannot leave the bundled page.
+enum LegalWebNavigationPolicy {
+    static func allows(_ url: URL?) -> Bool {
+        switch url?.scheme?.lowercased() {
+        case "http", "https":
+            return false
+        default:
+            return true
+        }
+    }
+}
+
 /// Canonical legal HTML is loaded from the app bundle with no network fallback.
 private struct LegalWebView: UIViewRepresentable {
     var document: LegalDocument
 
+    func makeCoordinator() -> LegalWebViewCoordinator {
+        LegalWebViewCoordinator()
+    }
+
     func makeUIView(context: Context) -> WKWebView {
         let webView = WKWebView()
+        webView.navigationDelegate = context.coordinator
         if let url = Bundle.main.url(forResource: document.localResourceName, withExtension: "html") {
             webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
         } else {
@@ -63,4 +80,23 @@ private struct LegalWebView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {}
+}
+
+private final class LegalWebViewCoordinator: NSObject, WKNavigationDelegate {
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
+    ) {
+        decisionHandler(LegalWebNavigationPolicy.allows(navigationAction.request.url) ? .allow : .cancel)
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        createWebViewWith configuration: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures: WKWindowFeatures
+    ) -> WKWebView? {
+        nil
+    }
 }

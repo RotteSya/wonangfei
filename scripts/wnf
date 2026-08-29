@@ -115,15 +115,20 @@ stage_start() {
 
 print_diag() {
   local log="${1:-$STAGE_LOG}"
+  local pattern='error: |fatal error: |\*\* .*FAILED \*\*|Testing failed|ANALYZE FAILED|The following build commands failed|xcodebuild: error:'
   if [[ -z "$log" || ! -f "$log" ]]; then
     printf '    (no log)\n'
     return 0
   fi
+  printf '    log: %s\n' "$(relpath "$log")"
   printf '%s\n' '--- diagnostic ---'
-  if grep -E 'error: |fatal error: |\*\* .*FAILED \*\*|Testing failed|ANALYZE FAILED|The following build commands failed|xcodebuild: error:' "$log" >/dev/null 2>&1; then
-    grep -E 'error: |fatal error: |\*\* .*FAILED \*\*|Testing failed|ANALYZE FAILED|The following build commands failed|xcodebuild: error:' "$log" | tail -n 40
+  # First match is the root error; later lines are usually cascade.
+  if grep -E "$pattern" "$log" >/dev/null 2>&1; then
+    grep -n -E -C 8 -m 1 "$pattern" "$log" || true
+    printf '%s\n' '--- first errors ---'
+    grep -n -E "$pattern" "$log" | head -n 20
   else
-    tail -n 40 "$log"
+    head -n 40 "$log"
   fi
   printf '%s\n' '-------------------'
 }

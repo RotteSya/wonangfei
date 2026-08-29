@@ -37,7 +37,7 @@ UI 测试经 `UITestSupport.launchMainShell()` 传入启动参数 `-wnf.onboardi
 | 构建/测试命令 | `scripts/wnf` |
 | targets、版本、bundle ID | `project.pbxproj` |
 | UserDefaults keys | `StorageKey` |
-| 生产默认值 | `WageState.Default` |
+| 生产默认值 | `Default` in `WageState.swift` |
 | App/Widget schema 与状态 label | `WidgetShared.swift`（`WorkStatus.label`） |
 | 活跃持久化 | `DailyRecordSQLiteStore` |
 | 公共法务内容 | `docs/privacy.html` / `docs/terms.html` / `docs/acknowledgements.html` |

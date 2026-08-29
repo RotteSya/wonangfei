@@ -126,9 +126,10 @@ print_diag() {
   if grep -E "$pattern" "$log" >/dev/null 2>&1; then
     grep -n -E -C 8 -m 1 "$pattern" "$log" || true
     printf '%s\n' '--- first errors ---'
-    grep -n -E "$pattern" "$log" | head -n 20
+    grep -n -E "$pattern" "$log" | head -n 20 || true
   else
-    head -n 40 "$log"
+    # Audit / "app not found" notes are appended after a green xcodebuild.
+    tail -n 40 "$log"
   fi
   printf '%s\n' '-------------------'
 }

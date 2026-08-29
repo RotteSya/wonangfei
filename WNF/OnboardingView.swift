@@ -1,11 +1,11 @@
 import SwiftUI
 import UIKit
 
+@MainActor
 private final class OnboardingImageStore: ObservableObject {
     @Published private var preparedImages: [String: UIImage] = [:]
 
     private var requestedImageNames = Set<String>()
-    private let decodeQueue = DispatchQueue(label: "com.wonangfei.onboarding-image-decode", qos: .userInitiated)
 
     func image(named name: String) -> UIImage? {
         preparedImages[name]
@@ -17,20 +17,18 @@ private final class OnboardingImageStore: ObservableObject {
 
         requestedImageNames.formUnion(pendingNames)
 
-        decodeQueue.async { [weak self] in
-            let decodedImages = pendingNames.compactMap { name -> (String, UIImage)? in
-                guard let sourceImage = UIImage(named: name) else { return nil }
-                return (name, sourceImage.preparingForDisplay() ?? sourceImage)
-            }
-
-            DispatchQueue.main.async {
-                guard let self else { return }
-                var nextImages = self.preparedImages
-                decodedImages.forEach { name, image in
-                    nextImages[name] = image
+        Task {
+            let decodedImages = await Task.detached(priority: .userInitiated) {
+                pendingNames.compactMap { name -> (String, UIImage)? in
+                    guard let sourceImage = UIImage(named: name) else { return nil }
+                    return (name, sourceImage.preparingForDisplay() ?? sourceImage)
                 }
-                self.preparedImages = nextImages
+            }.value
+            var nextImages = preparedImages
+            decodedImages.forEach { name, image in
+                nextImages[name] = image
             }
+            preparedImages = nextImages
         }
     }
 }

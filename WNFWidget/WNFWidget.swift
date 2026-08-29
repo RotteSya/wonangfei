@@ -31,8 +31,8 @@ private extension UIColor {
 }
 
 struct WNFWidgetConfigurationIntent: WidgetConfigurationIntent {
-    static var title: LocalizedStringResource = "窝囊费小组件"
-    static var description = IntentDescription("显示今日窝囊费。v1 暂无可配置参数，后续可加入每个小组件独立主题和隐私设置。")
+    static var title: LocalizedStringResource { "窝囊费小组件" }
+    static var description: IntentDescription { IntentDescription("显示今日窝囊费。v1 暂无可配置参数，后续可加入每个小组件独立主题和隐私设置。") }
 }
 
 private struct WNFWidgetEntry: TimelineEntry {

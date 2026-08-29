@@ -1,5 +1,6 @@
 import SwiftUI
 
+@MainActor
 final class HomeMascotVideoSessionCoordinator: ObservableObject {
     let controller: HomeMascotVideoController
 
@@ -7,8 +8,8 @@ final class HomeMascotVideoSessionCoordinator: ObservableObject {
     private var selectedTab: AppTab = .home
     private var isHomeSessionVisible = false
 
-    init(controller: HomeMascotVideoController = HomeMascotVideoController()) {
-        self.controller = controller
+    init(controller: HomeMascotVideoController? = nil) {
+        self.controller = controller ?? HomeMascotVideoController()
     }
 
     func handleScenePhase(_ phase: ScenePhase, selectedTab: AppTab, isHomeSessionVisible: Bool) {

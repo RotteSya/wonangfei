@@ -9,7 +9,7 @@ import UIKit
 /// listener inside this file produce or consume the preference; the value is
 /// fanned out to the rest of the app through the environment, not the key.
 private struct TabBarFloorHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
+    static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         // `max` is order-independent so multiple reporters (or a future split
         // tab bar) can contribute without the result depending on traversal.
@@ -92,6 +92,11 @@ struct RootView: View {
     @State private var tabBarFloorHeight: CGFloat = 0
     @AppStorage("wnf.onboarding.completed") private var onboardingCompleted = false
 
+    /// Launch argument `-wnf.onboarding.completed` is read-only (NSArgumentDomain / ProcessInfo), never persisted.
+    private var hasCompletedOnboarding: Bool {
+        onboardingCompleted || ProcessInfo.processInfo.arguments.contains("-wnf.onboarding.completed")
+    }
+
     private static let shareExportWidth: CGFloat = 360
     private static let shareLoadingRefreshDelayNanoseconds: UInt64 = 16_000_000
 
@@ -123,7 +128,7 @@ struct RootView: View {
     }
 
     private var day: WageDay { state.liveDay }
-    private var isHomeMascotSessionVisible: Bool { onboardingCompleted || entryAnimating }
+    private var isHomeMascotSessionVisible: Bool { hasCompletedOnboarding || entryAnimating }
     private var shareRenderScale: CGFloat {
         let scale = windowSceneScale ?? displayScale
         return scale > 0 ? scale : 1
@@ -131,16 +136,16 @@ struct RootView: View {
 
     var body: some View {
         ZStack {
-            if onboardingCompleted || entryAnimating {
+            if hasCompletedOnboarding || entryAnimating {
                 appShell
                     .scaleEffect(entryAnimating && !entryExpanded ? 0.88 : 1)
                     .opacity(entryAnimating && !entryExpanded ? 0.18 : 1)
                     .blur(radius: entryAnimating && !entryExpanded ? 12 : 0)
-                    .allowsHitTesting(onboardingCompleted && !entryAnimating)
+                    .allowsHitTesting(hasCompletedOnboarding && !entryAnimating)
                     .animation(EntranceTiming.shellAnimation, value: entryExpanded)
             }
 
-            if !onboardingCompleted {
+            if !hasCompletedOnboarding {
                 OnboardingView {
                     startHomeEntrance()
                 }
@@ -227,7 +232,7 @@ struct RootView: View {
     }
 
     private var pagerGesturesEnabled: Bool {
-        onboardingCompleted && !entryAnimating && !homeSharePresented && !settlementPresented
+        hasCompletedOnboarding && !entryAnimating && !homeSharePresented && !settlementPresented
     }
 
     private var appShell: some View {

@@ -13,8 +13,7 @@ final class JellyTourUITests: XCTestCase {
     }
 
     func testGrandTour() throws {
-        let app = XCUIApplication()
-        app.launch()
+        let app = launchMainShell()
         let t0 = Date()
 
         // 1. Watch the odometer tick + coins drop on home.

@@ -1,5 +1,6 @@
 import Foundation
 
+@MainActor
 final class WageState: ObservableObject {
     @Published var monthlySalary: Double {
         didSet {
@@ -119,7 +120,8 @@ final class WageState: ObservableObject {
 
     let userDefaults: UserDefaults
     private let dailyRecordStore: DailyRecordSQLiteStore
-    private var dayBoundaryTimer: Timer?
+    // Task handles are cancelled from deinit, which is nonisolated.
+    nonisolated(unsafe) private var dayBoundaryTask: Task<Void, Never>?
 
     /// Cached result of the most recent `calculation(at:)` call. Keyed by the
     /// settings fingerprint (everything `WageCalculator` reads from `self`) and
@@ -159,7 +161,7 @@ final class WageState: ObservableObject {
     }
 
     deinit {
-        dayBoundaryTimer?.invalidate()
+        dayBoundaryTask?.cancel()
     }
 
     var currentDayStart: Date {
@@ -237,8 +239,8 @@ final class WageState: ObservableObject {
     }
 
     func pauseCalendarDayTimer() {
-        dayBoundaryTimer?.invalidate()
-        dayBoundaryTimer = nil
+        dayBoundaryTask?.cancel()
+        dayBoundaryTask = nil
     }
 
     func resumeCalendarDayTimer(now: Date = Date()) {
@@ -335,17 +337,23 @@ final class WageState: ObservableObject {
     }
 
     private func scheduleDayBoundaryTimer(from date: Date) {
-        dayBoundaryTimer?.invalidate()
+        dayBoundaryTask?.cancel()
 
         let calendar = DateComponents.calendar
         let startOfDay = calendar.startOfDay(for: date)
         let nextBoundary = calendar.date(byAdding: DateComponents(day: 1, second: 1), to: startOfDay)
             ?? date.addingTimeInterval(86_401)
-        let timer = Timer(fire: nextBoundary, interval: 0, repeats: false) { [weak self] _ in
+        let delay = max(0, nextBoundary.timeIntervalSinceNow)
+
+        dayBoundaryTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(delay))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
             self?.refreshCalendarDayIfNeeded(now: Date())
         }
-        RunLoop.main.add(timer, forMode: .common)
-        dayBoundaryTimer = timer
     }
 
     private func closeLastObservedDayIfNeeded(now: Date) {
@@ -565,7 +573,7 @@ final class WageState: ObservableObject {
         return LastObservedSnapshot(dateKey: dateKey, settings: currentSettingsSnapshot)
     }
 
-    static func dateKey(for date: Date) -> String {
+    nonisolated static func dateKey(for date: Date) -> String {
         let components = DateComponents.calendar.dateComponents([.year, .month, .day], from: date)
         return String(
             format: "%04d-%02d-%02d",
@@ -575,18 +583,18 @@ final class WageState: ObservableObject {
         )
     }
 
-    static func date(fromDateKey key: String) -> Date? {
+    nonisolated static func date(fromDateKey key: String) -> Date? {
         let parts = key.split(separator: "-").compactMap { Int($0) }
         guard parts.count == 3 else { return nil }
         return DateComponents.calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
     }
 
-    private static func endOfDay(for date: Date) -> Date {
+    nonisolated private static func endOfDay(for date: Date) -> Date {
         let startOfDay = DateComponents.calendar.startOfDay(for: date)
         return DateComponents.calendar.date(byAdding: DateComponents(day: 1, second: -1), to: startOfDay) ?? date
     }
 
-    private static func weekdayIndex(for date: Date) -> Int {
+    nonisolated private static func weekdayIndex(for date: Date) -> Int {
         let weekday = DateComponents.calendar.component(.weekday, from: date)
         return (weekday + 5) % 7
     }

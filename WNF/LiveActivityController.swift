@@ -7,7 +7,7 @@ import Foundation
 /// settlement completed, day rolled over); this type decides start/update/end.
 @MainActor
 enum WNFLiveActivityController {
-    private static var minuteRefreshTimer: Timer?
+    private static var minuteRefreshTask: Task<Void, Never>?
 
     // MARK: Lifecycle hooks
 
@@ -35,51 +35,61 @@ enum WNFLiveActivityController {
         }
 
         let content = contentState(state: state, day: day, now: now)
-
-        // A stale activity from an earlier day can't be updated into today —
-        // end it and start fresh.
-        for activity in Activity<WNFLiveActivityAttributes>.activities
-        where activity.attributes.dateKey != dateKey {
-            Task { await activity.end(nil, dismissalPolicy: .immediate) }
-        }
-
-        if let activity = Activity<WNFLiveActivityAttributes>.activities
-            .first(where: { $0.attributes.dateKey == dateKey }) {
-            Task {
-                await activity.update(ActivityContent(state: content, staleDate: staleDate(for: content, now: now)))
-            }
-        } else {
-            let attributes = WNFLiveActivityAttributes(dateKey: dateKey)
-            _ = try? Activity.request(
-                attributes: attributes,
-                content: ActivityContent(state: content, staleDate: staleDate(for: content, now: now))
-            )
-        }
+        let stale = staleDate(for: content, now: now)
+        Task { await apply(dateKey: dateKey, content: content, staleDate: stale) }
     }
 
     /// Foreground minute-tick so the money figure never drifts far while the
     /// user can see both the app and the island.
     static func beginMinuteRefresh(state: WageState) {
         endMinuteRefresh()
-        let timer = Timer(timeInterval: 60, repeats: true) { [weak state] _ in
-            guard let state else { return }
-            Task { @MainActor in
+        minuteRefreshTask = Task { @MainActor [weak state] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .seconds(60))
+                } catch {
+                    return
+                }
+                guard !Task.isCancelled, let state else { return }
                 reconcile(state: state)
             }
         }
-        timer.tolerance = 5
-        RunLoop.main.add(timer, forMode: .common)
-        minuteRefreshTimer = timer
     }
 
     static func endMinuteRefresh() {
-        minuteRefreshTimer?.invalidate()
-        minuteRefreshTimer = nil
+        minuteRefreshTask?.cancel()
+        minuteRefreshTask = nil
     }
 
     static func endAll() {
+        Task { await endAllActivities() }
+    }
+
+    /// ActivityKit objects are obtained off the main actor so ending/updating
+    /// them does not send a MainActor-isolated `Activity` into a concurrent task.
+    nonisolated private static func endAllActivities() async {
         for activity in Activity<WNFLiveActivityAttributes>.activities {
-            Task { await activity.end(nil, dismissalPolicy: .immediate) }
+            await activity.end(nil, dismissalPolicy: .immediate)
+        }
+    }
+
+    nonisolated private static func apply(
+        dateKey: String,
+        content: WNFLiveActivityAttributes.ContentState,
+        staleDate: Date
+    ) async {
+        for activity in Activity<WNFLiveActivityAttributes>.activities
+        where activity.attributes.dateKey != dateKey {
+            await activity.end(nil, dismissalPolicy: .immediate)
+        }
+
+        let payload = ActivityContent(state: content, staleDate: staleDate)
+        if let activity = Activity<WNFLiveActivityAttributes>.activities
+            .first(where: { $0.attributes.dateKey == dateKey }) {
+            await activity.update(payload)
+        } else {
+            let attributes = WNFLiveActivityAttributes(dateKey: dateKey)
+            _ = try? Activity.request(attributes: attributes, content: payload)
         }
     }
 

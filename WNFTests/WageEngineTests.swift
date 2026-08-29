@@ -131,11 +131,12 @@ struct WageCalculatorTests {
     }
 }
 
+@MainActor
 struct WageStateBackfillTests {
     @Test("跨日回填沿用上次观察时的薪资设置")
     func backfilledRecordsUseLastObservedSettingsSnapshot() throws {
-        let (defaults, suiteName) = try isolatedDefaults()
-        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let (defaults, _, cleanup) = try isolatedDefaults()
+        defer { cleanup() }
 
         let calendar = DateComponents.calendar
         let todayStart = calendar.startOfDay(for: Date())
@@ -185,11 +186,12 @@ struct WageStateBackfillTests {
     }
 }
 
+@MainActor
 struct WageStateSettlementTests {
     @Test("liveDay 在非选中工作日归零但 calculation 保留原始计薪")
     func liveDayIsZeroOnUnselectedWeekday() throws {
-        let (defaults, suiteName) = try isolatedDefaults()
-        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let (defaults, _, cleanup) = try isolatedDefaults()
+        defer { cleanup() }
 
         let now = try #require(dateToday(hour: 10, minute: 30))
         let todayWeekday = weekdayIndex(for: now)
@@ -208,8 +210,8 @@ struct WageStateSettlementTests {
 
     @Test("selectedWeekdays 变化会立即影响同一秒 liveDay")
     func selectedWeekdayChangeInvalidatesLiveDay() throws {
-        let (defaults, suiteName) = try isolatedDefaults()
-        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let (defaults, _, cleanup) = try isolatedDefaults()
+        defer { cleanup() }
 
         let now = try #require(dateToday(hour: 10, minute: 30))
         let todayWeekday = weekdayIndex(for: now)
@@ -228,8 +230,8 @@ struct WageStateSettlementTests {
 
     @Test("markTodaySettled() 后 isTodaySettled == true")
     func markTodaySettledMarksCurrentDay() throws {
-        let (defaults, suiteName) = try isolatedDefaults()
-        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let (defaults, _, cleanup) = try isolatedDefaults()
+        defer { cleanup() }
         let state = WageState(userDefaults: defaults)
         defer { state.pauseCalendarDayTimer() }
 
@@ -240,8 +242,8 @@ struct WageStateSettlementTests {
 
     @Test("跨日后 isTodaySettled == false")
     func nextDayClearsTodaySettledPresentation() throws {
-        let (defaults, suiteName) = try isolatedDefaults()
-        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let (defaults, _, cleanup) = try isolatedDefaults()
+        defer { cleanup() }
         let state = WageState(userDefaults: defaults)
         defer { state.pauseCalendarDayTimer() }
 
@@ -256,8 +258,8 @@ struct WageStateSettlementTests {
 
     @Test("初始化不自动标记已结算")
     func initializationDoesNotAutoMarkSettled() throws {
-        let (defaults, suiteName) = try isolatedDefaults()
-        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let (defaults, _, cleanup) = try isolatedDefaults()
+        defer { cleanup() }
         defaults.set(0, forKey: StorageKey.workEndMinute)
         defaults.set([weekdayIndex(for: Date())], forKey: StorageKey.selectedWeekdays)
 
@@ -271,7 +273,7 @@ struct WageStateSettlementTests {
 struct RecordsAggregationTests {
     @Test("非选中工作日今日金额为 0")
     func unselectedWeekdayLiveRecordIsZero() throws {
-        let now = try #require(dateToday(hour: 10, minute: 30))
+        let now = try #require(dateOnFixedDay(hour: 10, minute: 30))
         let todayWeekday = weekdayIndex(for: now)
         let unselectedWeekdays = Set(0...6).subtracting([todayWeekday])
         let input = aggregationInput(currentDate: now, selectedWeekdays: unselectedWeekdays)
@@ -286,7 +288,7 @@ struct RecordsAggregationTests {
 
     @Test("今日 live record 会计入本周/本月")
     func liveTodayRecordCountsInCurrentPeriods() throws {
-        let now = try #require(dateToday(hour: 10, minute: 30))
+        let now = try #require(dateOnFixedDay(hour: 10, minute: 30))
         let input = aggregationInput(currentDate: now, selectedWeekdays: [weekdayIndex(for: now)])
 
         let snapshot = RecordAggregator.make(input: input, now: now)
@@ -299,7 +301,7 @@ struct RecordsAggregationTests {
 
     @Test("年聚合包含折叠月汇总并用 live today 替换今日已存快照")
     func yearlyAggregationIncludesMonthlySummariesAndDoesNotDoubleCountToday() throws {
-        let now = try #require(dateToday(hour: 10, minute: 30))
+        let now = try #require(dateOnFixedDay(hour: 10, minute: 30))
         let monthStart = DateComponents.calendar.date(from: DateComponents(
             year: DateComponents.calendar.component(.year, from: now),
             month: 3,
@@ -330,11 +332,12 @@ struct RecordsAggregationTests {
     }
 }
 
+@MainActor
 struct DailyRecordSQLiteStoreTests {
     @Test("旧 UserDefaults envelope 会迁移到 SQLite 并清理大 payload")
     func migratesLegacyUserDefaultsPayload() throws {
-        let (defaults, suiteName) = try isolatedDefaults()
-        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let (defaults, _, cleanup) = try isolatedDefaults()
+        defer { cleanup() }
 
         let now = Date()
         let yesterday = try #require(DateComponents.calendar.date(byAdding: .day, value: -1, to: now))
@@ -356,8 +359,8 @@ struct DailyRecordSQLiteStoreTests {
 
     @Test("超过 400 天的每日记录会折叠成月汇总")
     func foldsRecordsOlderThanRetentionWindow() throws {
-        let (defaults, suiteName) = try isolatedDefaults()
-        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let (defaults, _, cleanup) = try isolatedDefaults()
+        defer { cleanup() }
 
         let store = DailyRecordSQLiteStore(userDefaults: defaults)
         let now = Date()
@@ -385,7 +388,7 @@ struct DailyRecordSQLiteStoreTests {
 struct DailySettlementAggregationTests {
     @Test("累计窝囊费包含月汇总且今日 live 不重复计入")
     func cumulativeEarnedIncludesMonthlySummariesWithoutDoubleCountingToday() throws {
-        let today = try #require(dateToday(hour: 18, minute: 30))
+        let today = try #require(dateOnFixedDay(hour: 18, minute: 30))
         let yesterday = try #require(DateComponents.calendar.date(byAdding: .day, value: -1, to: today))
         let day = WageDay(
             startMinute: 9 * 60,
@@ -426,7 +429,7 @@ struct DailySettlementAggregationTests {
 struct WidgetProjectionTests {
     @Test("Widget snapshot 可以按分钟推导增长金额")
     func widgetSnapshotProjectsFutureMinute() throws {
-        let now = try #require(dateToday(hour: 10, minute: 0))
+        let now = try #require(dateOnFixedDay(hour: 10, minute: 0))
         let snapshot = widgetSnapshot(hidesSensitiveInfo: false, capturedAt: now, earningPerSecond: 1)
 
         let projected = snapshot.projected(at: now)
@@ -438,7 +441,7 @@ struct WidgetProjectionTests {
 
     @Test("Widget reload 目标会跳到下一个选中工作日起点")
     func widgetSnapshotFindsNextSelectedWorkStart() throws {
-        let now = try #require(dateToday(hour: 19, minute: 0))
+        let now = try #require(dateOnFixedDay(hour: 19, minute: 0))
         let snapshot = widgetSnapshot(hidesSensitiveInfo: false, capturedAt: now, earningPerSecond: 1)
 
         let nextStart = try #require(snapshot.nextSelectedWorkStart(after: now))
@@ -450,7 +453,7 @@ struct WidgetProjectionTests {
 
     @Test("Widget timeline 会封顶较长的加班分钟 entries")
     func widgetTimelineCapsLongOvertimeWindow() throws {
-        let now = try #require(dateToday(hour: 10, minute: 0))
+        let now = try #require(dateOnFixedDay(hour: 10, minute: 0))
         let snapshot = widgetSnapshot(
             hidesSensitiveInfo: false,
             capturedAt: now,
@@ -467,7 +470,7 @@ struct WidgetProjectionTests {
 
     @Test("Widget timeline 封顶后会在窗口末尾附近 reload")
     func cappedWidgetTimelineReloadsNearCapWindowEnd() throws {
-        let now = try #require(dateToday(hour: 10, minute: 0))
+        let now = try #require(dateOnFixedDay(hour: 10, minute: 0))
         let snapshot = widgetSnapshot(
             hidesSensitiveInfo: false,
             capturedAt: now,
@@ -486,7 +489,7 @@ struct WidgetProjectionTests {
 
     @Test("Widget timeline 未封顶时仍在下个选中工作日起点 reload")
     func uncappedWidgetTimelineReloadsAtNextSelectedWorkStart() throws {
-        let now = try #require(dateToday(hour: 17, minute: 0))
+        let now = try #require(dateOnFixedDay(hour: 17, minute: 0))
         let snapshot = widgetSnapshot(
             hidesSensitiveInfo: false,
             capturedAt: now,
@@ -525,21 +528,24 @@ private enum TestSetupError: Error {
     case userDefaultsUnavailable
 }
 
-private func isolatedDefaults() throws -> (UserDefaults, String) {
+private func isolatedDefaults() throws -> (defaults: UserDefaults, suiteName: String, cleanup: () -> Void) {
     let suiteName = "WNFTests.\(UUID().uuidString)"
     guard let defaults = UserDefaults(suiteName: suiteName) else {
         throw TestSetupError.userDefaultsUnavailable
     }
     defaults.removePersistentDomain(forName: suiteName)
-    let databaseURL = FileManager.default.temporaryDirectory
-        .appendingPathComponent("WNFTests", isDirectory: true)
-        .appendingPathComponent("\(suiteName).sqlite")
-    try? FileManager.default.createDirectory(
-        at: databaseURL.deletingLastPathComponent(),
-        withIntermediateDirectories: true
-    )
+
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent("WNFTests-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let databaseURL = root.appendingPathComponent("DailyRecords.sqlite")
     defaults.set(databaseURL.path, forKey: StorageKey.dailyRecordsSQLitePathOverride)
-    return (defaults, suiteName)
+
+    let cleanup = {
+        defaults.removePersistentDomain(forName: suiteName)
+        try? FileManager.default.removeItem(at: root)
+    }
+    return (defaults, suiteName, cleanup)
 }
 
 private func aggregationInput(currentDate: Date, selectedWeekdays: Set<Int>) -> RecordAggregationInput {
@@ -605,6 +611,18 @@ private func dateToday(hour: Int, minute: Int) -> Date? {
     components.minute = minute
     components.second = 0
     return DateComponents.calendar.date(from: components)
+}
+
+/// Monday 2026-08-17 in `DateComponents.calendar` — wall-clock-independent for pure calculation tests.
+private func dateOnFixedDay(hour: Int, minute: Int) -> Date? {
+    DateComponents.calendar.date(from: DateComponents(
+        year: 2026,
+        month: 8,
+        day: 17,
+        hour: hour,
+        minute: minute,
+        second: 0
+    ))
 }
 
 private func weekdayIndex(for date: Date) -> Int {

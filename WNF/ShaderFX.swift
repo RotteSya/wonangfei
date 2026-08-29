@@ -59,7 +59,7 @@ extension View {
 /// rasterize the AVPlayerLayer hosting the home mascot, and on iOS 26
 /// `maxSampleOffset` displaces the rendered layer. Plain transforms compose
 /// with everything, cost nothing at rest, and read just as soft in motion.
-struct JellyStretch: ViewModifier, Animatable {
+struct JellyStretch: ViewModifier, @MainActor Animatable {
     var stretch: CGFloat
 
     var animatableData: CGFloat {
@@ -111,6 +111,7 @@ extension ButtonStyle where Self == SquishButtonStyle {
 
 /// Centralized feedback generators so call sites stay one-liners and the
 /// generators get reused instead of re-allocated per event.
+@MainActor
 enum WNFHaptics {
     private static let selectionGenerator = UISelectionFeedbackGenerator()
     private static let softGenerator = UIImpactFeedbackGenerator(style: .soft)

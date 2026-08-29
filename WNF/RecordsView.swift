@@ -86,6 +86,7 @@ struct RecordAggregationInput: Equatable {
         self.selectedWeekdays = selectedWeekdays
     }
 
+    @MainActor
     init(state: WageState) {
         currentDateKey = state.currentDateKey
         recordsRevision = state.recordsRevision

@@ -279,7 +279,7 @@ private struct LiveWageReadout: View {
 }
 
 private struct MoneyBlockAnchorKey: PreferenceKey {
-    static var defaultValue: Anchor<CGRect>?
+    static let defaultValue: Anchor<CGRect>? = nil
 
     static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
         value = nextValue() ?? value
@@ -287,7 +287,7 @@ private struct MoneyBlockAnchorKey: PreferenceKey {
 }
 
 private struct CoinSourceAnchorKey: PreferenceKey {
-    static var defaultValue: Anchor<CGRect>?
+    static let defaultValue: Anchor<CGRect>? = nil
 
     static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
         value = nextValue() ?? value
@@ -399,13 +399,14 @@ private final class PlayerLayerView: UIView {
     }
 }
 
+@MainActor
 final class HomeMascotVideoController: ObservableObject {
     let player = AVQueuePlayer()
     private let clips: [HomeMascotVideoClip]
     private var pendingClips: [HomeMascotVideoClip] = []
     private var lastPlayedClip: HomeMascotVideoClip?
-    private var endObserver: NSObjectProtocol?
-    private var memoryWarningObserver: NSObjectProtocol?
+    nonisolated(unsafe) private var endObserver: NSObjectProtocol?
+    nonisolated(unsafe) private var memoryWarningObserver: NSObjectProtocol?
     private var isPlaybackRequested = false
     private let minimumQueuedItemCount = 3
 
@@ -502,8 +503,10 @@ final class HomeMascotVideoController: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            guard self?.isPlaybackRequested == true else { return }
-            self?.fillQueue()
+            Task { @MainActor in
+                guard self?.isPlaybackRequested == true else { return }
+                self?.fillQueue()
+            }
         }
     }
 
@@ -513,7 +516,9 @@ final class HomeMascotVideoController: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.pauseAndRelease()
+            Task { @MainActor in
+                self?.pauseAndRelease()
+            }
         }
     }
 }

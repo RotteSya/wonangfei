@@ -8,8 +8,7 @@ final class LegalDocumentUITests: XCTestCase {
     }
 
     func testPrivacyPolicyOpensFromBundle() throws {
-        let app = XCUIApplication()
-        app.launch()
+        let app = launchMainShell()
 
         let settings = app.buttons["tab.settings"]
         XCTAssertTrue(settings.waitForExistence(timeout: 5), "settings tab should exist (onboarding must be completed)")
@@ -41,9 +40,9 @@ final class LegalDocumentUITests: XCTestCase {
             "legal page must not wait on a dead remote host"
         )
 
-        let shot = XCUIScreen.main.screenshot()
-        let url = URL(fileURLWithPath: "/tmp/wnf-d2/privacy-uitest.png")
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try shot.pngRepresentation.write(to: url)
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = "privacy-uitest"
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 }

@@ -364,7 +364,7 @@ private struct IslandMetrics {
 }
 
 private struct ShareCardSizeKey: PreferenceKey {
-    static var defaultValue: CGSize = .zero
+    static let defaultValue: CGSize = .zero
     static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
         let next = nextValue()
         if next != .zero { value = next }
@@ -449,7 +449,7 @@ private struct GenieFunnelShape: Shape {
 /// custom `Animatable` modifier does (SwiftUI steps `animatableData` and re-runs
 /// `body` every frame). The funnel mask and shadow ride the same progress so they
 /// stay locked to the warp.
-private struct GenieEmergence: ViewModifier, Animatable {
+private struct GenieEmergence: ViewModifier, @MainActor Animatable {
     var progress: CGFloat
     var size: CGSize
     var params: GenieParams
@@ -488,7 +488,7 @@ private struct GenieEmergence: ViewModifier, Animatable {
 /// Per-frame stretch of the faux Dynamic Island capsule. Its size rises then
 /// falls across the emergence, so it must be recomputed every frame rather than
 /// interpolated between endpoints.
-private struct IslandCapsuleStretch: ViewModifier, Animatable {
+private struct IslandCapsuleStretch: ViewModifier, @MainActor Animatable {
     var progress: CGFloat
     var compact: CGSize
     var topY: CGFloat
@@ -745,6 +745,7 @@ struct ActivityView: UIViewControllerRepresentable {
         }
     }
 
+    @MainActor
     final class Coordinator {
         private var isPresented: Binding<Bool>
 
@@ -753,8 +754,8 @@ struct ActivityView: UIViewControllerRepresentable {
         }
 
         func dismiss() {
-            DispatchQueue.main.async {
-                self.isPresented.wrappedValue = false
+            Task { @MainActor in
+                isPresented.wrappedValue = false
             }
         }
     }

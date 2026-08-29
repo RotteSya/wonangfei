@@ -68,6 +68,7 @@ private struct LegalWebView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let webView = WKWebView()
         webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
         if let url = Bundle.main.url(forResource: document.localResourceName, withExtension: "html") {
             webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
         } else {
@@ -82,7 +83,7 @@ private struct LegalWebView: UIViewRepresentable {
     func updateUIView(_ webView: WKWebView, context: Context) {}
 }
 
-private final class LegalWebViewCoordinator: NSObject, WKNavigationDelegate {
+private final class LegalWebViewCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
     func webView(
         _ webView: WKWebView,
         decidePolicyFor navigationAction: WKNavigationAction,

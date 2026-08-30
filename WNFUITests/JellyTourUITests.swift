@@ -80,7 +80,16 @@ final class JellyTourUITests: XCTestCase {
             sleep(2)
         }
 
-        // 7. Continue to settings, then flick all the way back to home.
+        // 7. The retention layer must remain reachable below the data cards.
+        let badges = app.descendants(matching: .any)["records.badges"].firstMatch
+        for _ in 0..<3 where !badges.isHittable {
+            window.swipeUp()
+        }
+        XCTAssertTrue(badges.waitForExistence(timeout: 3), "achievement badges should remain in records")
+        XCTAssertTrue(badges.isHittable, "achievement badges should be reachable by scrolling")
+        attachScreen("design-qa-records-badges")
+
+        // 8. Continue to settings, then flick all the way back to home.
         mark("swipe-to-settings", t0)
         right.press(forDuration: 0.05, thenDragTo: left, withVelocity: 900, thenHoldForDuration: 0.05)
         sleep(2)
@@ -92,7 +101,7 @@ final class JellyTourUITests: XCTestCase {
         left.press(forDuration: 0.05, thenDragTo: right, withVelocity: 1600, thenHoldForDuration: 0.02)
         sleep(2)
 
-        // 8. Tab-bar taps (pill morph + jelly kick): 记录 → 我的 → 首页.
+        // 9. Tab-bar taps (pill morph + jelly kick): 记录 → 我的 → 首页.
         let tabRecords = app.buttons["tab.records"].firstMatch
         XCTAssertTrue(tabRecords.waitForExistence(timeout: 3), "tab bar should exist")
         mark("tab-records", t0)
@@ -105,7 +114,7 @@ final class JellyTourUITests: XCTestCase {
         app.buttons["tab.home"].firstMatch.tap()
         sleep(2)
 
-        // 9. Share card genie in/out (regression check for the overlay stack).
+        // 10. Share card genie in/out (regression check for the overlay stack).
         let share = app.buttons["home.share"].firstMatch
         XCTAssertTrue(share.waitForExistence(timeout: 3))
         mark("share-open", t0)

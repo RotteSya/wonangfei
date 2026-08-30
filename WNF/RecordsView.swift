@@ -41,6 +41,36 @@ struct RecordSummary {
     var elapsedPaidSeconds: Int = 0
 }
 
+struct RecordBadgeState: Identifiable, Equatable {
+    var id: String
+    var symbol: String
+    var label: String
+    var unlocked: Bool
+}
+
+enum RecordBadgeCatalog {
+    static func make(
+        todayEarned: Double,
+        currentMonthSummary: RecordSummary,
+        isTodaySettled: Bool
+    ) -> [RecordBadgeState] {
+        [
+            RecordBadgeState(id: "today-started", symbol: "sun.max.fill", label: "今日开张", unlocked: todayEarned > 0),
+            RecordBadgeState(id: "lunch-money", symbol: "cup.and.saucer.fill", label: "饭钱到手", unlocked: todayEarned >= 30),
+            RecordBadgeState(id: "today-100", symbol: "yensign.circle.fill", label: "今日破百", unlocked: todayEarned >= 100),
+            RecordBadgeState(id: "today-settled", symbol: "tray.and.arrow.down.fill", label: "今日入库", unlocked: isTodaySettled),
+            RecordBadgeState(id: "month-days-3", symbol: "calendar", label: "坐满 3 天", unlocked: currentMonthSummary.recordedDays >= 3),
+            RecordBadgeState(id: "month-days-10", symbol: "calendar.circle", label: "坐满 10 天", unlocked: currentMonthSummary.recordedDays >= 10),
+            RecordBadgeState(id: "month-days-20", symbol: "calendar.badge.checkmark", label: "坐满 20 天", unlocked: currentMonthSummary.recordedDays >= 20),
+            RecordBadgeState(id: "month-1000", symbol: "banknote.fill", label: "月攒千元", unlocked: currentMonthSummary.amount >= 1_000),
+            RecordBadgeState(id: "month-3000", symbol: "chart.line.uptrend.xyaxis", label: "月攒三千", unlocked: currentMonthSummary.amount >= 3_000),
+            RecordBadgeState(id: "month-5000", symbol: "briefcase.fill", label: "月攒五千", unlocked: currentMonthSummary.amount >= 5_000),
+            RecordBadgeState(id: "month-hours-40", symbol: "clock.fill", label: "忍 40h", unlocked: currentMonthSummary.elapsedPaidSeconds >= 40 * 60 * 60),
+            RecordBadgeState(id: "month-hours-100", symbol: "hourglass", label: "忍 100h", unlocked: currentMonthSummary.elapsedPaidSeconds >= 100 * 60 * 60)
+        ]
+    }
+}
+
 struct RecordAggregationInput: Equatable {
     var currentDateKey: String
     var recordsRevision: Int
@@ -392,6 +422,26 @@ struct RecordsView: View {
         bars.reduce(0) { $0 + $1.elapsedPaidSeconds }
     }
 
+    private var currentMonthSummary: RecordSummary {
+        aggregation.currentMonthSummary
+    }
+
+    private var todayEarned: Double {
+        aggregation.todayEarned
+    }
+
+    private var unlockedBadgeCount: Int {
+        recordBadges.filter(\.unlocked).count
+    }
+
+    private var recordBadges: [RecordBadgeState] {
+        RecordBadgeCatalog.make(
+            todayEarned: todayEarned,
+            currentMonthSummary: currentMonthSummary,
+            isTodaySettled: state.isTodaySettled
+        )
+    }
+
     private var currentDate: Date {
         WageState.date(fromDateKey: state.currentDateKey) ?? Date()
     }
@@ -440,8 +490,11 @@ struct RecordsView: View {
                     summaryMetricsCard
                         .cardEntrance(order: 2)
 
-                    coworkerNote
+                    badgeCard
                         .cardEntrance(order: 3)
+
+                    coworkerNote
+                        .cardEntrance(order: 4)
                 }
                 .padding(.horizontal, 18)
                 .padding(.top, 10)
@@ -538,6 +591,41 @@ struct RecordsView: View {
         .padding(.vertical, 18)
         .background(WNFTheme.surface, in: RoundedRectangle(cornerRadius: 22))
         .overlay(RoundedRectangle(cornerRadius: 22).stroke(WNFTheme.hairline, lineWidth: 0.5))
+    }
+
+    private var badgeCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("窝囊徽章")
+                        .font(.system(size: 19, weight: .black, design: .rounded))
+
+                    Text("本月 \(currentMonthSummary.recordedDays) 天 · \(WNFFormat.money(currentMonthSummary.amount, privacy: state.privacyMode))")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(WNFTheme.muted)
+                }
+
+                Spacer()
+
+                Text("\(unlockedBadgeCount) / \(recordBadges.count) 解锁")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(WNFTheme.muted)
+                    .contentTransition(.numericText())
+            }
+
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4),
+                spacing: 12
+            ) {
+                ForEach(recordBadges) { badge in
+                    Badge(symbol: badge.symbol, label: badge.label, unlocked: badge.unlocked)
+                }
+            }
+        }
+        .padding(16)
+        .background(WNFTheme.surface, in: RoundedRectangle(cornerRadius: 22))
+        .overlay(RoundedRectangle(cornerRadius: 22).stroke(WNFTheme.hairline, lineWidth: 0.5))
+        .accessibilityIdentifier("records.badges")
     }
 
     private func summaryMetric(label: String, value: String) -> some View {

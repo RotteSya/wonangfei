@@ -332,6 +332,47 @@ struct RecordsAggregationTests {
     }
 }
 
+struct RecordBadgeCatalogTests {
+    @Test("徽章目录稳定包含十二枚且空记录不解锁")
+    func emptyRecordKeepsAllBadgesLocked() {
+        let badges = RecordBadgeCatalog.make(
+            todayEarned: 0,
+            currentMonthSummary: RecordSummary(),
+            isTodaySettled: false
+        )
+
+        #expect(badges.count == 12)
+        #expect(badges.allSatisfy { !$0.unlocked })
+        #expect(Set(badges.map(\.id)).count == badges.count)
+    }
+
+    @Test("金额、坐班、工时与结算按真实阈值解锁")
+    func thresholdsUnlockExpectedBadges() {
+        let badges = RecordBadgeCatalog.make(
+            todayEarned: 100,
+            currentMonthSummary: RecordSummary(
+                amount: 3_000,
+                recordedDays: 10,
+                elapsedPaidSeconds: 40 * 60 * 60
+            ),
+            isTodaySettled: true
+        )
+        let unlockedIDs = Set(badges.filter(\.unlocked).map(\.id))
+
+        #expect(unlockedIDs == [
+            "today-started",
+            "lunch-money",
+            "today-100",
+            "today-settled",
+            "month-days-3",
+            "month-days-10",
+            "month-1000",
+            "month-3000",
+            "month-hours-40"
+        ])
+    }
+}
+
 @MainActor
 struct DailyRecordSQLiteStoreTests {
     @Test("旧 UserDefaults envelope 会迁移到 SQLite 并清理大 payload")

@@ -376,10 +376,21 @@ if privacy is not None:
     if not reasons_ok:
         err("PrivacyInfo missing UserDefaults CA92.1")
 
-marketing = "https://rottesya.github.io/wonangfei/"
-support = "https://rottesya.github.io/wonangfei/support.html"
+current_marketing = "https://rottesya.github.io/wonangfei/"
+current_support = "https://rottesya.github.io/wonangfei/support.html"
 privacy_url = "https://rottesya.github.io/wonangfei/privacy.html"
 required_keys = ("description", "keywords", "marketingUrl", "supportUrl")
+expected_version_urls = {
+    # READY_FOR_DISTRIBUTION versions are immutable ASC snapshots. Keep their
+    # pulled historical values instead of rewriting them to today's website.
+    "1.0": (
+        "https://rottesya.github.io/wonangfei-legal/",
+        "https://rottesya.github.io/wonangfei-legal/support.html",
+    ),
+    "1.1": (current_marketing, current_support),
+    # 1.2 is the only editable version and must use the current public URLs.
+    "1.2": (current_marketing, current_support),
+}
 for ver in ("1.0", "1.1", "1.2"):
     rel = "metadata/version/%s/zh-Hans.json" % ver
     payload = load_json(rel)
@@ -388,9 +399,10 @@ for ver in ("1.0", "1.1", "1.2"):
     for key in required_keys:
         if not payload.get(key):
             err("%s missing %s" % (rel, key))
-    if payload.get("marketingUrl") != marketing:
+    expected_marketing, expected_support = expected_version_urls[ver]
+    if payload.get("marketingUrl") != expected_marketing:
         err("%s marketingUrl" % rel)
-    if payload.get("supportUrl") != support:
+    if payload.get("supportUrl") != expected_support:
         err("%s supportUrl" % rel)
 
 app_info = load_json("metadata/app-info/zh-Hans.json")
@@ -464,7 +476,7 @@ check_canonical_files() {
 }
 
 git_diff_check() {
-  local out rc=0
+  local out rc=0 base_ref="" merge_base="" head=""
   set +e
   out=$(git diff --check 2>&1)
   rc=$?
@@ -478,6 +490,54 @@ git_diff_check() {
   rc=$?
   set -e
   if [[ $rc -ne 0 ]]; then
+    printf '%s\n' "$out"
+    return 1
+  fi
+
+  # A clean checkout has no working-tree diff, so also inspect everything the
+  # current branch introduced relative to main. WNF_DIFF_BASE supports forks
+  # whose default branch uses a different ref.
+  if [[ -n "${WNF_DIFF_BASE:-}" ]]; then
+    base_ref="$WNF_DIFF_BASE"
+  elif git rev-parse --verify --quiet 'origin/main^{commit}' >/dev/null; then
+    base_ref="origin/main"
+  elif git rev-parse --verify --quiet 'main^{commit}' >/dev/null; then
+    base_ref="main"
+  fi
+
+  if [[ -n "$base_ref" ]]; then
+    set +e
+    merge_base=$(git merge-base "$base_ref" HEAD 2>/dev/null)
+    rc=$?
+    set -e
+    if [[ $rc -ne 0 || -z "$merge_base" ]]; then
+      printf 'cannot resolve merge-base for %s and HEAD\n' "$base_ref"
+      return 1
+    fi
+    head=$(git rev-parse HEAD)
+    if [[ "$merge_base" != "$head" ]]; then
+      set +e
+      out=$(git diff --check "${merge_base}..HEAD" 2>&1)
+      rc=$?
+      set -e
+      if [[ $rc -ne 0 ]]; then
+        printf '%s\n' "$out"
+        return 1
+      fi
+    fi
+  fi
+
+  # After the branch is merged, base and HEAD can be identical. Keep the gate
+  # useful by rejecting trailing horizontal whitespace in every tracked text file.
+  set +e
+  out=$(git grep -n -I -E '[[:blank:]]+$' -- . 2>&1)
+  rc=$?
+  set -e
+  if [[ $rc -eq 0 ]]; then
+    printf 'tracked files contain trailing whitespace:\n%s\n' "$out"
+    return 1
+  fi
+  if [[ $rc -ne 1 ]]; then
     printf '%s\n' "$out"
     return 1
   fi
@@ -680,7 +740,7 @@ cmd_static_gate() {
     require_cmd python3
     require_cmd sips
     require_cmd xcodebuild
-    printf 'git diff --check\n'
+    printf 'working tree + committed branch diff hygiene\n'
     git_diff_check
     printf 'forbidden substrings\n'
     forbidden_needles_python

@@ -4,6 +4,7 @@ import UserNotifications
 
 struct SettingsView: View {
     @EnvironmentObject private var state: WageState
+    @StateObject private var aggregationStore = RecordAggregationStore()
 
     var onShowOnboarding: () -> Void = {}
 
@@ -11,6 +12,9 @@ struct SettingsView: View {
     @State private var notificationAuthStatus: UNAuthorizationStatus = .notDetermined
 
     private var day: WageDay { state.calculation }
+    private var currentMonthSummary: RecordSummary {
+        aggregationStore.snapshot(for: RecordAggregationInput(state: state)).currentMonthSummary
+    }
     private var workStartBinding: Binding<DateComponents> {
         Binding {
             state.workStart
@@ -36,7 +40,7 @@ struct SettingsView: View {
                 .padding(.top, 2)
 
             ScrollView {
-                VStack(spacing: 16) {
+                VStack(spacing: 14) {
                     profileBanner
 
                     SectionCard(title: "收入") {
@@ -129,7 +133,7 @@ struct SettingsView: View {
                     footer
                 }
                 .padding(.horizontal, 18)
-                .padding(.top, 16)
+                .padding(.top, 12)
                 .padding(.bottom, 105)
             }
         }
@@ -258,36 +262,38 @@ struct SettingsView: View {
     }
 
     private var profileBanner: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 15) {
             Image("HeroMascot")
                 .resizable()
                 .scaledToFill()
-                .frame(width: 66, height: 66)
-                .clipShape(RoundedRectangle(cornerRadius: 18))
-                .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.white.opacity(0.16), lineWidth: 1))
+                .frame(width: 62, height: 62)
+                .clipShape(RoundedRectangle(cornerRadius: 17))
+                .overlay(RoundedRectangle(cornerRadius: 17).stroke(Color.white.opacity(0.16), lineWidth: 1))
 
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text("窝囊费打工人")
-                    .font(WNFTheme.display(26))
+                    .font(WNFTheme.display(25))
                     .foregroundStyle(Color.white)
                 HStack(spacing: 6) {
                     YenBadge(size: 13)
-                    Text("时薪 \(state.privacyMode ? "¥••" : "¥\(Int(day.hourlyRate))") · 每天窝囊 \(Self.dailyHoursText(paidMinutes: day.workdayMinutes)) 小时")
+                    Text("时薪 \(state.privacyMode ? "¥••" : String(format: "¥%.2f", day.hourlyRate)) · 本月已忍 \(state.privacyMode ? "••h••min" : WNFFormat.duration(currentMonthSummary.elapsedPaidSeconds / 60))")
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(Color.white.opacity(0.58))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
                 }
             }
 
             Spacer(minLength: 0)
         }
-        .padding(22)
+        .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(WNFTheme.inkSurface, in: RoundedRectangle(cornerRadius: 28))
         .overlay(alignment: .topTrailing) {
             Text("¥")
-                .font(.system(size: 210, weight: .black, design: .rounded))
+                .font(.system(size: 185, weight: .black, design: .rounded))
                 .foregroundStyle(WNFTheme.yellow.opacity(0.12))
-                .offset(x: 20, y: -56)
+                .offset(x: 22, y: -50)
         }
         .clipShape(RoundedRectangle(cornerRadius: 28))
     }
@@ -295,7 +301,7 @@ struct SettingsView: View {
     private var weekdaysCard: some View {
         SectionCard(title: "工作日") {
             VStack(alignment: .leading, spacing: 9) {
-                HStack(spacing: 6) {
+                HStack(spacing: 7) {
                     ForEach(Array(["一", "二", "三", "四", "五", "六", "日"].enumerated()), id: \.offset) { index, label in
                         Button {
                             state.toggleWeekday(index)
@@ -303,8 +309,8 @@ struct SettingsView: View {
                             Text(label)
                                 .font(.system(size: 16, weight: .black, design: .rounded))
                                 .foregroundStyle(state.selectedWeekdays.contains(index) ? WNFTheme.yellow : WNFTheme.muted)
-                                .frame(maxWidth: .infinity, minHeight: 40)
-                                .background(state.selectedWeekdays.contains(index) ? WNFTheme.ink : WNFTheme.surfaceSoft, in: RoundedRectangle(cornerRadius: 12))
+                                .frame(maxWidth: .infinity, minHeight: 42)
+                                .background(state.selectedWeekdays.contains(index) ? WNFTheme.inkSurface : WNFTheme.surfaceSoft, in: RoundedRectangle(cornerRadius: 12))
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("周\(label)")
@@ -315,7 +321,7 @@ struct SettingsView: View {
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(WNFTheme.muted)
             }
-            .padding(14)
+            .padding(13)
         }
     }
 
@@ -403,8 +409,9 @@ private struct ValueStepper: View {
                 action: onIncrement
             )
         }
-        .frame(width: width, height: 38)
-        .background(WNFTheme.hairline, in: Capsule())
+        .frame(width: width, height: 40)
+        .background(WNFTheme.surfaceSoft.opacity(0.75), in: Capsule())
+        .overlay(Capsule().stroke(WNFTheme.hairline, lineWidth: 0.5))
         .accessibilityElement(children: .contain)
         .sheet(isPresented: $isQuickEditorPresented) {
             WNFNumberPadSheet(
@@ -457,8 +464,9 @@ private struct TimePickerRow: View {
                     .font(WNFTheme.mono(14))
                     .foregroundStyle(WNFTheme.ink)
                     .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(WNFTheme.hairline, in: Capsule())
+                    .padding(.vertical, 9)
+                    .background(WNFTheme.surfaceSoft.opacity(0.75), in: Capsule())
+                    .overlay(Capsule().stroke(WNFTheme.hairline, lineWidth: 0.5))
             }
             .buttonStyle(.squish(0.95))
             .accessibilityLabel("\(title)时间")

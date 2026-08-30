@@ -10,10 +10,10 @@ struct TopBar: View {
                 Image("CowThreeQ")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 26, height: 28)
+                    .frame(width: 32, height: 34)
                 Text("窝囊费")
-                    .font(WNFTheme.display(21))
-                YenBadge(size: 16)
+                    .font(WNFTheme.display(27))
+                    .foregroundStyle(WNFTheme.ink)
             }
 
             Spacer()
@@ -29,9 +29,9 @@ struct TopBar: View {
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(state.privacyMode ? WNFTheme.yellow : WNFTheme.ink)
                         .contentTransition(.symbolEffect(.replace))
-                        .frame(width: 40, height: 40)
-                        .background(state.privacyMode ? WNFTheme.inkSurface : WNFTheme.surface, in: RoundedRectangle(cornerRadius: 13))
-                        .overlay(RoundedRectangle(cornerRadius: 13).stroke(WNFTheme.hairline, lineWidth: 0.5))
+                        .frame(width: 42, height: 42)
+                        .background(state.privacyMode ? WNFTheme.inkSurface : WNFTheme.surface, in: RoundedRectangle(cornerRadius: 14))
+                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(WNFTheme.hairline, lineWidth: 0.5))
                         .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
                 }
                 .buttonStyle(.squish)
@@ -43,9 +43,9 @@ struct TopBar: View {
                         Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(WNFTheme.ink)
-                            .frame(width: 40, height: 40)
-                            .background(WNFTheme.surface, in: RoundedRectangle(cornerRadius: 13))
-                            .overlay(RoundedRectangle(cornerRadius: 13).stroke(WNFTheme.hairline, lineWidth: 0.5))
+                            .frame(width: 42, height: 42)
+                            .background(WNFTheme.surface, in: RoundedRectangle(cornerRadius: 14))
+                            .overlay(RoundedRectangle(cornerRadius: 14).stroke(WNFTheme.hairline, lineWidth: 0.5))
                             .shadow(color: .black.opacity(0.05), radius: 6, y: 2)
                     }
                     .buttonStyle(.squish)
@@ -56,7 +56,7 @@ struct TopBar: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 22)
-        .padding(.top, 8)
+        .padding(.top, 10)
     }
 }
 
@@ -89,16 +89,17 @@ struct StatusChip: View {
                 .contentTransition(.numericText())
                 .animation(.snappy(duration: 0.3), value: label)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
+        .foregroundStyle(WNFTheme.ink)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
         .background(WNFTheme.surfaceSoft, in: Capsule())
     }
 
     @ViewBuilder
     private var statusDot: some View {
         let dot = Circle()
-            .fill(WNFTheme.coral)
-            .frame(width: 7, height: 7)
+            .fill(WNFTheme.yellow)
+            .frame(width: 9, height: 9)
 
         if reduceMotion {
             dot
@@ -111,8 +112,8 @@ struct StatusChip: View {
                     .opacity(pulsing ? 1.0 : 0.6)
                     .background(
                         Circle()
-                            .fill(WNFTheme.coral.opacity(pulsing ? 0 : 0.35))
-                            .frame(width: 13, height: 13)
+                            .fill(WNFTheme.yellow.opacity(pulsing ? 0 : 0.35))
+                            .frame(width: 15, height: 15)
                             .scaleEffect(pulsing ? 1.5 : 0.6)
                     )
             } animation: { _ in
@@ -170,16 +171,15 @@ struct SectionCard<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(WNFTheme.display(13))
+                .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(WNFTheme.muted)
-                .tracking(1.5)
-                .padding(.horizontal, 10)
+                .padding(.horizontal, 8)
 
             VStack(spacing: 0) {
                 content
             }
-            .background(WNFTheme.surface, in: RoundedRectangle(cornerRadius: 22))
-            .overlay(RoundedRectangle(cornerRadius: 22).stroke(WNFTheme.hairline, lineWidth: 0.5))
+            .background(WNFTheme.surface, in: RoundedRectangle(cornerRadius: 24))
+            .overlay(RoundedRectangle(cornerRadius: 24).stroke(WNFTheme.hairline, lineWidth: 0.5))
         }
     }
 }

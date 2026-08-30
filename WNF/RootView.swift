@@ -94,7 +94,11 @@ struct RootView: View {
 
     /// Launch argument `-wnf.onboarding.completed` is read-only (NSArgumentDomain / ProcessInfo), never persisted.
     private var hasCompletedOnboarding: Bool {
-        onboardingCompleted || ProcessInfo.processInfo.arguments.contains("-wnf.onboarding.completed")
+        onboardingCompleted
+            || UserDefaults.standard.bool(forKey: "wnf.onboarding.completed")
+            || ProcessInfo.processInfo.arguments.contains("-wnf.onboarding.completed")
+            || ProcessInfo.processInfo.environment["WNF_SKIP_ONBOARDING"] == "1"
+            || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 
     private static let shareExportWidth: CGFloat = 360

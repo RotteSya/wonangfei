@@ -17,9 +17,9 @@ enum RecordPeriod: String, CaseIterable, Identifiable {
 
     var heroLabel: String {
         switch self {
-        case .week: "本 周 窝 囊 费"
-        case .month: "本 月 窝 囊 费"
-        case .year: "本 年 窝 囊 费"
+        case .week: "本周窝囊费"
+        case .month: "本月窝囊费"
+        case .year: "本年窝囊费"
         }
     }
 }
@@ -342,7 +342,7 @@ struct RecordAggregationSnapshot {
     }
 }
 
-private final class RecordAggregationStore: ObservableObject {
+final class RecordAggregationStore: ObservableObject {
     private var cachedInput: RecordAggregationInput?
     private var cachedSnapshot = RecordAggregationSnapshot.empty
 
@@ -364,7 +364,6 @@ struct RecordsView: View {
     @State private var period: RecordPeriod = .month
     @State private var selectedBarID: RecordBar.ID?
 
-    private var day: WageDay { state.calculation }
     private var aggregation: RecordAggregationSnapshot {
         aggregationStore.snapshot(for: RecordAggregationInput(state: state))
     }
@@ -389,6 +388,26 @@ struct RecordsView: View {
         bars.map(\.amount).max() ?? 0
     }
 
+    private var periodElapsedPaidSeconds: Int {
+        bars.reduce(0) { $0 + $1.elapsedPaidSeconds }
+    }
+
+    private var currentDate: Date {
+        WageState.date(fromDateKey: state.currentDateKey) ?? Date()
+    }
+
+    private var chartTitle: String {
+        let calendar = DateComponents.calendar
+        switch period {
+        case .week:
+            return "本周每日窝囊费"
+        case .month:
+            return "\(calendar.component(.month, from: currentDate)) 月每周窝囊费"
+        case .year:
+            return "\(calendar.component(.year, from: currentDate)) 年每月窝囊费"
+        }
+    }
+
     private var chartRangeLabel: String {
         switch period {
         case .week:
@@ -398,23 +417,6 @@ struct RecordsView: View {
         case .year:
             "1 月 - 12 月"
         }
-    }
-
-    private var currentMonthSummary: RecordSummary {
-        aggregation.currentMonthSummary
-    }
-
-    private var todayEarned: Double {
-        aggregation.todayEarned
-    }
-
-    private var unlockedBadgeCount: Int {
-        [
-            todayEarned > 0,
-            state.hasLunchBreak,
-            state.includeOvertime,
-            currentMonthSummary.elapsedPaidSeconds >= 100 * 60 * 60
-        ].filter(\.self).count
     }
 
     var body: some View {
@@ -428,36 +430,21 @@ struct RecordsView: View {
                 .padding(.top, 2)
 
             ScrollView {
-                VStack(spacing: 14) {
+                VStack(spacing: 12) {
                     heroCard
                         .cardEntrance(order: 0)
 
-                    // Chart sits right under the headline number — it's the
-                    // "show me my data" centerpiece and the home of the
-                    // scrub-to-read gesture, so it earns the top of the fold.
                     chartCard
                         .cardEntrance(order: 1)
 
-                    HStack(spacing: 10) {
-                        MetricTile(label: period == .week ? "本周日均" : period == .month ? "月日均" : "年日均", value: WNFFormat.money(periodAverage, privacy: state.privacyMode), subtitle: "来自已记录日期", big: true)
-                        MetricTile(label: "本期最高", value: WNFFormat.money(periodPeak, privacy: state.privacyMode), subtitle: "单柱最高金额", accent: WNFTheme.coral, big: true)
-                    }
-                    .cardEntrance(order: 2)
+                    summaryMetricsCard
+                        .cardEntrance(order: 2)
 
-                    HStack(spacing: 10) {
-                        MetricTile(label: "时薪", value: state.privacyMode ? "¥••/h" : "¥\(Int(day.hourlyRate))/h", subtitle: "基于税后月薪", accent: WNFTheme.cyan)
-                        MetricTile(label: "已记录", value: "\(recordedDayCount) 天", subtitle: "含今日")
-                    }
-                    .cardEntrance(order: 3)
-
-                    achievementCard
-                        .cardEntrance(order: 4)
-
-                    badgeCard
-                        .cardEntrance(order: 5)
+                    coworkerNote
+                        .cardEntrance(order: 3)
                 }
                 .padding(.horizontal, 18)
-                .padding(.top, 14)
+                .padding(.top, 10)
                 .padding(.bottom, 105)
             }
         }
@@ -468,42 +455,33 @@ struct RecordsView: View {
     }
 
     private var heroCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 20) {
             PeriodSwitcher(period: $period)
 
-            Text(period.heroLabel)
-                .font(WNFTheme.display(12))
-                .tracking(2)
-                .foregroundStyle(WNFTheme.inkFixed.opacity(0.65))
-                .contentTransition(.numericText())
-                .animation(.snappy(duration: 0.3), value: period)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(period.heroLabel)
+                    .font(WNFTheme.display(17))
+                    .foregroundStyle(WNFTheme.inkFixed.opacity(0.82))
+                    .contentTransition(.numericText())
+                    .animation(.snappy(duration: 0.3), value: period)
 
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
-                Text(WNFFormat.money(total, privacy: state.privacyMode))
-                    .font(.system(size: 56, weight: .black, design: .rounded))
+                Text(WNFFormat.moneyDecimal(total, privacy: state.privacyMode))
+                    .font(.system(size: 49, weight: .black, design: .rounded))
                     .foregroundStyle(WNFTheme.inkFixed)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.65)
+                    .minimumScaleFactor(0.58)
                     .contentTransition(.numericText(value: total))
                     .animation(.spring(response: 0.55, dampingFraction: 0.8), value: total)
-                Spacer(minLength: 0)
-            }
 
-            HStack(spacing: 8) {
-                Label("已记录 \(recordedDayCount) 天", systemImage: "calendar")
-                    .font(.system(size: 11, weight: .heavy))
-                    .foregroundStyle(WNFTheme.yellow)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(WNFTheme.inkFixed, in: Capsule())
+                Text("已记录 \(recordedDayCount) 天  ·  \(state.privacyMode ? "••h••min" : WNFFormat.duration(periodElapsedPaidSeconds / 60))")
+                    .font(.system(size: 13, weight: .heavy, design: .rounded))
+                    .foregroundStyle(WNFTheme.inkFixed.opacity(0.72))
                     .contentTransition(.numericText())
                     .animation(.snappy(duration: 0.3), value: recordedDayCount)
-                Text("今日金额计入本期")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(WNFTheme.inkFixed.opacity(0.6))
             }
         }
-        .padding(22)
+        .padding(16)
+        .padding(.bottom, 20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             // Gold-card surface: brand yellow with printed grain and a slow
@@ -517,43 +495,14 @@ struct RecordsView: View {
             BreathingWatermark()
         }
         .clipShape(RoundedRectangle(cornerRadius: 28))
-        .shadow(color: WNFTheme.yellow.opacity(0.24), radius: 20, y: 10)
-    }
-
-    private var achievementCard: some View {
-        HStack(spacing: 14) {
-            MascotPortrait()
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("本 月 成 就")
-                    .font(WNFTheme.display(12))
-                    .tracking(1.5)
-                    .foregroundStyle(WNFTheme.yellow)
-                    .goldShimmer(period: 6.0, intensity: 0.6)
-                Text("本月已记录 \(currentMonthSummary.recordedDays) 天")
-                    .font(.system(size: 22, weight: .black, design: .rounded))
-                    .foregroundStyle(Color.white)
-                    .contentTransition(.numericText())
-                    .animation(.snappy(duration: 0.3), value: currentMonthSummary.recordedDays)
-                Text("累计到账 \(WNFFormat.money(currentMonthSummary.amount, privacy: state.privacyMode))")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.55))
-            }
-            Spacer()
-        }
-        .padding(16)
-        .background {
-            RoundedRectangle(cornerRadius: 22)
-                .fill(WNFTheme.inkSurface)
-                .paperGrain(0.05)
-        }
+        .shadow(color: WNFTheme.yellow.opacity(0.2), radius: 18, y: 8)
     }
 
     private var chartCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Text(period == .week ? "本周每日窝囊费" : period == .month ? "本月每周窝囊费" : "本年每月窝囊费")
-                    .font(WNFTheme.display(19))
+                Text(chartTitle)
+                    .font(WNFTheme.display(20))
                     .contentTransition(.numericText())
                     .animation(.snappy(duration: 0.3), value: period)
                 Spacer()
@@ -561,10 +510,6 @@ struct RecordsView: View {
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(WNFTheme.muted)
             }
-
-            Text("按住图表左右滑动查数")
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(WNFTheme.muted.opacity(0.75))
 
             BarChart(bars: bars, selectedBarID: $selectedBarID, privacy: state.privacyMode)
                 .id(period)
@@ -574,27 +519,71 @@ struct RecordsView: View {
         .overlay(RoundedRectangle(cornerRadius: 22).stroke(WNFTheme.hairline, lineWidth: 0.5))
     }
 
-    private var badgeCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("窝囊徽章")
-                    .font(.system(size: 19, weight: .black, design: .rounded))
-                Spacer()
-                Text("\(unlockedBadgeCount) / 4 解锁")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(WNFTheme.muted)
-            }
+    private var summaryMetricsCard: some View {
+        HStack(spacing: 0) {
+            summaryMetric(
+                label: period == .week ? "日均" : period == .month ? "日均" : "月均",
+                value: WNFFormat.moneyDecimal(periodAverage, privacy: state.privacyMode)
+            )
 
-            HStack(spacing: 10) {
-                Badge(symbol: "sun.max", label: "今日开张", unlocked: todayEarned > 0)
-                Badge(symbol: "fork.knife", label: "午休大师", unlocked: state.hasLunchBreak)
-                Badge(symbol: "clock", label: "加班 +1", unlocked: state.includeOvertime)
-                Badge(symbol: "yensign.circle", label: "忍 100h", unlocked: currentMonthSummary.elapsedPaidSeconds >= 100 * 60 * 60)
-            }
+            Rectangle()
+                .fill(WNFTheme.hairline)
+                .frame(width: 1, height: 54)
+
+            summaryMetric(
+                label: "最高",
+                value: WNFFormat.moneyDecimal(periodPeak, privacy: state.privacyMode)
+            )
         }
-        .padding(16)
+        .padding(.vertical, 18)
         .background(WNFTheme.surface, in: RoundedRectangle(cornerRadius: 22))
         .overlay(RoundedRectangle(cornerRadius: 22).stroke(WNFTheme.hairline, lineWidth: 0.5))
+    }
+
+    private func summaryMetric(label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(WNFTheme.muted)
+            Text(value)
+                .font(WNFTheme.mono(22))
+                .foregroundStyle(WNFTheme.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .contentTransition(.numericText())
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 18)
+    }
+
+    private var coworkerNote: some View {
+        HStack(spacing: 13) {
+            MascotPortrait()
+                .frame(width: 54, height: 54)
+
+            Text(coworkerNoteText)
+                .font(.system(size: 14, weight: .heavy))
+                .foregroundStyle(WNFTheme.ink)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(WNFTheme.surfaceSoft.opacity(0.55), in: RoundedRectangle(cornerRadius: 18))
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(WNFTheme.surface, in: RoundedRectangle(cornerRadius: 22))
+        .overlay(RoundedRectangle(cornerRadius: 22).stroke(WNFTheme.hairline, lineWidth: 0.5))
+    }
+
+    private var coworkerNoteText: String {
+        switch period {
+        case .week:
+            "我数过了，这周工位没白坐。"
+        case .month:
+            "我数过了，这个月工位没白坐。"
+        case .year:
+            "我数过了，今年的工时都在这儿。"
+        }
     }
 
     private var daysInCurrentMonth: Int {

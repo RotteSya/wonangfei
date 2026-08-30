@@ -12,6 +12,13 @@ final class JellyTourUITests: XCTestCase {
         print("TOUR-MARK \(String(format: "%07.2f", Date().timeIntervalSince(start)))s \(label)")
     }
 
+    private func attachScreen(_ name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     func testGrandTour() throws {
         let app = launchMainShell()
         let t0 = Date()
@@ -19,6 +26,7 @@ final class JellyTourUITests: XCTestCase {
         // 1. Watch the odometer tick + coins drop on home.
         mark("home-idle", t0)
         sleep(4)
+        attachScreen("design-qa-home")
 
         // 2. Long-press the money → charge squish + coin fountain.
         let money = app.descendants(matching: .any)["home.money"].firstMatch
@@ -44,6 +52,7 @@ final class JellyTourUITests: XCTestCase {
         let left = window.coordinate(withNormalizedOffset: CGVector(dx: 0.10, dy: 0.42))
         right.press(forDuration: 0.05, thenDragTo: left, withVelocity: 420, thenHoldForDuration: 0.05)
         sleep(3) // records entrance choreography + bars grow
+        attachScreen("design-qa-records")
 
         // 5. Scrub the chart slowly left → right.
         let chart = app.descendants(matching: .any)["records.chart"].firstMatch
@@ -75,6 +84,7 @@ final class JellyTourUITests: XCTestCase {
         mark("swipe-to-settings", t0)
         right.press(forDuration: 0.05, thenDragTo: left, withVelocity: 900, thenHoldForDuration: 0.05)
         sleep(2)
+        attachScreen("design-qa-settings")
         mark("flick-back-records", t0)
         left.press(forDuration: 0.05, thenDragTo: right, withVelocity: 1600, thenHoldForDuration: 0.02)
         sleep(1)

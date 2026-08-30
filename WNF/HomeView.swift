@@ -228,15 +228,20 @@ private struct LiveWageReadout: View {
     @State private var charging = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 15) {
             StatusChip(label: statusChipLabel)
-                .padding(.top, 12)
+                .padding(.top, 18)
 
-            VStack(alignment: .leading, spacing: 5) {
-                Text("今 日 窝 囊 费")
-                    .font(WNFTheme.display(14))
-                    .tracking(5)
-                    .foregroundStyle(WNFTheme.inkSoft)
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 10) {
+                    Circle()
+                        .fill(WNFTheme.yellow)
+                        .frame(width: 10, height: 10)
+                        .background(Circle().fill(WNFTheme.yellow.opacity(0.18)).frame(width: 20, height: 20))
+                    Text("今日窝囊费")
+                        .font(WNFTheme.display(18))
+                        .foregroundStyle(WNFTheme.ink)
+                }
 
                 OdometerMoneyText(value: day.earnedToday, privacy: privacyMode, isActive: isActive, maxWidth: contentWidth)
                     // Charge-up squish: pressing compresses the number like a
@@ -270,7 +275,7 @@ private struct LiveWageReadout: View {
                 Circle().fill(WNFTheme.muted).frame(width: 4, height: 4)
                 Text("离下班 \(WNFFormat.duration(day.wallToEndMinutes))")
             }
-            .font(.system(size: 13, weight: .heavy))
+            .font(.system(size: 14, weight: .heavy, design: .rounded))
             .foregroundStyle(WNFTheme.inkSoft)
 
             ProgressTrack(day: day, startText: workStartText, endText: workEndText, isActive: isActive)
@@ -306,6 +311,16 @@ private struct HomeMascotStage: View {
     var body: some View {
         HomeMascotVideoSequence()
             .frame(width: stageHeight, height: stageHeight)
+            .background {
+                RadialGradient(
+                    colors: [WNFTheme.cyan.opacity(0.16), WNFTheme.cyan.opacity(0)],
+                    center: .center,
+                    startRadius: 20,
+                    endRadius: 155
+                )
+                .frame(width: stageHeight + 70, height: stageHeight + 70)
+                .blur(radius: 8)
+            }
             .frame(maxWidth: .infinity)
             .overlay(alignment: .topLeading) {
                 ThoughtBubble(quote: quote)
@@ -335,11 +350,12 @@ private struct ThoughtBubble: View {
 
     var body: some View {
         Text(quote)
-            .font(.system(size: 14, weight: .heavy))
+            .font(.system(size: 15, weight: .heavy))
             .foregroundStyle(WNFTheme.ink)
-            .padding(.horizontal, 15)
-            .padding(.vertical, 11)
-            .background(WNFTheme.surface, in: RoundedRectangle(cornerRadius: 17))
+            .lineSpacing(3)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 13)
+            .background(WNFTheme.surface, in: RoundedRectangle(cornerRadius: 18))
             .overlay(alignment: .bottomLeading) {
                 // Trailing thought dots, outside the bubble's own bounds.
                 Circle()
@@ -527,8 +543,7 @@ private struct HomeMascotVideoClip: Equatable {
     var resourceName: String
 
     static let all = [
-        HomeMascotVideoClip(resourceName: "home-typing"),
-        HomeMascotVideoClip(resourceName: "home-bored")
+        HomeMascotVideoClip(resourceName: "home-typing")
     ]
 }
 
@@ -668,7 +683,7 @@ private struct ProgressTrack: View {
     }
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 9) {
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
                     Capsule().fill(WNFTheme.track)
@@ -697,17 +712,9 @@ private struct ProgressTrack: View {
                     }
                     .clipShape(Capsule())
 
-                    if day.progress > 0 && day.progress < 1 {
-                        Circle()
-                            .fill(Color.white)
-                            .overlay(Circle().stroke(WNFTheme.inkFixed, lineWidth: 3))
-                            .frame(width: 15, height: 15)
-                            .offset(x: max(0, proxy.size.width * day.progress - 7))
-                            .shadow(color: WNFTheme.gold.opacity(0.5), radius: 5)
-                    }
                 }
             }
-            .frame(height: 13)
+            .frame(height: 10)
             .anchorPreference(key: CoinSourceAnchorKey.self, value: .bounds) { $0 }
 
             HStack {

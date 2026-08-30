@@ -75,30 +75,17 @@ struct AppTabBar: View {
     var progress: CGFloat
     var onSelect: (AppTab) -> Void
 
-    private static let baseWidth: CGFloat = 47
-    private static let extraWidth: CGFloat = 35
-    private static let spacing: CGFloat = 4
-    private static let itemHeight: CGFloat = 44
+    private static let itemWidth: CGFloat = 110
+    private static let itemHeight: CGFloat = 50
 
     private func selection(_ index: Int) -> CGFloat {
         max(0, 1 - abs(min(max(progress, 0), 2) - CGFloat(index)))
     }
 
-    private func itemWidth(_ index: Int) -> CGFloat {
-        Self.baseWidth + Self.extraWidth * selection(index)
-    }
-
-    private func itemLeft(_ index: Int) -> CGFloat {
-        (0..<index).reduce(0) { $0 + itemWidth($1) + Self.spacing }
-    }
-
     private var pill: (x: CGFloat, width: CGFloat) {
         let clamped = min(max(progress, 0), 2)
-        let lower = Int(clamped.rounded(.down))
-        let upper = min(lower + 1, 2)
-        let t = clamped - CGFloat(lower)
-        let x = lerp(itemLeft(lower), itemLeft(upper), t)
-        let width = lerp(itemWidth(lower), itemWidth(upper), t)
+        let x = clamped * Self.itemWidth
+        let width = Self.itemWidth
         // Squish against the wall while rubber-banding past either end; the
         // pill compresses toward whichever wall is being pressed.
         let overscroll = max(0, -progress) + max(0, progress - 2)
@@ -108,7 +95,7 @@ struct AppTabBar: View {
     }
 
     var body: some View {
-        HStack(spacing: Self.spacing) {
+        HStack(spacing: 0) {
             ForEach(AppTab.allCases) { tab in
                 item(for: tab)
             }
@@ -134,28 +121,27 @@ struct AppTabBar: View {
             onSelect(tab)
         } label: {
             ZStack {
-                // Resting face: centered mono icon.
-                Image(systemName: tab.symbol)
-                    .font(.system(size: 15, weight: .bold))
+                HStack(spacing: 7) {
+                    Image(systemName: tab.symbol)
+                        .font(.system(size: 16, weight: .bold))
+                    Text(tab.title)
+                        .font(.system(size: 13, weight: .heavy))
+                }
                     .foregroundStyle(WNFTheme.inkSoft)
                     .opacity(Double(1 - sel))
 
-                // Active face: yellow icon + label, pinned leading.
                 HStack(spacing: 6) {
                     Image(systemName: tab.symbol)
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(WNFTheme.yellow)
                     Text(tab.title)
                         .font(.system(size: 13, weight: .heavy))
                         .foregroundStyle(.white)
                         .fixedSize()
-                        .opacity(Double(max(0, sel * 1.6 - 0.6)))
                 }
                 .opacity(Double(sel))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, 16)
             }
-            .frame(width: itemWidth(index), height: Self.itemHeight)
+            .frame(width: Self.itemWidth, height: Self.itemHeight)
             .contentShape(Capsule())
         }
         .buttonStyle(.squish(0.9))
@@ -163,10 +149,6 @@ struct AppTabBar: View {
         .accessibilityIdentifier("tab.\(tab.rawValue)")
         .accessibilityAddTraits(sel > 0.5 ? [.isSelected] : [])
     }
-}
-
-private func lerp(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat {
-    a + (b - a) * t
 }
 
 #Preview("Tab bar sweep") {

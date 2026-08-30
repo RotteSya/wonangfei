@@ -591,7 +591,11 @@ struct RootView: View {
         )
         .frame(width: Self.shareExportWidth)
 
-        if let image = renderedShareImage(exportCard, scale: shareRenderScale) {
+        if let image = WNFShareImageRenderer.render(
+            exportCard,
+            width: Self.shareExportWidth,
+            scale: shareRenderScale
+        ) {
             activityItems = [image]
         } else {
             activityItems = [shareFallbackText(day: day, hidesSensitiveInfo: hidesSensitiveInfo)]
@@ -614,7 +618,11 @@ struct RootView: View {
             onDismiss: {}
         )
         .frame(width: Self.shareExportWidth)
-        return renderedShareImage(card, scale: shareRenderScale)
+        return WNFShareImageRenderer.render(
+            card,
+            width: Self.shareExportWidth,
+            scale: shareRenderScale
+        )
     }
 
     @MainActor
@@ -665,7 +673,11 @@ struct RootView: View {
         )
         .frame(width: Self.shareExportWidth)
 
-        if let image = renderedShareImage(exportCard, scale: shareRenderScale) {
+        if let image = WNFShareImageRenderer.render(
+            exportCard,
+            width: Self.shareExportWidth,
+            scale: shareRenderScale
+        ) {
             activityItems = [image]
         } else {
             activityItems = [settlementFallbackText(settlement: settlement, hidesSensitiveInfo: hidesSensitiveInfo)]
@@ -681,35 +693,32 @@ struct RootView: View {
         return "今天挣了 \(amount)，已忍 \(duration)\(streakSuffix)。——窝囊费"
     }
 
-    // Main-thread bound: the loading pre-flight gives perceptual feedback, not actual concurrency.
-    @MainActor
-    private func renderedShareImage<Content: View>(_ content: Content, scale: CGFloat) -> UIImage? {
-        let renderer = ImageRenderer(content: content)
-        renderer.scale = scale
-        renderer.proposedSize = ProposedViewSize(width: Self.shareExportWidth, height: nil)
-        renderer.isOpaque = false
-
-        var renderedImage: UIImage?
-        renderer.render(rasterizationScale: scale) { size, draw in
-            guard size.width > 0, size.height > 0 else { return }
-
-            let format = UIGraphicsImageRendererFormat()
-            format.scale = scale
-            format.opaque = false
-
-            renderedImage = UIGraphicsImageRenderer(size: size, format: format).image { context in
-                draw(context.cgContext)
-            }
-        }
-        return renderedImage
-    }
-
     private func shareFallbackText(day: WageDay, hidesSensitiveInfo: Bool) -> String {
         "今天挣了 \(WNFFormat.moneyDecimal(day.earnedToday, privacy: hidesSensitiveInfo))，上班上了 \(shareDurationText(day: day, hidesSensitiveInfo: hidesSensitiveInfo))。"
     }
 
     private func shareDurationText(day: WageDay, hidesSensitiveInfo: Bool) -> String {
         hidesSensitiveInfo ? "••h••min" : WNFFormat.duration(day.elapsedPaidMinutes)
+    }
+}
+
+/// The single rasterization path for every exported voucher image.
+/// `ImageRenderer.uiImage` preserves SwiftUI's coordinate system; routing its
+/// draw callback through a UIKit graphics context vertically mirrors the pixels.
+@MainActor
+enum WNFShareImageRenderer {
+    static func render<Content: View>(
+        _ content: Content,
+        width: CGFloat,
+        scale: CGFloat
+    ) -> UIImage? {
+        guard width > 0, scale > 0 else { return nil }
+
+        let renderer = ImageRenderer(content: content)
+        renderer.scale = scale
+        renderer.proposedSize = ProposedViewSize(width: width, height: nil)
+        renderer.isOpaque = false
+        return renderer.uiImage
     }
 }
 

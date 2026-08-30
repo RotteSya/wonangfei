@@ -1,3 +1,4 @@
+import CoreImage
 import SwiftUI
 import XCTest
 @testable import WNF
@@ -17,19 +18,66 @@ final class VoucherSnapshotTests: XCTestCase {
     }
 
     private func render(_ view: some View, width: CGFloat, name: String) throws {
-        let renderer = ImageRenderer(
-            content: view
-                .frame(width: width)
-                .environment(\.colorScheme, .light)
+        let image = try XCTUnwrap(
+            WNFShareImageRenderer.render(
+                view
+                    .frame(width: width)
+                    .environment(\.colorScheme, .light),
+                width: width,
+                scale: 3
+            ),
+            "\(name) should rasterize"
         )
-        renderer.scale = 3
-        let image = try XCTUnwrap(renderer.uiImage, "\(name) should rasterize")
         XCTAssertGreaterThan(image.size.height, 100, "\(name) should have real content")
 
         guard let dir = snapshotDirectory else { return }
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let data = try XCTUnwrap(image.pngData())
         try data.write(to: dir.appendingPathComponent("\(name).png"))
+    }
+
+    func testShareImageRendererPreservesVerticalOrientation() throws {
+        let image = try XCTUnwrap(
+            WNFShareImageRenderer.render(
+                VStack(spacing: 0) {
+                    Color.red.frame(height: 20)
+                    Color.blue.frame(height: 20)
+                }
+                .frame(width: 40, height: 40),
+                width: 40,
+                scale: 1
+            )
+        )
+
+        let top = try pixelRGBA(in: image, x: 20, yFromTop: 5)
+        let bottom = try pixelRGBA(in: image, x: 20, yFromTop: 35)
+
+        XCTAssertGreaterThan(top.red, top.blue, "logical top should remain red")
+        XCTAssertGreaterThan(bottom.blue, bottom.red, "logical bottom should remain blue")
+    }
+
+    private func pixelRGBA(
+        in image: UIImage,
+        x: CGFloat,
+        yFromTop: CGFloat
+    ) throws -> (red: UInt8, green: UInt8, blue: UInt8, alpha: UInt8) {
+        let ciImage = try XCTUnwrap(CIImage(image: image))
+        let sampleBounds = CGRect(
+            x: x,
+            y: ciImage.extent.height - yFromTop - 1,
+            width: 1,
+            height: 1
+        )
+        var pixel = [UInt8](repeating: 0, count: 4)
+        CIContext(options: [.workingColorSpace: NSNull()]).render(
+            ciImage,
+            toBitmap: &pixel,
+            rowBytes: 4,
+            bounds: sampleBounds,
+            format: .RGBA8,
+            colorSpace: CGColorSpaceCreateDeviceRGB()
+        )
+        return (pixel[0], pixel[1], pixel[2], pixel[3])
     }
 
     func testDailyStatementVoucherRenders() throws {

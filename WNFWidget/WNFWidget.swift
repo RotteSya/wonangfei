@@ -231,7 +231,7 @@ struct WNFLiveActivity: Widget {
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(context.state.isDone ? "今日窝囊费 · 待领取" : "今日窝囊费")
+                        Text(liveActivityTitle(context.state))
                             .font(.caption2.weight(.heavy))
                             .foregroundStyle(LiveActivityPalette.muted)
                         Text(moneyText(context.state))
@@ -244,7 +244,7 @@ struct WNFLiveActivity: Widget {
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text(context.state.isDone ? "状态" : "离下班")
+                        Text(liveActivityCountdownLabel(context.state))
                             .font(.caption2.weight(.heavy))
                             .foregroundStyle(LiveActivityPalette.muted)
                         countdown(context.state, size: 20)
@@ -277,6 +277,18 @@ struct WNFLiveActivity: Widget {
         }
     }
 
+    private func liveActivityTitle(_ state: WNFLiveActivityAttributes.ContentState) -> String {
+        if state.isDone { return "今日窝囊费 · 待领取" }
+        if state.isOvertime { return "今日窝囊费 · 加班中" }
+        return "今日窝囊费"
+    }
+
+    private func liveActivityCountdownLabel(_ state: WNFLiveActivityAttributes.ContentState) -> String {
+        if state.isDone { return "状态" }
+        if state.isOvertime { return "加班剩余" }
+        return "离下班"
+    }
+
     private func moneyText(_ state: WNFLiveActivityAttributes.ContentState) -> String {
         if state.hidesAmount { return "¥•••.••" }
         let exact = String(format: "¥%.2f", state.earnedAtRef)
@@ -290,7 +302,7 @@ struct WNFLiveActivity: Widget {
                     .font(.system(size: size, weight: .black, design: .rounded))
                     .foregroundStyle(LiveActivityPalette.yellow)
             } else {
-                Text(timerInterval: Date.now...max(Date.now, state.workdayEnd), countsDown: true)
+                Text(timerInterval: Date.now...max(Date.now, countdownEnd(state)), countsDown: true)
                     .font(.system(size: size, weight: .black, design: .monospaced))
                     .foregroundStyle(LiveActivityPalette.ink)
                     .multilineTextAlignment(.trailing)
@@ -299,9 +311,13 @@ struct WNFLiveActivity: Widget {
         }
     }
 
+    private func countdownEnd(_ state: WNFLiveActivityAttributes.ContentState) -> Date {
+        state.overtimeEnd ?? state.workdayEnd
+    }
+
     private func progressBar(_ state: WNFLiveActivityAttributes.ContentState) -> some View {
         Group {
-            if state.isDone {
+            if state.isDone || state.isOvertime {
                 ProgressView(value: 1)
             } else {
                 ProgressView(
@@ -329,7 +345,7 @@ private struct LiveActivityLockScreenView: View {
                         .foregroundStyle(.black)
                         .frame(width: 16, height: 16)
                         .background(LiveActivityPalette.yellow, in: RoundedRectangle(cornerRadius: 4.5))
-                    Text(state.isDone ? "窝囊费 · 待领取" : "窝囊费 · 正在结算")
+                    Text(lockScreenTitle)
                         .font(.caption.weight(.heavy))
                         .foregroundStyle(LiveActivityPalette.muted)
                 }
@@ -340,10 +356,10 @@ private struct LiveActivityLockScreenView: View {
                         .foregroundStyle(LiveActivityPalette.yellow)
                 } else {
                     HStack(spacing: 4) {
-                        Text("离下班")
+                        Text(state.isOvertime ? "加班剩余" : "离下班")
                             .font(.caption2.weight(.heavy))
                             .foregroundStyle(LiveActivityPalette.muted)
-                        Text(timerInterval: Date.now...max(Date.now, state.workdayEnd), countsDown: true)
+                        Text(timerInterval: Date.now...max(Date.now, state.overtimeEnd ?? state.workdayEnd), countsDown: true)
                             .font(.caption.weight(.black))
                             .monospacedDigit()
                             .foregroundStyle(LiveActivityPalette.ink)
@@ -360,7 +376,7 @@ private struct LiveActivityLockScreenView: View {
                 .lineLimit(1)
 
             Group {
-                if state.isDone {
+                if state.isDone || state.isOvertime {
                     ProgressView(value: 1)
                 } else {
                     ProgressView(
@@ -381,5 +397,11 @@ private struct LiveActivityLockScreenView: View {
         if state.hidesAmount { return "¥•••.••" }
         let exact = String(format: "¥%.2f", state.earnedAtRef)
         return state.isDone ? exact : "≈\(exact)"
+    }
+
+    private var lockScreenTitle: String {
+        if state.isDone { return "窝囊费 · 待领取" }
+        if state.isOvertime { return "窝囊费 · 加班中" }
+        return "窝囊费 · 正在结算"
     }
 }

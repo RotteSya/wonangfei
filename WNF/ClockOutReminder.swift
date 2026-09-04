@@ -8,6 +8,7 @@ final class ClockOutReminderService {
 
     private static let logger = Logger(subsystem: "com.wonangfei.app", category: "ClockOutReminder")
     private static let notificationIdPrefix = "wnf.clockout.weekday."
+    private static let overtimeNotificationID = "wnf.clockout.overtime.once"
 
     private let center: UNUserNotificationCenter
 
@@ -91,6 +92,38 @@ final class ClockOutReminderService {
         }
 
         Self.logger.info("Scheduled clock-out reminders for weekdays=\(selectedWeekdays.sorted(), privacy: .public) at \(hour, privacy: .public):\(minute, privacy: .public)")
+    }
+
+    /// One-shot reminder for the current overtime deadline. Missing notification
+    /// permission must not affect in-app stop/decision behavior.
+    func reconcileOvertimeDeadline(_ deadline: Date?) async {
+        center.removePendingNotificationRequests(withIdentifiers: [Self.overtimeNotificationID])
+        guard let deadline, deadline > Date() else { return }
+
+        let status = await currentAuthorizationStatus()
+        guard status == .authorized || status == .provisional || status == .ephemeral else {
+            Self.logger.info("Skipping overtime reminder because authorization status is \(String(describing: status), privacy: .public)")
+            return
+        }
+
+        let content = UNMutableNotificationContent()
+        content.title = "加班也该停了"
+        content.body = "这轮加的班到点了，进来领走。"
+        content.sound = .default
+
+        let interval = max(1, deadline.timeIntervalSinceNow)
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: Self.overtimeNotificationID,
+            content: content,
+            trigger: trigger
+        )
+
+        do {
+            try await center.add(request)
+        } catch {
+            Self.logger.error("Failed to schedule overtime reminder: \(String(describing: error), privacy: .public)")
+        }
     }
 
     private func cancelAllClockOutNotifications() async {

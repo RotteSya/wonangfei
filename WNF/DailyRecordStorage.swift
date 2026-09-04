@@ -33,6 +33,7 @@ enum StorageKey {
     static let dailyRecordsSQLitePathOverride = "wnf.records.daily.sqlitePathOverride"
     static let lastObservedDateKey = "wnf.records.lastObservedDateKey"
     static let lastObservedSnapshot = "wnf.records.lastObservedSnapshot"
+    static let clockOutRuntimeState = "wnf.clockOut.runtimeState.v1"
 }
 
 struct DailyRecordLoadResult {
@@ -99,6 +100,8 @@ struct DailyWageRecord: Codable, Equatable, Identifiable {
     var workdaysPerMonth: Int
     var capturedAt: Date
     var source: DailyRecordSource
+    var overtimeSeconds: Int
+    var overtimeEarned: Double
 
     var elapsedPaidMinutes: Int {
         elapsedPaidSeconds / 60
@@ -114,7 +117,9 @@ struct DailyWageRecord: Codable, Equatable, Identifiable {
         monthlySalary: Double,
         workdaysPerMonth: Int,
         capturedAt: Date,
-        source: DailyRecordSource = .observed
+        source: DailyRecordSource = .observed,
+        overtimeSeconds: Int = 0,
+        overtimeEarned: Double = 0
     ) {
         self.dateKey = dateKey
         self.earnedToday = earnedToday
@@ -126,6 +131,8 @@ struct DailyWageRecord: Codable, Equatable, Identifiable {
         self.workdaysPerMonth = workdaysPerMonth
         self.capturedAt = capturedAt
         self.source = source
+        self.overtimeSeconds = overtimeSeconds
+        self.overtimeEarned = overtimeEarned
     }
 
     enum CodingKeys: String, CodingKey {
@@ -139,6 +146,8 @@ struct DailyWageRecord: Codable, Equatable, Identifiable {
         case workdaysPerMonth
         case capturedAt
         case source
+        case overtimeSeconds
+        case overtimeEarned
     }
 
     init(from decoder: Decoder) throws {
@@ -153,6 +162,8 @@ struct DailyWageRecord: Codable, Equatable, Identifiable {
         workdaysPerMonth = try container.decode(Int.self, forKey: .workdaysPerMonth)
         capturedAt = try container.decode(Date.self, forKey: .capturedAt)
         source = try container.decodeIfPresent(DailyRecordSource.self, forKey: .source) ?? .observed
+        overtimeSeconds = try container.decodeIfPresent(Int.self, forKey: .overtimeSeconds) ?? 0
+        overtimeEarned = try container.decodeIfPresent(Double.self, forKey: .overtimeEarned) ?? 0
     }
 }
 
@@ -242,6 +253,34 @@ final class DailyRecordSQLiteStore {
         return try body(db)
     }
 
+    private func migrateDailyRecordOvertimeColumns(_ db: OpaquePointer) throws {
+        let columns = try tableColumnNames("daily_records", db: db)
+        if columns.contains("overtime_seconds") == false {
+            try execute(
+                "ALTER TABLE daily_records ADD COLUMN overtime_seconds INTEGER NOT NULL DEFAULT 0;",
+                db: db
+            )
+        }
+        if columns.contains("overtime_earned") == false {
+            try execute(
+                "ALTER TABLE daily_records ADD COLUMN overtime_earned REAL NOT NULL DEFAULT 0;",
+                db: db
+            )
+        }
+    }
+
+    private func tableColumnNames(_ table: String, db: OpaquePointer) throws -> Set<String> {
+        var statement: OpaquePointer?
+        try prepare("PRAGMA table_info(\(table));", db: db, statement: &statement)
+        defer { sqlite3_finalize(statement) }
+
+        var names = Set<String>()
+        while sqlite3_step(statement) == SQLITE_ROW {
+            names.insert(columnText(statement, 1))
+        }
+        return names
+    }
+
     private func initializeDatabase(_ db: OpaquePointer) throws {
         try execute("PRAGMA journal_mode=WAL;", db: db)
         try execute("PRAGMA foreign_keys=ON;", db: db)
@@ -257,11 +296,14 @@ final class DailyRecordSQLiteStore {
                 monthly_salary REAL NOT NULL,
                 workdays_per_month INTEGER NOT NULL,
                 captured_at REAL NOT NULL,
-                source TEXT NOT NULL
+                source TEXT NOT NULL,
+                overtime_seconds INTEGER NOT NULL DEFAULT 0,
+                overtime_earned REAL NOT NULL DEFAULT 0
             );
             """,
             db: db
         )
+        try migrateDailyRecordOvertimeColumns(db)
         try execute(
             """
             CREATE TABLE IF NOT EXISTS monthly_record_summaries (
@@ -388,8 +430,10 @@ final class DailyRecordSQLiteStore {
                 monthly_salary,
                 workdays_per_month,
                 captured_at,
-                source
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                source,
+                overtime_seconds,
+                overtime_earned
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(date_key) DO UPDATE SET
                 earned_today = excluded.earned_today,
                 target_today = excluded.target_today,
@@ -399,7 +443,9 @@ final class DailyRecordSQLiteStore {
                 monthly_salary = excluded.monthly_salary,
                 workdays_per_month = excluded.workdays_per_month,
                 captured_at = excluded.captured_at,
-                source = excluded.source;
+                source = excluded.source,
+                overtime_seconds = excluded.overtime_seconds,
+                overtime_earned = excluded.overtime_earned;
             """
         var statement: OpaquePointer?
         try prepare(sql, db: db, statement: &statement)
@@ -418,6 +464,8 @@ final class DailyRecordSQLiteStore {
             try bind(record.workdaysPerMonth, at: 8, statement: statement, db: db)
             try bind(record.capturedAt.timeIntervalSinceReferenceDate, at: 9, statement: statement, db: db)
             try bind(record.source.rawValue, at: 10, statement: statement, db: db)
+            try bind(record.overtimeSeconds, at: 11, statement: statement, db: db)
+            try bind(record.overtimeEarned, at: 12, statement: statement, db: db)
             try stepDone(statement, db: db)
         }
     }
@@ -486,7 +534,8 @@ final class DailyRecordSQLiteStore {
             sql =
                 """
                 SELECT date_key, earned_today, target_today, elapsed_paid_seconds, workday_minutes,
-                       hourly_rate, monthly_salary, workdays_per_month, captured_at, source
+                       hourly_rate, monthly_salary, workdays_per_month, captured_at, source,
+                       overtime_seconds, overtime_earned
                 FROM daily_records
                 ORDER BY date_key;
                 """
@@ -494,7 +543,8 @@ final class DailyRecordSQLiteStore {
             sql =
                 """
                 SELECT date_key, earned_today, target_today, elapsed_paid_seconds, workday_minutes,
-                       hourly_rate, monthly_salary, workdays_per_month, captured_at, source
+                       hourly_rate, monthly_salary, workdays_per_month, captured_at, source,
+                       overtime_seconds, overtime_earned
                 FROM daily_records
                 WHERE date_key < ?
                 ORDER BY date_key;
@@ -522,7 +572,9 @@ final class DailyRecordSQLiteStore {
                 monthlySalary: sqlite3_column_double(statement, 6),
                 workdaysPerMonth: Int(sqlite3_column_int64(statement, 7)),
                 capturedAt: Date(timeIntervalSinceReferenceDate: sqlite3_column_double(statement, 8)),
-                source: source
+                source: source,
+                overtimeSeconds: Int(sqlite3_column_int64(statement, 10)),
+                overtimeEarned: sqlite3_column_double(statement, 11)
             )
             records[dateKey] = record
         }

@@ -1272,28 +1272,31 @@ private struct SettlementQuoteCard: View {
 struct ClockOutCTA: View {
     var status: WorkStatus
     var isSettled: Bool = false
+    var isPromptDismissed: Bool = false
     var action: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var title: String {
         if isSettled { return "今日已下班 · 再看一眼" }
+        if isPromptDismissed { return "下班！" }
         switch status {
         case .off: return "今天不用结算"
         case .before, .morning, .afternoon, .lunch: return "查看今天挣多少"
-        case .done: return "下班！领今天的窝囊费"
+        case .done: return "下班！"
         }
     }
 
     private var subtitle: String {
         if isSettled { return "今日窝囊费已入账，剩下都是你的时间" }
+        if isPromptDismissed { return "表已停，随时可以领走今天的窝囊费" }
         switch status {
         case .off: return "今天不是选中的工作日，窝囊费记为 0"
         case .before: return "今天的窝囊费还没开张"
         case .morning: return "已经熬过早上的两小时最值钱"
         case .lunch: return "午休回血中，要不要看看今天挣多少"
         case .afternoon: return "再忍忍，也可以提前看看战绩"
-        case .done: return "数据已自动保存，想收工时再点"
+        case .done: return "表已停，点一次就能收工"
         }
     }
 

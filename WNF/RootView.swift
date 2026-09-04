@@ -89,6 +89,8 @@ struct RootView: View {
     @State private var settlementPresented = false
     @State private var settlementSnapshot: DailySettlement?
     @State private var settlementHidesSensitiveInfo = false
+    @State private var clockOutDecisionPresented = false
+    @State private var overtimePickerPresented = false
     @State private var tabBarFloorHeight: CGFloat = 0
     @AppStorage("wnf.onboarding.completed") private var onboardingCompleted = false
 
@@ -178,6 +180,7 @@ struct RootView: View {
         }
         .onAppear {
             syncHomeMascotVideoSession()
+            state.reconcileClockOut()
         }
         .onChange(of: scenePhase) { _, newPhase in
             homeMascotVideoSession.handleScenePhase(
@@ -214,6 +217,7 @@ struct RootView: View {
 
                 try await EntranceTiming.sleep(EntranceTiming.onboardingCommitDelayAfterBurst)
                 onboardingCompleted = true
+                state.recaptureTodayWorkEndFromSettings()
                 syncHomeMascotVideoSession()
 
                 try await EntranceTiming.sleep(EntranceTiming.cleanupDelayAfterCommit)
@@ -236,7 +240,31 @@ struct RootView: View {
     }
 
     private var pagerGesturesEnabled: Bool {
-        hasCompletedOnboarding && !entryAnimating && !homeSharePresented && !settlementPresented
+        hasCompletedOnboarding
+            && !entryAnimating
+            && !homeSharePresented
+            && !settlementPresented
+            && !showsClockOutDecision
+            && !overtimePickerPresented
+    }
+
+    private var showsClockOutDecision: Bool {
+        guard hasCompletedOnboarding,
+              !entryAnimating,
+              selectedTab == .home,
+              !homeSharePresented,
+              !settlementPresented
+        else {
+            return false
+        }
+        switch state.clockOutPhase {
+        case .decisionDue:
+            return true
+        case .promptDismissed:
+            return clockOutDecisionPresented
+        default:
+            return false
+        }
     }
 
     private var appShell: some View {
@@ -256,10 +284,11 @@ struct RootView: View {
                             )
                     }
                 )
-                .opacity(homeSharePresented || settlementPresented ? 0 : 1)
-                .allowsHitTesting(!homeSharePresented && !settlementPresented)
+                .opacity(homeSharePresented || settlementPresented || showsClockOutDecision ? 0 : 1)
+                .allowsHitTesting(!homeSharePresented && !settlementPresented && !showsClockOutDecision)
                 .animation(.easeInOut(duration: 0.18), value: homeSharePresented)
                 .animation(.easeInOut(duration: 0.18), value: settlementPresented)
+                .animation(.easeInOut(duration: 0.18), value: showsClockOutDecision)
                 .zIndex(1)
 
             ShareCardBackdrop(isPresented: homeSharePresented, onDismiss: dismissShareCard)
@@ -292,7 +321,7 @@ struct RootView: View {
                     hidesSensitiveInfo: $settlementHidesSensitiveInfo,
                     isPreparingShare: isPreparingShareActivity,
                     onShare: presentSettlementSystemShare,
-                    onSaveAsAsset: saveSettlementAsAsset,
+                    onSaveAsAsset: dismissSettlement,
                     onDismiss: dismissSettlement
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -300,11 +329,51 @@ struct RootView: View {
                 .transition(.opacity)
                 .zIndex(4)
             }
+
+            if showsClockOutDecision {
+                ClockOutDecisionOverlay(
+                    onConfirm: confirmClockOutAndPresentSettlement,
+                    onOvertime: presentOvertimePicker,
+                    onDismiss: dismissClockOutDecision
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .ignoresSafeArea(.container, edges: .all)
+                .transition(.opacity)
+                .zIndex(5)
+            }
+
+            if WNFClock.isLaunchFrozen {
+                Button("jump deadline") {
+                    state.jumpTestClockPastDeadline()
+                }
+                .accessibilityIdentifier("test.clock.jumpDeadline")
+                .frame(width: 48, height: 48)
+                .opacity(0.01)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .padding(.bottom, 120)
+                .padding(.leading, 12)
+                .zIndex(20)
+            }
         }
         .background {
             ActivityView(activityItems: activityItems, isPresented: $isActivityPresented)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .allowsHitTesting(false)
+        }
+        .sheet(isPresented: $overtimePickerPresented) {
+            OvertimeDurationSheet(
+                now: WNFClock.now,
+                startOfDay: state.currentDayStart,
+                onConfirm: confirmOvertimeDuration,
+                onCancel: { overtimePickerPresented = false }
+            )
+        }
+        .onChange(of: state.clockOutPhase) { _, phase in
+            if case .promptDismissed = phase { return }
+            clockOutDecisionPresented = false
+            if case .overtimeRunning = phase {
+                overtimePickerPresented = false
+            }
         }
     }
 
@@ -325,7 +394,7 @@ struct RootView: View {
                     isShareCardPresented: $homeSharePresented,
                     isActive: abs(pagerProgress) < 0.999,
                     onShare: presentShareCard,
-                    onClockOut: presentSettlement
+                    onClockOut: handleHomeClockOut
                 )
                 .environmentObject(homeMascotVideoSession.controller)
                 .environment(\.pagerJellyStretch, jellyStretch)
@@ -516,9 +585,47 @@ struct RootView: View {
         homeSharePresented = true
     }
 
-    private func presentSettlement() {
+    private func handleHomeClockOut() {
         guard selectedTab == .home else { return }
-        let now = Date()
+        if state.isTodaySettled {
+            presentSettlementCeremony()
+            return
+        }
+        switch state.clockOutPhase {
+        case .decisionDue, .promptDismissed:
+            withAnimation(.easeInOut(duration: 0.22)) {
+                clockOutDecisionPresented = true
+            }
+        default:
+            break
+        }
+    }
+
+    private func dismissClockOutDecision() {
+        state.dismissClockOutPrompt()
+        clockOutDecisionPresented = false
+    }
+
+    private func presentOvertimePicker() {
+        overtimePickerPresented = true
+    }
+
+    private func confirmOvertimeDuration(_ duration: TimeInterval) {
+        overtimePickerPresented = false
+        clockOutDecisionPresented = false
+        state.beginOvertime(duration: duration, now: WNFClock.now)
+    }
+
+    private func confirmClockOutAndPresentSettlement() {
+        let now = WNFClock.now
+        clockOutDecisionPresented = false
+        overtimePickerPresented = false
+        state.confirmClockOut(now: now)
+        presentSettlementCeremony(at: now)
+    }
+
+    private func presentSettlementCeremony(at now: Date = WNFClock.now) {
+        guard selectedTab == .home else { return }
         let day = state.liveDay(at: now)
         settlementSnapshot = DailySettlement.derive(
             from: day,
@@ -537,14 +644,6 @@ struct RootView: View {
         withAnimation(.easeOut(duration: 0.22)) {
             settlementPresented = false
         }
-    }
-
-    private func saveSettlementAsAsset() {
-        state.persistCurrentDaySnapshot()
-        state.markTodaySettled()
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
-        dismissSettlement()
     }
 
     private func dismissShareCard() {

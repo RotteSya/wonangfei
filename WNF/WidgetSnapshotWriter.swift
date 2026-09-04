@@ -14,7 +14,9 @@ enum WNFWidgetSnapshotWriter {
         hasLunchBreak: Bool,
         selectedWeekdays: Set<Int>,
         statusLabel: String,
-        hidesSensitiveInfo: Bool
+        hidesSensitiveInfo: Bool,
+        overtimeEnd: Date? = nil,
+        overtimeSeconds: Int = 0
     ) -> Bool {
         guard let userDefaults = UserDefaults(suiteName: WNFShared.appGroupID) else { return false }
         let capturedAt = Date()
@@ -33,7 +35,9 @@ enum WNFWidgetSnapshotWriter {
             earningPerSecond: day.hourlyRate / 3600,
             selectedWeekdays: selectedWeekdays.sorted(),
             statusLabel: statusLabel,
-            hidesSensitiveInfo: hidesSensitiveInfo
+            hidesSensitiveInfo: hidesSensitiveInfo,
+            overtimeEnd: overtimeEnd,
+            overtimeSeconds: overtimeSeconds
         )
 
         if let existingData = userDefaults.data(forKey: WNFShared.widgetSnapshotKey),

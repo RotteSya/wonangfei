@@ -64,7 +64,7 @@ enum WNFWidgetDate {
 }
 
 struct WNFWidgetSnapshot: Codable, Equatable {
-    static let schemaVersion = 2
+    static let schemaVersion = 3
 
     static var sample: WNFWidgetSnapshot {
         let now = Date()
@@ -83,7 +83,9 @@ struct WNFWidgetSnapshot: Codable, Equatable {
             earningPerSecond: 888.88 / Double(188 * 60),
             selectedWeekdays: Array(0...4),
             statusLabel: "正在搬砖",
-            hidesSensitiveInfo: false
+            hidesSensitiveInfo: false,
+            overtimeEnd: nil,
+            overtimeSeconds: 0
         )
     }
 
@@ -103,6 +105,8 @@ struct WNFWidgetSnapshot: Codable, Equatable {
     var selectedWeekdays: [Int]
     var statusLabel: String
     var hidesSensitiveInfo: Bool
+    var overtimeEnd: Date?
+    var overtimeSeconds: Int
 
     var earnedTodayText: String {
         hidesSensitiveInfo ? "¥•••.••" : String(format: "¥%.2f", earnedToday)
@@ -124,7 +128,9 @@ struct WNFWidgetSnapshot: Codable, Equatable {
         earningPerSecond: Double = 0,
         selectedWeekdays: [Int] = Array(0...6),
         statusLabel: String,
-        hidesSensitiveInfo: Bool = false
+        hidesSensitiveInfo: Bool = false,
+        overtimeEnd: Date? = nil,
+        overtimeSeconds: Int = 0
     ) {
         self.schemaVersion = schemaVersion
         self.dateKey = dateKey
@@ -142,6 +148,8 @@ struct WNFWidgetSnapshot: Codable, Equatable {
         self.selectedWeekdays = selectedWeekdays.filter { (0...6).contains($0) }.sorted()
         self.statusLabel = statusLabel
         self.hidesSensitiveInfo = hidesSensitiveInfo
+        self.overtimeEnd = overtimeEnd
+        self.overtimeSeconds = max(0, overtimeSeconds)
     }
 
     enum CodingKeys: String, CodingKey {
@@ -161,6 +169,8 @@ struct WNFWidgetSnapshot: Codable, Equatable {
         case selectedWeekdays
         case statusLabel
         case hidesSensitiveInfo
+        case overtimeEnd
+        case overtimeSeconds
     }
 
     /// `Equatable` includes `capturedAt`, so a strict `==` between successive
@@ -184,6 +194,8 @@ struct WNFWidgetSnapshot: Codable, Equatable {
             && selectedWeekdays == other.selectedWeekdays
             && statusLabel == other.statusLabel
             && hidesSensitiveInfo == other.hidesSensitiveInfo
+            && overtimeEnd == other.overtimeEnd
+            && overtimeSeconds == other.overtimeSeconds
     }
 
     init(from decoder: Decoder) throws {
@@ -211,6 +223,8 @@ struct WNFWidgetSnapshot: Codable, Equatable {
             .sorted()
         statusLabel = try container.decode(String.self, forKey: .statusLabel)
         hidesSensitiveInfo = try container.decodeIfPresent(Bool.self, forKey: .hidesSensitiveInfo) ?? false
+        overtimeEnd = try container.decodeIfPresent(Date.self, forKey: .overtimeEnd)
+        overtimeSeconds = try container.decodeIfPresent(Int.self, forKey: .overtimeSeconds) ?? 0
     }
 }
 
@@ -262,8 +276,15 @@ extension WNFWidgetSnapshot {
         guard nowSecond > startSecond else { return 0 }
 
         // `includeOvertime` remains decodable for schema-v2 compatibility, but
-        // it can no longer relax the configured off-duty ceiling.
-        let paidThroughSecond = min(nowSecond, endSecond)
+        // projection only continues past the normal end when `overtimeEnd` is set.
+        let capSecond: Int
+        if let overtimeEnd,
+           WNFWidgetDate.dateKey(for: date) == WNFWidgetDate.dateKey(for: overtimeEnd) {
+            capSecond = max(endSecond, WNFWidgetDate.secondsInDay(for: overtimeEnd))
+        } else {
+            capSecond = endSecond
+        }
+        let paidThroughSecond = min(nowSecond, capSecond)
         let rawLunchStart = hasLunchBreak ? min(lunchStartMinute, lunchEndMinute) : workEndMinute
         let rawLunchEnd = hasLunchBreak ? max(lunchStartMinute, lunchEndMinute) : workEndMinute
         let lunchStartSecond = max(startSecond, rawLunchStart * 60)
@@ -312,7 +333,9 @@ extension WNFWidgetSnapshot {
             earningPerSecond: earningPerSecond,
             selectedWeekdays: selectedWeekdays,
             statusLabel: statusLabel,
-            hidesSensitiveInfo: hidesSensitiveInfo
+            hidesSensitiveInfo: hidesSensitiveInfo,
+            overtimeEnd: overtimeEnd,
+            overtimeSeconds: overtimeSeconds
         )
     }
 }
@@ -368,7 +391,13 @@ enum WNFWidgetTimeline {
     static func projectionEndDate(for snapshot: WNFWidgetSnapshot, now: Date) -> Date {
         guard snapshot.isSelectedWorkday(now) else { return now }
         let startOfDay = WNFWidgetDate.calendar.startOfDay(for: now)
-        return WNFWidgetDate.date(on: startOfDay, minute: snapshot.workEndMinute) ?? now
+        let workEndDate = WNFWidgetDate.date(on: startOfDay, minute: snapshot.workEndMinute) ?? now
+        if let overtimeEnd = snapshot.overtimeEnd,
+           WNFWidgetDate.dateKey(for: now) == WNFWidgetDate.dateKey(for: overtimeEnd),
+           overtimeEnd > workEndDate {
+            return overtimeEnd
+        }
+        return workEndDate
     }
 
     private static func nextWorkdayReloadDate(
@@ -401,6 +430,64 @@ struct WNFLiveActivityAttributes: ActivityAttributes {
         var isDone: Bool
         /// 隐私模式：金额打码。
         var hidesAmount: Bool
+        /// 加班续命中：倒计时指向加班截止时间。
+        var isOvertime: Bool
+        var overtimeEnd: Date?
+
+        enum CodingKeys: String, CodingKey {
+            case refDate
+            case earnedAtRef
+            case workdayStart
+            case workdayEnd
+            case isDone
+            case hidesAmount
+            case isOvertime
+            case overtimeEnd
+        }
+
+        init(
+            refDate: Date,
+            earnedAtRef: Double,
+            workdayStart: Date,
+            workdayEnd: Date,
+            isDone: Bool,
+            hidesAmount: Bool,
+            isOvertime: Bool = false,
+            overtimeEnd: Date? = nil
+        ) {
+            self.refDate = refDate
+            self.earnedAtRef = earnedAtRef
+            self.workdayStart = workdayStart
+            self.workdayEnd = workdayEnd
+            self.isDone = isDone
+            self.hidesAmount = hidesAmount
+            self.isOvertime = isOvertime
+            self.overtimeEnd = overtimeEnd
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            refDate = try container.decode(Date.self, forKey: .refDate)
+            earnedAtRef = try container.decode(Double.self, forKey: .earnedAtRef)
+            workdayStart = try container.decode(Date.self, forKey: .workdayStart)
+            workdayEnd = try container.decode(Date.self, forKey: .workdayEnd)
+            isDone = try container.decode(Bool.self, forKey: .isDone)
+            hidesAmount = try container.decode(Bool.self, forKey: .hidesAmount)
+            isOvertime = try container.decodeIfPresent(Bool.self, forKey: .isOvertime) ?? false
+            overtimeEnd = try container.decodeIfPresent(Date.self, forKey: .overtimeEnd)
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(refDate, forKey: .refDate)
+            try container.encode(earnedAtRef, forKey: .earnedAtRef)
+            try container.encode(workdayStart, forKey: .workdayStart)
+            try container.encode(workdayEnd, forKey: .workdayEnd)
+            try container.encode(isDone, forKey: .isDone)
+            try container.encode(hidesAmount, forKey: .hidesAmount)
+            try container.encode(isOvertime, forKey: .isOvertime)
+            try container.encodeIfPresent(overtimeEnd, forKey: .overtimeEnd)
+        }
     }
 
     /// One activity per calendar day.

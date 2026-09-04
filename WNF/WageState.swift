@@ -97,6 +97,9 @@ final class WageState: ObservableObject {
         }
     }
 
+    @Published private(set) var clockOutPhase: ClockOutPhase = .working
+    @Published private(set) var clockOutRuntimeState: ClockOutRuntimeState?
+
     /// `true` when the user has explicitly completed (or saved) today's settlement.
     /// Used by Home to switch into the lightweight "personal time" presentation.
     /// Naturally resets when `currentDateKey` advances past the stored date.
@@ -104,8 +107,13 @@ final class WageState: ObservableObject {
         lastSettlementDateKey == currentDateKey
     }
 
+    var todayWorkEndMinute: Int {
+        clockOutRuntimeState?.baseWorkEndMinute ?? workEnd.minutesInDay
+    }
+
     func markTodaySettled() {
         lastSettlementDateKey = currentDateKey
+        clockOutPhase = derivedClockOutPhase(now: WNFClock.now)
         Task { @MainActor in
             WNFLiveActivityController.reconcile(state: self)
         }
@@ -115,6 +123,7 @@ final class WageState: ObservableObject {
     private let dailyRecordStore: DailyRecordSQLiteStore
     // Task handles are cancelled from deinit, which is nonisolated.
     nonisolated(unsafe) private var dayBoundaryTask: Task<Void, Never>?
+    nonisolated(unsafe) private var clockOutDeadlineTask: Task<Void, Never>?
 
     /// Cached result of the most recent `calculation(at:)` call. Keyed by the
     /// settings fingerprint (everything `WageCalculator` reads from `self`) and
@@ -123,24 +132,38 @@ final class WageState: ObservableObject {
     /// hit this cache instead of re-running the calendar component extraction
     /// and the compute step.
     private var calculationCache: (fingerprint: CalculationFingerprint, secondBucket: Int, day: WageDay)?
+    private var liveDayCache: (fingerprint: LiveDayFingerprint, secondBucket: Int, day: WageDay)?
 
     init(userDefaults: UserDefaults = .standard, dailyRecordStore: DailyRecordSQLiteStore? = nil) {
         self.userDefaults = userDefaults
         self.dailyRecordStore = dailyRecordStore ?? DailyRecordSQLiteStore(userDefaults: userDefaults)
 
+        let now = WNFClock.now
+        let usesTestClock = WNFClock.isLaunchFrozen
         monthlySalary = Self.clampedMonthlySalary(userDefaults.doubleValue(forKey: StorageKey.monthlySalary) ?? Default.monthlySalary)
         workdaysPerMonth = Self.clampedWorkdaysPerMonth(userDefaults.integerValue(forKey: StorageKey.workdaysPerMonth) ?? Default.workdaysPerMonth)
         workStart = DateComponents.minuteInDay(userDefaults.integerValue(forKey: StorageKey.workStartMinute) ?? Default.workStartMinute)
-        workEnd = DateComponents.minuteInDay(userDefaults.integerValue(forKey: StorageKey.workEndMinute) ?? Default.workEndMinute)
+        workEnd = DateComponents.minuteInDay(
+            usesTestClock ? Default.workEndMinute : (userDefaults.integerValue(forKey: StorageKey.workEndMinute) ?? Default.workEndMinute)
+        )
         lunchStart = DateComponents.minuteInDay(userDefaults.integerValue(forKey: StorageKey.lunchStartMinute) ?? Default.lunchStartMinute)
         lunchEnd = DateComponents.minuteInDay(userDefaults.integerValue(forKey: StorageKey.lunchEndMinute) ?? Default.lunchEndMinute)
         hasLunchBreak = userDefaults.boolValue(forKey: StorageKey.hasLunchBreak) ?? Default.hasLunchBreak
         privacyMode = userDefaults.boolValue(forKey: StorageKey.privacyMode) ?? Default.privacyMode
-        selectedWeekdays = userDefaults.weekdaySet(forKey: StorageKey.selectedWeekdays) ?? Default.selectedWeekdays
+        var weekdays = userDefaults.weekdaySet(forKey: StorageKey.selectedWeekdays) ?? Default.selectedWeekdays
+        if usesTestClock {
+            weekdays.insert(Self.weekdayIndex(for: now))
+        }
+        selectedWeekdays = weekdays
         clockOutReminderEnabled = userDefaults.boolValue(forKey: StorageKey.clockOutReminderEnabled) ?? Default.clockOutReminderEnabled
         liveActivityEnabled = userDefaults.boolValue(forKey: StorageKey.liveActivityEnabled) ?? Default.liveActivityEnabled
-        lastSettlementDateKey = userDefaults.string(forKey: StorageKey.lastSettlementDateKey)
-        let now = Date()
+        lastSettlementDateKey = usesTestClock ? nil : userDefaults.string(forKey: StorageKey.lastSettlementDateKey)
+        let loadedRuntime = Self.decodeClockOutRuntimeState(from: userDefaults)
+        if usesTestClock {
+            clockOutRuntimeState = loadedRuntime?.dateKey == Self.dateKey(for: now) ? loadedRuntime : nil
+        } else {
+            clockOutRuntimeState = loadedRuntime
+        }
         currentDateKey = Self.dateKey(for: now)
         let dailyRecordLoadResult = self.dailyRecordStore.load(now: now)
         dailyRecords = dailyRecordLoadResult.records
@@ -148,24 +171,27 @@ final class WageState: ObservableObject {
         persistEditableSettings()
 
         closeLastObservedDayIfNeeded(now: now)
+        ensureClockOutRuntime(for: now)
         rememberObservedSnapshot(now)
+        reconcileClockOut(now: now)
         scheduleDayBoundaryTimer(from: now)
     }
 
     deinit {
         dayBoundaryTask?.cancel()
+        clockOutDeadlineTask?.cancel()
     }
 
     var currentDayStart: Date {
-        Self.date(fromDateKey: currentDateKey) ?? DateComponents.calendar.startOfDay(for: Date())
+        Self.date(fromDateKey: currentDateKey) ?? DateComponents.calendar.startOfDay(for: WNFClock.now)
     }
 
     var calculation: WageDay {
-        calculation(at: Date())
+        calculation(at: WNFClock.now)
     }
 
     var liveDay: WageDay {
-        liveDay(at: Date())
+        liveDay(at: WNFClock.now)
     }
 
     func calculation(at date: Date) -> WageDay {
@@ -183,11 +209,72 @@ final class WageState: ObservableObject {
     }
 
     func liveDay(at date: Date) -> WageDay {
-        let day = calculation(at: date)
-        guard isPaidWorkday(date, settings: currentSettingsSnapshot) else {
-            return Self.offDay(from: day)
+        let secondBucket = Int(date.timeIntervalSinceReferenceDate)
+        let fingerprint = liveDayFingerprint
+        if let cache = liveDayCache,
+           cache.secondBucket == secondBucket,
+           cache.fingerprint == fingerprint {
+            return cache.day
         }
-        return day
+
+        let settings = settingsForLiveCalculation(at: date)
+        let day = calculateWageDay(at: date, settings: settings)
+        guard isPaidWorkday(date, settings: settings) else {
+            let off = Self.offDay(from: day)
+            liveDayCache = (fingerprint, secondBucket, off)
+            return off
+        }
+
+        let withOvertime = applyOvertimeIfNeeded(to: day, at: date)
+        liveDayCache = (fingerprint, secondBucket, withOvertime)
+        return withOvertime
+    }
+
+    private func settingsForLiveCalculation(at date: Date) -> WageCalculationSettingsSnapshot {
+        var settings = currentSettingsSnapshot
+        if Self.dateKey(for: date) == currentDateKey {
+            settings.workEndMinute = todayWorkEndMinute
+        }
+        return settings
+    }
+
+    private func applyOvertimeIfNeeded(
+        to day: WageDay,
+        at date: Date
+    ) -> WageDay {
+        guard let runtime = clockOutRuntimeState,
+              runtime.dateKey == Self.dateKey(for: date)
+        else {
+            return day
+        }
+
+        let startOfDay = Self.date(fromDateKey: runtime.dateKey)
+            ?? DateComponents.calendar.startOfDay(for: date)
+        let normalEnd = ClockOutRuntimeEngine.workEndDate(
+            startOfDay: startOfDay,
+            minute: runtime.baseWorkEndMinute
+        )
+        return WageCalculator.applyingOvertime(
+            to: day,
+            normalEnd: normalEnd,
+            overtimeEnd: runtime.overtimeEnd,
+            now: date
+        )
+    }
+
+    private var liveDayFingerprint: LiveDayFingerprint {
+        LiveDayFingerprint(
+            monthlySalary: monthlySalary,
+            workdaysPerMonth: workdaysPerMonth,
+            workStartMinute: workStart.minutesInDay,
+            workEndMinute: todayWorkEndMinute,
+            lunchStartMinute: lunchStart.minutesInDay,
+            lunchEndMinute: lunchEnd.minutesInDay,
+            hasLunchBreak: hasLunchBreak,
+            selectedWeekdays: selectedWeekdays.sorted(),
+            overtimeEnd: clockOutRuntimeState?.overtimeEnd,
+            dateKey: clockOutRuntimeState?.dateKey
+        )
     }
 
     private var currentSettingsSnapshot: WageCalculationSettingsSnapshot {
@@ -217,23 +304,129 @@ final class WageState: ObservableObject {
     }
 
     func persistCurrentDaySnapshot() {
-        let now = Date()
+        let now = WNFClock.now
         advanceCalendarDay(to: now)
         persistDailySnapshot(for: now, capturedAt: now)
         rememberObservedSnapshot(now)
     }
 
-    func refreshCalendarDayIfNeeded(now: Date = Date()) {
+    func refreshCalendarDayIfNeeded(now: Date = WNFClock.now) {
         advanceCalendarDay(to: now)
+        reconcileClockOut(now: now)
         scheduleDayBoundaryTimer(from: now)
+    }
+
+    func reconcileClockOut(now: Date = WNFClock.now) {
+        advanceCalendarDay(to: now)
+        ensureClockOutRuntime(for: now)
+        applyTestClockOutSuppressionIfNeeded()
+        let nextPhase = derivedClockOutPhase(now: now)
+        let previousPhase = clockOutPhase
+        if nextPhase != previousPhase {
+            clockOutPhase = nextPhase
+            if case .decisionDue = nextPhase {
+                persistDailySnapshot(for: now, capturedAt: now)
+                rememberObservedSnapshot(now)
+            }
+        }
+        scheduleClockOutDeadlineTimer(from: now)
+    }
+
+    func dismissClockOutPrompt() {
+        guard var runtime = clockOutRuntimeState else { return }
+        runtime = ClockOutRuntimeEngine.dismiss(runtime)
+        clockOutRuntimeState = runtime
+        persistClockOutRuntimeState()
+        clockOutPhase = derivedClockOutPhase(now: WNFClock.now)
+        scheduleClockOutDeadlineTimer(from: WNFClock.now)
+    }
+
+    func beginOvertime(duration: TimeInterval, now: Date = WNFClock.now) {
+        reconcileClockOut(now: now)
+        guard isTodaySettled == false else { return }
+        switch clockOutPhase {
+        case .decisionDue, .promptDismissed:
+            break
+        default:
+            return
+        }
+        guard let runtime = clockOutRuntimeState else { return }
+
+        let startOfDay = currentDayStart
+        let remaining = ClockOutRuntimeEngine.remainingOvertimeAllowance(now: now, startOfDay: startOfDay)
+        guard remaining > 0, duration > 0 else { return }
+
+        let nextRuntime = ClockOutRuntimeEngine.beginOvertime(
+            runtime: runtime,
+            duration: duration,
+            now: now,
+            startOfDay: startOfDay
+        )
+        clockOutRuntimeState = nextRuntime
+        persistClockOutRuntimeState()
+        persistDailySnapshot(for: now, capturedAt: now)
+        rememberObservedSnapshot(now)
+        clockOutPhase = derivedClockOutPhase(now: now)
+        scheduleClockOutDeadlineTimer(from: now)
+        reconcileOvertimeReminder(deadline: nextRuntime.overtimeEnd)
+        Task { @MainActor in
+            WNFLiveActivityController.reconcile(state: self, now: now)
+        }
+    }
+
+    func confirmClockOut(now: Date = WNFClock.now) {
+        reconcileClockOut(now: now)
+        guard isTodaySettled == false else { return }
+        persistDailySnapshot(for: now, capturedAt: now)
+        rememberObservedSnapshot(now)
+        markTodaySettled()
+        reconcileOvertimeReminder(deadline: nil)
+        scheduleClockOutDeadlineTimer(from: now)
+    }
+
+    func recaptureTodayWorkEndFromSettings() {
+        guard var runtime = clockOutRuntimeState,
+              runtime.dateKey == currentDateKey,
+              runtime.overtimeEnd == nil,
+              runtime.revision == 0,
+              runtime.dismissedRevision == nil
+        else {
+            return
+        }
+        runtime.baseWorkEndMinute = workEnd.minutesInDay
+        clockOutRuntimeState = runtime
+        persistClockOutRuntimeState()
+        reconcileClockOut()
+    }
+
+    func jumpTestClockPastDeadline() {
+        guard WNFClock.isOverridden else { return }
+        let deadline: Date
+        switch clockOutPhase {
+        case .overtimeRunning(let until, _):
+            deadline = until
+        case .working:
+            deadline = ClockOutRuntimeEngine.workEndDate(
+                startOfDay: currentDayStart,
+                minute: todayWorkEndMinute
+            )
+        case .decisionDue(let existing, _), .promptDismissed(let existing, _):
+            deadline = existing
+        case .settled, .offDay:
+            return
+        }
+        WNFClock.setOverride(deadline.addingTimeInterval(0.001))
+        reconcileClockOut(now: WNFClock.now)
     }
 
     func pauseCalendarDayTimer() {
         dayBoundaryTask?.cancel()
         dayBoundaryTask = nil
+        clockOutDeadlineTask?.cancel()
+        clockOutDeadlineTask = nil
     }
 
-    func resumeCalendarDayTimer(now: Date = Date()) {
+    func resumeCalendarDayTimer(now: Date = WNFClock.now) {
         refreshCalendarDayIfNeeded(now: now)
     }
 
@@ -311,9 +504,10 @@ final class WageState: ObservableObject {
     }
 
     private func recordCalculationSettingsChanged() {
-        let now = Date()
+        let now = WNFClock.now
         advanceCalendarDay(to: now)
         rememberObservedSnapshot(now)
+        reconcileClockOut(now: now)
     }
 
     private func advanceCalendarDay(to newDate: Date) {
@@ -323,7 +517,11 @@ final class WageState: ObservableObject {
         let settings = lastObservedSnapshotForClosure()?.settings ?? currentSettingsSnapshot
         closeObservedDateRange(from: currentDayStart, to: newDate, capturedAt: newDate, settings: settings)
         currentDateKey = newDateKey
+        clockOutRuntimeState = nil
+        persistClockOutRuntimeState()
+        ensureClockOutRuntime(for: newDate)
         rememberObservedSnapshot(newDate)
+        clockOutPhase = derivedClockOutPhase(now: newDate)
     }
 
     private func scheduleDayBoundaryTimer(from date: Date) {
@@ -342,7 +540,7 @@ final class WageState: ObservableObject {
                 return
             }
             guard !Task.isCancelled else { return }
-            self?.refreshCalendarDayIfNeeded(now: Date())
+            self?.refreshCalendarDayIfNeeded(now: WNFClock.now)
         }
     }
 
@@ -440,33 +638,43 @@ final class WageState: ObservableObject {
         source: DailyRecordSource,
         settings: WageCalculationSettingsSnapshot
     ) -> DailyWageRecord {
-        let day = calculateWageDay(at: date, settings: settings)
-        guard isPaidWorkday(date, settings: settings) else {
+        var recordSettings = settings
+        let dateKey = Self.dateKey(for: date)
+        if let runtime = clockOutRuntimeState, runtime.dateKey == dateKey {
+            recordSettings.workEndMinute = runtime.baseWorkEndMinute
+        }
+
+        var day = calculateWageDay(at: date, settings: recordSettings)
+        if isPaidWorkday(date, settings: recordSettings) {
+            day = applyOvertimeIfNeeded(to: day, at: date)
+        } else {
             return DailyWageRecord(
-                dateKey: Self.dateKey(for: date),
+                dateKey: dateKey,
                 earnedToday: 0,
                 targetToday: 0,
                 elapsedPaidSeconds: 0,
                 workdayMinutes: day.workdayMinutes,
                 hourlyRate: day.hourlyRate,
-                monthlySalary: settings.monthlySalary,
-                workdaysPerMonth: settings.workdaysPerMonth,
+                monthlySalary: recordSettings.monthlySalary,
+                workdaysPerMonth: recordSettings.workdaysPerMonth,
                 capturedAt: capturedAt,
                 source: source
             )
         }
 
         return DailyWageRecord(
-            dateKey: Self.dateKey(for: date),
+            dateKey: dateKey,
             earnedToday: day.earnedToday,
             targetToday: day.targetToday,
             elapsedPaidSeconds: day.elapsedPaidSeconds,
             workdayMinutes: day.workdayMinutes,
             hourlyRate: day.hourlyRate,
-            monthlySalary: settings.monthlySalary,
-            workdaysPerMonth: settings.workdaysPerMonth,
+            monthlySalary: recordSettings.monthlySalary,
+            workdaysPerMonth: recordSettings.workdaysPerMonth,
             capturedAt: capturedAt,
-            source: source
+            source: source,
+            overtimeSeconds: day.overtimeSeconds,
+            overtimeEarned: day.overtimeEarned
         )
     }
 
@@ -529,6 +737,102 @@ final class WageState: ObservableObject {
                 workEnd: workEnd,
                 selectedWeekdays: selectedWeekdays
             )
+        }
+    }
+
+    private func reconcileOvertimeReminder(deadline: Date?) {
+        Task { @MainActor in
+            await ClockOutReminderService.shared.reconcileOvertimeDeadline(deadline)
+        }
+    }
+
+    private func derivedClockOutPhase(now: Date) -> ClockOutPhase {
+        ClockOutRuntimeEngine.phase(
+            isPaidWorkday: isPaidWorkday(now, settings: currentSettingsSnapshot),
+            isSettled: lastSettlementDateKey == Self.dateKey(for: now),
+            runtime: clockOutRuntimeState,
+            now: now,
+            startOfDay: DateComponents.calendar.startOfDay(for: now)
+        )
+    }
+
+    private func ensureClockOutRuntime(for now: Date) {
+        let dateKey = Self.dateKey(for: now)
+        if let runtime = clockOutRuntimeState, runtime.dateKey == dateKey {
+            return
+        }
+
+        if isPaidWorkday(now, settings: currentSettingsSnapshot) {
+            clockOutRuntimeState = ClockOutRuntimeEngine.makeTodaySnapshot(
+                dateKey: dateKey,
+                workEndMinute: workEnd.minutesInDay
+            )
+        } else {
+            clockOutRuntimeState = nil
+        }
+        persistClockOutRuntimeState()
+    }
+
+    private func applyTestClockOutSuppressionIfNeeded() {
+        guard WNFClock.shouldSuppressClockOutPrompt(),
+              var runtime = clockOutRuntimeState,
+              runtime.dismissedRevision != runtime.revision
+        else {
+            return
+        }
+        runtime.dismissedRevision = runtime.revision
+        clockOutRuntimeState = runtime
+    }
+
+    private func persistClockOutRuntimeState() {
+        if let runtime = clockOutRuntimeState,
+           let data = try? JSONEncoder().encode(runtime) {
+            userDefaults.set(data, forKey: StorageKey.clockOutRuntimeState)
+        } else {
+            userDefaults.removeObject(forKey: StorageKey.clockOutRuntimeState)
+        }
+    }
+
+    private static func decodeClockOutRuntimeState(from userDefaults: UserDefaults) -> ClockOutRuntimeState? {
+        guard let data = userDefaults.data(forKey: StorageKey.clockOutRuntimeState) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(ClockOutRuntimeState.self, from: data)
+    }
+
+    private func scheduleClockOutDeadlineTimer(from date: Date) {
+        clockOutDeadlineTask?.cancel()
+        clockOutDeadlineTask = nil
+        guard WNFClock.isOverridden == false else { return }
+
+        let fireDate: Date?
+        switch clockOutPhase {
+        case .working:
+            fireDate = ClockOutRuntimeEngine.workEndDate(
+                startOfDay: DateComponents.calendar.startOfDay(for: date),
+                minute: todayWorkEndMinute
+            )
+        case .overtimeRunning(let until, _):
+            fireDate = until
+        default:
+            fireDate = nil
+        }
+        guard let fireDate, fireDate > date else { return }
+
+        let delay = WNFClock.isOverridden ? fireDate.timeIntervalSince(WNFClock.now) : fireDate.timeIntervalSince(Date())
+        guard delay > 0 else {
+            clockOutPhase = derivedClockOutPhase(now: WNFClock.now)
+            return
+        }
+
+        clockOutDeadlineTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(delay))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            self?.reconcileClockOut(now: WNFClock.now)
         }
     }
 
@@ -655,6 +959,19 @@ private struct CalculationFingerprint: Equatable {
     let lunchEndMinute: Int
     let hasLunchBreak: Bool
     let selectedWeekdays: [Int]
+}
+
+private struct LiveDayFingerprint: Equatable {
+    let monthlySalary: Double
+    let workdaysPerMonth: Int
+    let workStartMinute: Int
+    let workEndMinute: Int
+    let lunchStartMinute: Int
+    let lunchEndMinute: Int
+    let hasLunchBreak: Bool
+    let selectedWeekdays: [Int]
+    let overtimeEnd: Date?
+    let dateKey: String?
 }
 
 private enum Default {

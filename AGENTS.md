@@ -58,14 +58,14 @@ UI 测试经 `UITestSupport.launchMainShell()` 传入启动参数 `-wnf.onboardi
 - `RecordsView` 周/月/年图必须从 `RecordAggregationInput` 聚合，不要写死倍率。
 - `FoundationModels` 只在具备能力的 iOS 26+ 设备上给气泡文案（`BubbleQuoteEngine`）；否则用静态 quotes。不是网络依赖。
 
-跨 target 唯一共享源：`WNF/WidgetShared.swift`（schema + `WorkStatus` + Live Activity attributes）。
+跨 target 唯一共享源：`WNF/WidgetShared.swift`（schema v3 + `WorkStatus` + Live Activity attributes）。Widget 投影截止用 `overtimeEnd`；没有明确加班截止时仍封顶于正常下班时间。
 
 | 层 | 文件 | 职责 |
 |---|---|---|
 | 入口 | `WNFApp.swift` → `RootView.swift` | scene / 快照汇流；三页果冻 pager |
-| 状态 | `WageState.swift` | 共享 `ObservableObject`：设置、当日计算、记录、结算旗 |
-| 领域 | `WageCalculator.swift` · `DailyRecordStorage.swift` · `DailySettlement.swift` | 纯工资数学；SQLite + 旧 JSON 迁移；结算派生 |
-| 页面 | `HomeView.swift` · `RecordsView.swift` · `SettingsView.swift` · `OnboardingView.swift` | 首页 / 记录 / 我的 / 首启引导 |
+| 状态 | `WageState.swift` | 共享 `ObservableObject`：设置、当日计算、记录、结算旗、`ClockOutPhase` |
+| 领域 | `WageCalculator.swift` · `ClockOutRuntime.swift` · `DailyRecordStorage.swift` · `DailySettlement.swift` | 纯工资数学与加班叠加；下班运行快照；SQLite + 旧 JSON 迁移；结算派生 |
+| 页面 | `HomeView.swift` · `RecordsView.swift` · `SettingsView.swift` · `OnboardingView.swift` · `ClockOutFlow.swift` | 首页 / 记录 / 我的 / 首启引导 / 下班决策与加班时长 |
 | 共享 | `Theme.swift` · `SharedViews.swift` · `WageFormatting.swift` · `WorkStatusPresentation.swift` | token、控件、格式化、quotes / 吉祥物（label 来自 `WorkStatus.label`） |
 | 特效 | `ShaderFX.swift` + `WNFShaders.metal` + `GenieEffect.metal` · `OdometerText.swift` · `PagerShell.swift` | 着色器包装、滑轮数字、pager / 手势仲裁 |
 | 凭证 | `Voucher.swift` · `ShareCard.swift` | 公文票据族、战报卡 genie |
@@ -76,7 +76,7 @@ UI 测试经 `UITestSupport.launchMainShell()` 传入启动参数 `-wnf.onboardi
 
 ## 5. 不可破坏契约
 
-结算语义：**数据自动保存，仪式手动触发**。不自动弹窗、不红点追赶、不连续催。只有「存入资产」把当天写成已结算；X / 点屏外 / 跳过都不算完成。个人时间态看 `WageState.isTodaySettled`。
+结算语义：**到点自动停表并保存记录；大号「下班！」一次完成结算仪式**。到达当日 `ClockOutRuntimeState.baseWorkEndMinute` 后工资封顶、记录写入，不依赖按钮或进程还活着。同一天首次进入到点状态时，首页弹出下班决策（主操作「下班！」，次操作「加班…」）。点「下班！」立即 `confirmClockOut()`（保存快照 + `markTodaySettled()`）并播放金币/盖章/凭证仪式；结算卡上的撕纸只是视觉收尾，关闭结算卡不撤销已结算。点「加班…」必须选明确时长，到期再次停表并再弹一轮。关闭决策层保持停表，当轮不再自动强弹，首页留入口。次日不补弹旧日决策。当日下班边界以运行快照为准，设置页改默认下班时间从下一工作日生效。个人时间态看 `WageState.isTodaySettled`。加班叠在相同基础时薪上，不改 `workdayMinutes` / `targetToday`。
 
 | 约束 | 原因 | 所有者 |
 |---|---|---|
@@ -92,12 +92,12 @@ UI 测试经 `UITestSupport.launchMainShell()` 传入启动参数 `-wnf.onboardi
 | 公章骑年压月：盖日期/流水号，**永不**盖金额 | 发放凭证的视觉契约 | `DailySettlement` |
 | 分享 spinner 预热是感知反馈，不是渲染并发修复 | `ImageRenderer` 仍在 MainActor 同步栅格化；先让一帧刷新 loading | `RootView.presentSystemShare` |
 | 着色器时钟必须 `isActive` + Reduce Motion 门控 | 离屏 pager 页与 Reduce Motion 用户零帧 | `ShaderFX.GoldShimmer` 等 |
-| 结算只从首页 Clock-Out CTA 触发 | `RootView` 独占 overlay；「存入资产」= `persistCurrentDaySnapshot()` + `markTodaySettled()` | `RootView` · `WageState` |
-| 提醒 / Live Activity 的 reconcile 不进 View | 分别走 `WageState.reconcileClockOutReminder()` 与 `WNFLiveActivityController.reconcile` | `ClockOutReminderService` · `WNFLiveActivityController` |
+| 结算由 RootView 独占 overlay | 到点决策或首页入口触发；「下班！」= `confirmClockOut()` | `RootView` · `WageState` |
+| 提醒 / Live Activity / 下班运行态的 reconcile 不进 View | 分别走 `WageState.reconcileClockOutReminder()`、`WNFLiveActivityController.reconcile`、`WageState.reconcileClockOut()` | `ClockOutReminderService` · `WNFLiveActivityController` · `WageState` |
 | 六个工作状态文案只有一张表 | 改文案只改这一处 | `WorkStatus.label`（`WidgetShared.swift`） |
 | 法务页只加载 bundle 内 HTML，无网络回退 | 设置里打开就是本地那份 | `Legal.swift` / `LegalWebNavigationPolicy` |
 | Widget 永不写入 App Group | 单向数据流 | `WNFWidget` |
-| 不自动弹出结算 | 仪式手动；没有红点追赶 | `RootView` |
+| 到点弹下班决策，不追赶 | 同一 revision 只自动弹一次；关闭后首页留入口 | `RootView` · `ClockOutPhase` |
 
 圆角：10–12 控件 / 18 缩略图 / 22 卡片 / 28 hero / 999 胶囊。发丝描边 `WNFTheme.hairline`。不用 emoji 当功能图标。纸 overlay（战报 genie、结算层）强制浅色。首页滑轮保持系统圆体；`WNFTheme.display` 只标题/字标，`WNFTheme.mono` 走工资条数字。
 
@@ -113,7 +113,7 @@ UI 测试经 `UITestSupport.launchMainShell()` 传入启动参数 `-wnf.onboardi
 | 发布相关、bundle 内容、签名无关的 Release 警告 | `./scripts/wnf release-check` |
 | 交 PR / 交接 | `./scripts/wnf verify`（doctor → bootstrap → 静态门禁 → build → L2 → L3 → analyze → release-check） |
 
-L3 依赖这些 a11y identifier，重构必须保留：`home.money` · `home.share` · `home.privacy` · `tab.home` / `tab.records` / `tab.settings` · `records.period.week|month|year` · `records.chart` · `share.cancel` · `settings.legal.privacy` / `settings.legal.terms`。`JellyTourUITests.testGrandTour` 兼布局护栏（TopBar 被挤出屏会 off-screen 失败）。`VoucherSnapshotTests` 是 render-smoke，不是参考图回归。
+L3 依赖这些 a11y identifier，重构必须保留：`home.money` · `home.share` · `home.privacy` · `tab.home` / `tab.records` / `tab.settings` · `records.period.week|month|year` · `records.chart` · `share.cancel` · `settings.legal.privacy` / `settings.legal.terms` · `clockout.overlay` / `clockout.confirm` / `clockout.overtime` / `clockout.dismiss` · `overtime.duration` / `overtime.confirm` / `overtime.cancel`。`JellyTourUITests.testGrandTour` 兼布局护栏（TopBar 被挤出屏会 off-screen 失败）。`VoucherSnapshotTests` 是 render-smoke，不是参考图回归。
 
 `./scripts/wnf store-check` 是可选的只读 ASC 核对，**不**计入 `verify`。
 

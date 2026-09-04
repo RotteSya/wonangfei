@@ -44,6 +44,10 @@
 		100000000000000000000137 /* JetBrainsMono-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000244 /* JetBrainsMono-Bold.ttf */; };
 		100000000000000000000138 /* Voucher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000245 /* Voucher.swift */; };
 		100000000000000000000140 /* LiveActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000247 /* LiveActivityController.swift */; };
+		100000000000000000000148 /* ClockOutRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000248 /* ClockOutRuntime.swift */; };
+		100000000000000000000149 /* ClockOutFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000249 /* ClockOutFlow.swift */; };
+		100000000000000000000151 /* ClockOutFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000250 /* ClockOutFlowTests.swift */; };
+		100000000000000000000B25 /* ClockOutFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000B24 /* ClockOutFlowUITests.swift */; };
 		100000000000000000000125 /* WageEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000234 /* WageEngineTests.swift */; };
 		100000000000000000000139 /* VoucherSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000246 /* VoucherSnapshotTests.swift */; };
 		100000000000000000000B01 /* JellyTourUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000B02 /* JellyTourUITests.swift */; };
@@ -147,6 +151,10 @@
 		100000000000000000000244 /* JetBrainsMono-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "JetBrainsMono-Bold.ttf"; sourceTree = "<group>"; };
 		100000000000000000000245 /* Voucher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Voucher.swift; sourceTree = "<group>"; };
 		100000000000000000000247 /* LiveActivityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityController.swift; sourceTree = "<group>"; };
+		100000000000000000000248 /* ClockOutRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockOutRuntime.swift; sourceTree = "<group>"; };
+		100000000000000000000249 /* ClockOutFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockOutFlow.swift; sourceTree = "<group>"; };
+		100000000000000000000250 /* ClockOutFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockOutFlowTests.swift; sourceTree = "<group>"; };
+		100000000000000000000B24 /* ClockOutFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockOutFlowUITests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -233,6 +241,8 @@
 				100000000000000000000A0A /* PagerShell.swift */,
 				100000000000000000000238 /* BubbleQuoteEngine.swift */,
 				100000000000000000000236 /* DailySettlement.swift */,
+				100000000000000000000248 /* ClockOutRuntime.swift */,
+				100000000000000000000249 /* ClockOutFlow.swift */,
 				100000000000000000000237 /* ClockOutReminder.swift */,
 				100000000000000000000207 /* RecordsView.swift */,
 				100000000000000000000208 /* SettingsView.swift */,
@@ -262,6 +272,7 @@
 			children = (
 				100000000000000000000234 /* WageEngineTests.swift */,
 				100000000000000000000246 /* VoucherSnapshotTests.swift */,
+				100000000000000000000250 /* ClockOutFlowTests.swift */,
 			);
 			path = WNFTests;
 			sourceTree = "<group>";
@@ -272,6 +283,7 @@
 				100000000000000000000B02 /* JellyTourUITests.swift */,
 				100000000000000000000B21 /* LegalDocumentUITests.swift */,
 				100000000000000000000B22 /* UITestSupport.swift */,
+				100000000000000000000B24 /* ClockOutFlowUITests.swift */,
 			);
 			path = WNFUITests;
 			sourceTree = "<group>";
@@ -482,6 +494,8 @@
 				100000000000000000000A09 /* PagerShell.swift in Sources */,
 				100000000000000000000129 /* BubbleQuoteEngine.swift in Sources */,
 				100000000000000000000127 /* DailySettlement.swift in Sources */,
+				100000000000000000000148 /* ClockOutRuntime.swift in Sources */,
+				100000000000000000000149 /* ClockOutFlow.swift in Sources */,
 				100000000000000000000128 /* ClockOutReminder.swift in Sources */,
 				100000000000000000000107 /* RecordsView.swift in Sources */,
 				100000000000000000000108 /* SettingsView.swift in Sources */,
@@ -504,6 +518,7 @@
 			files = (
 				100000000000000000000125 /* WageEngineTests.swift in Sources */,
 				100000000000000000000139 /* VoucherSnapshotTests.swift in Sources */,
+				100000000000000000000151 /* ClockOutFlowTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -514,6 +529,7 @@
 				100000000000000000000B01 /* JellyTourUITests.swift in Sources */,
 				100000000000000000000B20 /* LegalDocumentUITests.swift in Sources */,
 				100000000000000000000B23 /* UITestSupport.swift in Sources */,
+				100000000000000000000B25 /* ClockOutFlowUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

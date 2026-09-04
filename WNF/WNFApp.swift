@@ -12,6 +12,7 @@ struct WNFApp: App {
                 .onChange(of: scenePhase) { _, newPhase in
                     if newPhase == .active {
                         state.resumeCalendarDayTimer()
+                        state.reconcileClockOut()
                         writeWidgetSnapshot()
                         state.reconcileClockOutReminder()
                         WNFLiveActivityController.beginMinuteRefresh(state: state)
@@ -52,6 +53,15 @@ struct WNFApp: App {
                 .onChange(of: state.selectedWeekdays) { _, _ in
                     writeWidgetSnapshot()
                 }
+                .onChange(of: state.clockOutRuntimeState) { _, _ in
+                    writeWidgetSnapshot()
+                }
+                .onChange(of: state.clockOutPhase) { _, _ in
+                    writeWidgetSnapshot()
+                }
+                .onChange(of: state.lastSettlementDateKey) { _, _ in
+                    writeWidgetSnapshot()
+                }
         }
     }
 
@@ -60,13 +70,15 @@ struct WNFApp: App {
         let wrote = WNFWidgetSnapshotWriter.write(
             day: day,
             workStartMinute: state.workStart.minutesInDay,
-            workEndMinute: state.workEnd.minutesInDay,
+            workEndMinute: state.todayWorkEndMinute,
             lunchStartMinute: state.lunchStart.minutesInDay,
             lunchEndMinute: state.lunchEnd.minutesInDay,
             hasLunchBreak: state.hasLunchBreak,
             selectedWeekdays: state.selectedWeekdays,
             statusLabel: day.status.label,
-            hidesSensitiveInfo: state.privacyMode
+            hidesSensitiveInfo: state.privacyMode,
+            overtimeEnd: state.clockOutRuntimeState?.overtimeEnd,
+            overtimeSeconds: day.overtimeSeconds
         )
         if wrote {
             WNFWidgetReloader.scheduleReload()

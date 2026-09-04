@@ -84,6 +84,7 @@ struct RecordAggregationInput: Equatable {
     var lunchEndMinute: Int
     var hasLunchBreak: Bool
     var selectedWeekdays: Set<Int>
+    var overtimeEnd: Date?
 
     init(
         currentDateKey: String,
@@ -97,7 +98,8 @@ struct RecordAggregationInput: Equatable {
         lunchStartMinute: Int,
         lunchEndMinute: Int,
         hasLunchBreak: Bool,
-        selectedWeekdays: Set<Int>
+        selectedWeekdays: Set<Int>,
+        overtimeEnd: Date? = nil
     ) {
         self.currentDateKey = currentDateKey
         self.recordsRevision = recordsRevision
@@ -111,6 +113,7 @@ struct RecordAggregationInput: Equatable {
         self.lunchEndMinute = lunchEndMinute
         self.hasLunchBreak = hasLunchBreak
         self.selectedWeekdays = selectedWeekdays
+        self.overtimeEnd = overtimeEnd
     }
 
     @MainActor
@@ -122,11 +125,12 @@ struct RecordAggregationInput: Equatable {
         monthlySalary = state.monthlySalary
         workdaysPerMonth = state.workdaysPerMonth
         workStartMinute = state.workStart.minutesInDay
-        workEndMinute = state.workEnd.minutesInDay
+        workEndMinute = state.todayWorkEndMinute
         lunchStartMinute = state.lunchStart.minutesInDay
         lunchEndMinute = state.lunchEnd.minutesInDay
         hasLunchBreak = state.hasLunchBreak
         selectedWeekdays = state.selectedWeekdays
+        overtimeEnd = state.clockOutRuntimeState?.overtimeEnd
     }
 
     static func == (lhs: RecordAggregationInput, rhs: RecordAggregationInput) -> Bool {
@@ -140,6 +144,7 @@ struct RecordAggregationInput: Equatable {
             && lhs.lunchEndMinute == rhs.lunchEndMinute
             && lhs.hasLunchBreak == rhs.hasLunchBreak
             && lhs.selectedWeekdays == rhs.selectedWeekdays
+            && lhs.overtimeEnd == rhs.overtimeEnd
     }
 }
 
@@ -289,7 +294,7 @@ struct RecordAggregationSnapshot {
 
     fileprivate static func liveTodayRecord(input: RecordAggregationInput, now: Date) -> DailyWageRecord {
         let currentTime = DateComponents.calendar.dateComponents([.hour, .minute, .second, .nanosecond], from: now)
-        let day = WageCalculator.compute(
+        var day = WageCalculator.compute(
             monthlySalary: input.monthlySalary,
             workdaysPerMonth: input.workdaysPerMonth,
             workStart: .minuteInDay(input.workStartMinute),
@@ -301,6 +306,16 @@ struct RecordAggregationSnapshot {
         )
         let currentDayStart = WageState.date(fromDateKey: input.currentDateKey)
             ?? DateComponents.calendar.startOfDay(for: now)
+        let normalEnd = ClockOutRuntimeEngine.workEndDate(
+            startOfDay: currentDayStart,
+            minute: input.workEndMinute
+        )
+        day = WageCalculator.applyingOvertime(
+            to: day,
+            normalEnd: normalEnd,
+            overtimeEnd: input.overtimeEnd,
+            now: now
+        )
         guard input.selectedWeekdays.contains(weekdayIndex(for: currentDayStart, calendar: DateComponents.calendar)) else {
             return DailyWageRecord(
                 dateKey: input.currentDateKey,
@@ -325,7 +340,9 @@ struct RecordAggregationSnapshot {
             monthlySalary: input.monthlySalary,
             workdaysPerMonth: input.workdaysPerMonth,
             capturedAt: now,
-            source: .observed
+            source: .observed,
+            overtimeSeconds: day.overtimeSeconds,
+            overtimeEarned: day.overtimeEarned
         )
     }
 

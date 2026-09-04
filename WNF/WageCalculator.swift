@@ -13,6 +13,8 @@ struct WageDay {
     var targetToday: Double
     var status: WorkStatus
     var wallToEndMinutes: Int
+    var overtimeSeconds: Int = 0
+    var overtimeEarned: Double = 0
 
     var progress: Double {
         let workdaySeconds = workdayMinutes * 60
@@ -109,8 +111,41 @@ enum WageCalculator {
             earnedToday: earnedToday,
             targetToday: targetToday,
             status: status,
-            wallToEndMinutes: max(0, Int(ceil((Double(endSecond) - nowSecond) / 60)))
+            wallToEndMinutes: max(0, Int(ceil((Double(endSecond) - nowSecond) / 60))),
+            overtimeSeconds: 0,
+            overtimeEarned: 0
         )
+    }
+
+    /// Stacks overtime on a normal-day result without changing the base hourly
+    /// rate, `targetToday`, or `workdayMinutes`. Progress stays capped at 1.0.
+    static func applyingOvertime(
+        to baseDay: WageDay,
+        normalEnd: Date,
+        overtimeEnd: Date?,
+        now: Date
+    ) -> WageDay {
+        var day = baseDay
+        day.overtimeSeconds = 0
+        day.overtimeEarned = 0
+
+        guard let overtimeEnd, overtimeEnd > normalEnd, now > normalEnd else {
+            return day
+        }
+
+        let effectiveEnd = min(now, overtimeEnd)
+        let overtimeSeconds = max(0, Int(effectiveEnd.timeIntervalSince(normalEnd).rounded(.down)))
+        let overtimeEarned = baseDay.hourlyRate / 3600 * Double(overtimeSeconds)
+
+        day.overtimeSeconds = overtimeSeconds
+        day.overtimeEarned = overtimeEarned
+        day.elapsedPaidSeconds = baseDay.elapsedPaidSeconds + overtimeSeconds
+        day.elapsedPaidMinutes = day.elapsedPaidSeconds / 60
+        day.earnedToday = baseDay.earnedToday + overtimeEarned
+        day.wallToEndMinutes = now < overtimeEnd
+            ? max(0, Int(ceil(overtimeEnd.timeIntervalSince(now) / 60)))
+            : 0
+        return day
     }
 }
 

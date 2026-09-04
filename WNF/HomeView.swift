@@ -26,7 +26,7 @@ struct HomeView: View {
             WNFTheme.bg.ignoresSafeArea()
 
             HeroHomePage(
-                initialStatus: state.liveDay.status,
+                initialStatus: state.liveDay(at: WNFClock.now).status,
                 isActive: isActive,
                 onShare: onShare,
                 onClockOut: onClockOut
@@ -62,9 +62,19 @@ private struct HeroHomePage: View {
     }
 
     private var statusChipLabel: String {
-        state.isTodaySettled
-            ? "今日已下班 · 个人时间"
-            : WorkStatusPresentation(status: displayedStatus).label
+        if state.isTodaySettled {
+            return "今日已下班 · 个人时间"
+        }
+        if case .overtimeRunning = state.clockOutPhase {
+            return "加班续命中"
+        }
+        return WorkStatusPresentation(status: displayedStatus).label
+    }
+
+    private var showsClockOutCTA: Bool {
+        if state.isTodaySettled { return true }
+        if case .promptDismissed = state.clockOutPhase { return true }
+        return false
     }
 
     /// Height of the transparent margin baked into the bottom of the home
@@ -109,18 +119,23 @@ private struct HeroHomePage: View {
                     Group {
                         if isActive {
                             TimelineView(.periodic(from: .now, by: 1)) { context in
-                                readout(at: context.date, contentWidth: proxy.size.width - 44)
+                                readout(at: WNFClock.displayNow(context.date), contentWidth: proxy.size.width - 44)
                             }
                         } else {
-                            readout(at: Date(), contentWidth: proxy.size.width - 44)
+                            readout(at: WNFClock.now, contentWidth: proxy.size.width - 44)
                         }
                     }
                     .padding(.horizontal, 22)
 
-                    if state.isTodaySettled || displayedStatus == .done {
+                    if showsClockOutCTA {
                         ClockOutCTA(
                             status: displayedStatus,
                             isSettled: state.isTodaySettled,
+                            isPromptDismissed: {
+                                if case .promptDismissed = state.clockOutPhase { return true }
+                                if case .decisionDue = state.clockOutPhase { return true }
+                                return false
+                            }(),
                             action: onClockOut
                         )
                         .padding(.top, 4)
@@ -142,10 +157,14 @@ private struct HeroHomePage: View {
             .backgroundPreferenceValue(CoinSourceAnchorKey.self) { anchor in
                 if let anchor, isActive {
                     TimelineView(.periodic(from: .now, by: 1)) { context in
-                        let day = state.liveDay(at: context.date)
+                        let day = state.liveDay(at: WNFClock.displayNow(context.date))
                         HomeCoinDropLayer(
                             day: day,
                             isSettled: state.isTodaySettled,
+                            isOvertimeRunning: {
+                                if case .overtimeRunning = state.clockOutPhase { return true }
+                                return false
+                            }(),
                             sourceFrame: proxy[anchor],
                             pageSize: proxy.size,
                             collisionY: coinCollisionY(in: proxy.size)
@@ -168,7 +187,7 @@ private struct HeroHomePage: View {
         .onChange(of: isActive) { _, nowActive in
             guard nowActive else { return }
             // The page may have missed a status flip while parked off-screen.
-            let current = state.liveDay(at: Date()).status
+            let current = state.liveDay(at: WNFClock.now).status
             if current != displayedStatus {
                 displayedStatus = current
                 quoteEngine.setStatus(current)
@@ -183,7 +202,8 @@ private struct HeroHomePage: View {
             statusChipLabel: statusChipLabel,
             privacyMode: state.privacyMode,
             workStartText: state.workStart.clockText,
-            workEndText: state.workEnd.clockText,
+            workEndText: DateComponents.minuteInDay(state.todayWorkEndMinute).clockText,
+            remainingLabel: remainingLabel(for: day),
             isActive: isActive,
             contentWidth: contentWidth,
             onMoneyLongPress: launchFountain
@@ -191,6 +211,19 @@ private struct HeroHomePage: View {
         .onChange(of: day.status) { _, newStatus in
             displayedStatus = newStatus
             quoteEngine.setStatus(newStatus)
+        }
+    }
+
+    private func remainingLabel(for day: WageDay) -> String {
+        switch state.clockOutPhase {
+        case .overtimeRunning:
+            return "加班剩余 \(WNFFormat.duration(day.wallToEndMinutes))"
+        case .decisionDue, .promptDismissed:
+            return "表已停"
+        case .settled:
+            return "今日已下班"
+        default:
+            return "离下班 \(WNFFormat.duration(day.wallToEndMinutes))"
         }
     }
 
@@ -220,6 +253,7 @@ private struct LiveWageReadout: View {
     var privacyMode: Bool
     var workStartText: String
     var workEndText: String
+    var remainingLabel: String
     var isActive: Bool
     var contentWidth: CGFloat
     var onMoneyLongPress: () -> Void
@@ -273,7 +307,7 @@ private struct LiveWageReadout: View {
             HStack(spacing: 18) {
                 Text("已忍 \(WNFFormat.duration(day.elapsedPaidMinutes))")
                 Circle().fill(WNFTheme.muted).frame(width: 4, height: 4)
-                Text("离下班 \(WNFFormat.duration(day.wallToEndMinutes))")
+                Text(remainingLabel)
             }
             .font(.system(size: 14, weight: .heavy, design: .rounded))
             .foregroundStyle(WNFTheme.inkSoft)
@@ -736,6 +770,7 @@ private struct HomeCoinDropLayer: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var day: WageDay
     var isSettled: Bool
+    var isOvertimeRunning: Bool = false
     var sourceFrame: CGRect
     var pageSize: CGSize
     var collisionY: CGFloat
@@ -758,6 +793,7 @@ private struct HomeCoinDropLayer: View {
 
     private var canEmitCoins: Bool {
         guard !isSettled else { return false }
+        if isOvertimeRunning { return true }
         switch day.status {
         case .morning, .afternoon:
             return true

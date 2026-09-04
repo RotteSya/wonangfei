@@ -12,7 +12,7 @@ enum WNFLiveActivityController {
     // MARK: Lifecycle hooks
 
     /// Bring the activity in line with the current wage state.
-    static func reconcile(state: WageState, now: Date = Date()) {
+    static func reconcile(state: WageState, now: Date = WNFClock.now) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
 
         let dateKey = WNFWidgetDate.dateKey(for: now)
@@ -22,11 +22,21 @@ enum WNFLiveActivityController {
         }
 
         let day = state.liveDay(at: now)
+        let phase = state.clockOutPhase
         let shouldRun: Bool
-        switch day.status {
-        case .morning, .lunch, .afternoon, .done:
+        switch phase {
+        case .offDay:
+            shouldRun = false
+        case .working:
+            switch day.status {
+            case .morning, .lunch, .afternoon, .done:
+                shouldRun = true
+            case .off, .before:
+                shouldRun = false
+            }
+        case .overtimeRunning, .decisionDue, .promptDismissed:
             shouldRun = true
-        case .off, .before:
+        case .settled:
             shouldRun = false
         }
         guard shouldRun else {
@@ -34,7 +44,7 @@ enum WNFLiveActivityController {
             return
         }
 
-        let content = contentState(state: state, day: day, now: now)
+        let content = contentState(state: state, day: day, phase: phase, now: now)
         let stale = staleDate(for: content, now: now)
         Task { await apply(dateKey: dateKey, content: content, staleDate: stale) }
     }
@@ -95,21 +105,47 @@ enum WNFLiveActivityController {
 
     // MARK: State derivation
 
-    private static func contentState(
+    static func contentState(
         state: WageState,
         day: WageDay,
+        phase: ClockOutPhase,
         now: Date
     ) -> WNFLiveActivityAttributes.ContentState {
         let startOfDay = WNFWidgetDate.calendar.startOfDay(for: now)
         let start = WNFWidgetDate.date(on: startOfDay, minute: day.startMinute) ?? now
-        let end = WNFWidgetDate.date(on: startOfDay, minute: day.endMinute) ?? now
+        let normalEnd = WNFWidgetDate.date(on: startOfDay, minute: day.endMinute) ?? now
+
+        let isOvertime: Bool
+        let isDone: Bool
+        let workdayEnd: Date
+        let overtimeEnd: Date?
+        switch phase {
+        case .overtimeRunning(let until, _):
+            isOvertime = true
+            isDone = false
+            workdayEnd = until
+            overtimeEnd = until
+        case .decisionDue, .promptDismissed, .settled:
+            isOvertime = false
+            isDone = true
+            workdayEnd = normalEnd
+            overtimeEnd = nil
+        case .working, .offDay:
+            isOvertime = false
+            isDone = day.status == .done
+            workdayEnd = normalEnd
+            overtimeEnd = nil
+        }
+
         return WNFLiveActivityAttributes.ContentState(
             refDate: now,
             earnedAtRef: day.earnedToday,
             workdayStart: start,
-            workdayEnd: end,
-            isDone: day.status == .done,
-            hidesAmount: state.privacyMode
+            workdayEnd: workdayEnd,
+            isDone: isDone,
+            hidesAmount: state.privacyMode,
+            isOvertime: isOvertime,
+            overtimeEnd: overtimeEnd
         )
     }
 

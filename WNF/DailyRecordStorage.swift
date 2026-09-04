@@ -13,6 +13,9 @@ enum StorageKey {
     static let lunchStartMinute = "wnf.settings.lunchStartMinute"
     static let lunchEndMinute = "wnf.settings.lunchEndMinute"
     static let hasLunchBreak = "wnf.settings.hasLunchBreak"
+    // Legacy preference retained only so older installations can be identified
+    // during diagnostics. The salary engine no longer permits this value to
+    // override the configured work-end boundary.
     static let includeOvertime = "wnf.settings.includeOvertime"
     static let privacyMode = "wnf.settings.privacyMode"
     static let selectedWeekdays = "wnf.settings.selectedWeekdays"

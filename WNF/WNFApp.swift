@@ -49,9 +49,6 @@ struct WNFApp: App {
                 .onChange(of: state.hasLunchBreak) { _, _ in
                     writeWidgetSnapshot()
                 }
-                .onChange(of: state.includeOvertime) { _, _ in
-                    writeWidgetSnapshot()
-                }
                 .onChange(of: state.selectedWeekdays) { _, _ in
                     writeWidgetSnapshot()
                 }
@@ -67,7 +64,6 @@ struct WNFApp: App {
             lunchStartMinute: state.lunchStart.minutesInDay,
             lunchEndMinute: state.lunchEnd.minutesInDay,
             hasLunchBreak: state.hasLunchBreak,
-            includeOvertime: state.includeOvertime,
             selectedWeekdays: state.selectedWeekdays,
             statusLabel: day.status.label,
             hidesSensitiveInfo: state.privacyMode

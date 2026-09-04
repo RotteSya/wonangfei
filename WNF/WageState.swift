@@ -52,13 +52,6 @@ final class WageState: ObservableObject {
         }
     }
 
-    @Published var includeOvertime: Bool {
-        didSet {
-            userDefaults.set(includeOvertime, forKey: StorageKey.includeOvertime)
-            recordCalculationSettingsChanged()
-        }
-    }
-
     @Published var privacyMode: Bool {
         didSet {
             userDefaults.set(privacyMode, forKey: StorageKey.privacyMode)
@@ -142,7 +135,6 @@ final class WageState: ObservableObject {
         lunchStart = DateComponents.minuteInDay(userDefaults.integerValue(forKey: StorageKey.lunchStartMinute) ?? Default.lunchStartMinute)
         lunchEnd = DateComponents.minuteInDay(userDefaults.integerValue(forKey: StorageKey.lunchEndMinute) ?? Default.lunchEndMinute)
         hasLunchBreak = userDefaults.boolValue(forKey: StorageKey.hasLunchBreak) ?? Default.hasLunchBreak
-        includeOvertime = userDefaults.boolValue(forKey: StorageKey.includeOvertime) ?? Default.includeOvertime
         privacyMode = userDefaults.boolValue(forKey: StorageKey.privacyMode) ?? Default.privacyMode
         selectedWeekdays = userDefaults.weekdaySet(forKey: StorageKey.selectedWeekdays) ?? Default.selectedWeekdays
         clockOutReminderEnabled = userDefaults.boolValue(forKey: StorageKey.clockOutReminderEnabled) ?? Default.clockOutReminderEnabled
@@ -207,7 +199,6 @@ final class WageState: ObservableObject {
             lunchStartMinute: lunchStart.minutesInDay,
             lunchEndMinute: lunchEnd.minutesInDay,
             hasLunchBreak: hasLunchBreak,
-            includeOvertime: includeOvertime,
             selectedWeekdays: selectedWeekdays
         )
     }
@@ -221,7 +212,6 @@ final class WageState: ObservableObject {
             lunchStartMinute: lunchStart.minutesInDay,
             lunchEndMinute: lunchEnd.minutesInDay,
             hasLunchBreak: hasLunchBreak,
-            includeOvertime: includeOvertime,
             selectedWeekdays: selectedWeekdays.sorted()
         )
     }
@@ -481,7 +471,7 @@ final class WageState: ObservableObject {
     }
 
     private func calculateWageDay(at date: Date, settings: WageCalculationSettingsSnapshot) -> WageDay {
-        let currentTime = DateComponents.calendar.dateComponents([.hour, .minute, .second], from: date)
+        let currentTime = DateComponents.calendar.dateComponents([.hour, .minute, .second, .nanosecond], from: date)
         return WageCalculator.compute(
             monthlySalary: settings.monthlySalary,
             workdaysPerMonth: settings.workdaysPerMonth,
@@ -490,7 +480,6 @@ final class WageState: ObservableObject {
             lunchStart: settings.lunchStart,
             lunchEnd: settings.lunchEnd,
             hasLunchBreak: settings.hasLunchBreak,
-            includeOvertime: settings.includeOvertime,
             now: currentTime
         )
     }
@@ -524,7 +513,6 @@ final class WageState: ObservableObject {
         userDefaults.set(lunchStart.minutesInDay, forKey: StorageKey.lunchStartMinute)
         userDefaults.set(lunchEnd.minutesInDay, forKey: StorageKey.lunchEndMinute)
         userDefaults.set(hasLunchBreak, forKey: StorageKey.hasLunchBreak)
-        userDefaults.set(includeOvertime, forKey: StorageKey.includeOvertime)
         userDefaults.set(privacyMode, forKey: StorageKey.privacyMode)
         userDefaults.set(selectedWeekdays.sorted(), forKey: StorageKey.selectedWeekdays)
         userDefaults.set(clockOutReminderEnabled, forKey: StorageKey.clockOutReminderEnabled)
@@ -613,7 +601,6 @@ struct WageCalculationSettingsSnapshot: Codable, Equatable {
     var lunchStartMinute: Int
     var lunchEndMinute: Int
     var hasLunchBreak: Bool
-    var includeOvertime: Bool
     var selectedWeekdays: [Int]
 
     init(
@@ -624,7 +611,6 @@ struct WageCalculationSettingsSnapshot: Codable, Equatable {
         lunchStartMinute: Int,
         lunchEndMinute: Int,
         hasLunchBreak: Bool,
-        includeOvertime: Bool,
         selectedWeekdays: Set<Int>
     ) {
         self.monthlySalary = monthlySalary
@@ -634,7 +620,6 @@ struct WageCalculationSettingsSnapshot: Codable, Equatable {
         self.lunchStartMinute = lunchStartMinute
         self.lunchEndMinute = lunchEndMinute
         self.hasLunchBreak = hasLunchBreak
-        self.includeOvertime = includeOvertime
         self.selectedWeekdays = selectedWeekdays
             .filter { (0...6).contains($0) }
             .sorted()
@@ -669,7 +654,6 @@ private struct CalculationFingerprint: Equatable {
     let lunchStartMinute: Int
     let lunchEndMinute: Int
     let hasLunchBreak: Bool
-    let includeOvertime: Bool
     let selectedWeekdays: [Int]
 }
 
@@ -681,7 +665,6 @@ private enum Default {
     static let lunchStartMinute = 12 * 60
     static let lunchEndMinute = 13 * 60
     static let hasLunchBreak = true
-    static let includeOvertime = true
     static let privacyMode = false
     static let selectedWeekdays: Set<Int> = [0, 1, 2, 3, 4]
     static let clockOutReminderEnabled = false

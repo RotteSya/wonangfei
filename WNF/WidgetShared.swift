@@ -261,7 +261,9 @@ extension WNFWidgetSnapshot {
         let endSecond = workEndMinute * 60
         guard nowSecond > startSecond else { return 0 }
 
-        let paidThroughSecond = includeOvertime ? nowSecond : min(nowSecond, endSecond)
+        // `includeOvertime` remains decodable for schema-v2 compatibility, but
+        // it can no longer relax the configured off-duty ceiling.
+        let paidThroughSecond = min(nowSecond, endSecond)
         let rawLunchStart = hasLunchBreak ? min(lunchStartMinute, lunchEndMinute) : workEndMinute
         let rawLunchEnd = hasLunchBreak ? max(lunchStartMinute, lunchEndMinute) : workEndMinute
         let lunchStartSecond = max(startSecond, rawLunchStart * 60)
@@ -366,8 +368,7 @@ enum WNFWidgetTimeline {
     static func projectionEndDate(for snapshot: WNFWidgetSnapshot, now: Date) -> Date {
         guard snapshot.isSelectedWorkday(now) else { return now }
         let startOfDay = WNFWidgetDate.calendar.startOfDay(for: now)
-        let endMinute = snapshot.includeOvertime ? (24 * 60 - 1) : snapshot.workEndMinute
-        return WNFWidgetDate.date(on: startOfDay, minute: endMinute) ?? now
+        return WNFWidgetDate.date(on: startOfDay, minute: snapshot.workEndMinute) ?? now
     }
 
     private static func nextWorkdayReloadDate(

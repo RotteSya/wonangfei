@@ -83,7 +83,6 @@ struct RecordAggregationInput: Equatable {
     var lunchStartMinute: Int
     var lunchEndMinute: Int
     var hasLunchBreak: Bool
-    var includeOvertime: Bool
     var selectedWeekdays: Set<Int>
 
     init(
@@ -98,7 +97,6 @@ struct RecordAggregationInput: Equatable {
         lunchStartMinute: Int,
         lunchEndMinute: Int,
         hasLunchBreak: Bool,
-        includeOvertime: Bool,
         selectedWeekdays: Set<Int>
     ) {
         self.currentDateKey = currentDateKey
@@ -112,7 +110,6 @@ struct RecordAggregationInput: Equatable {
         self.lunchStartMinute = lunchStartMinute
         self.lunchEndMinute = lunchEndMinute
         self.hasLunchBreak = hasLunchBreak
-        self.includeOvertime = includeOvertime
         self.selectedWeekdays = selectedWeekdays
     }
 
@@ -129,7 +126,6 @@ struct RecordAggregationInput: Equatable {
         lunchStartMinute = state.lunchStart.minutesInDay
         lunchEndMinute = state.lunchEnd.minutesInDay
         hasLunchBreak = state.hasLunchBreak
-        includeOvertime = state.includeOvertime
         selectedWeekdays = state.selectedWeekdays
     }
 
@@ -143,7 +139,6 @@ struct RecordAggregationInput: Equatable {
             && lhs.lunchStartMinute == rhs.lunchStartMinute
             && lhs.lunchEndMinute == rhs.lunchEndMinute
             && lhs.hasLunchBreak == rhs.hasLunchBreak
-            && lhs.includeOvertime == rhs.includeOvertime
             && lhs.selectedWeekdays == rhs.selectedWeekdays
     }
 }
@@ -293,7 +288,7 @@ struct RecordAggregationSnapshot {
     }
 
     fileprivate static func liveTodayRecord(input: RecordAggregationInput, now: Date) -> DailyWageRecord {
-        let currentTime = DateComponents.calendar.dateComponents([.hour, .minute, .second], from: now)
+        let currentTime = DateComponents.calendar.dateComponents([.hour, .minute, .second, .nanosecond], from: now)
         let day = WageCalculator.compute(
             monthlySalary: input.monthlySalary,
             workdaysPerMonth: input.workdaysPerMonth,
@@ -302,7 +297,6 @@ struct RecordAggregationSnapshot {
             lunchStart: .minuteInDay(input.lunchStartMinute),
             lunchEnd: .minuteInDay(input.lunchEndMinute),
             hasLunchBreak: input.hasLunchBreak,
-            includeOvertime: input.includeOvertime,
             now: currentTime
         )
         let currentDayStart = WageState.date(fromDateKey: input.currentDateKey)

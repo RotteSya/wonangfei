@@ -104,12 +104,6 @@ struct SettingsView: View {
 
                     clockOutReminderCard
 
-                    SectionCard(title: "其它") {
-                        SettingsRow(title: "计入加班", isLast: true) {
-                            WNFToggle(isOn: $state.includeOvertime)
-                        }
-                    }
-
                     SectionCard(title: "引导") {
                         SettingsRow(title: "重新设置工资/时间", isLast: true) {
                             Button {

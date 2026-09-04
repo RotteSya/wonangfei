@@ -12,7 +12,6 @@ enum WNFWidgetSnapshotWriter {
         lunchStartMinute: Int,
         lunchEndMinute: Int,
         hasLunchBreak: Bool,
-        includeOvertime: Bool,
         selectedWeekdays: Set<Int>,
         statusLabel: String,
         hidesSensitiveInfo: Bool
@@ -29,7 +28,7 @@ enum WNFWidgetSnapshotWriter {
             lunchStartMinute: lunchStartMinute,
             lunchEndMinute: lunchEndMinute,
             hasLunchBreak: hasLunchBreak,
-            includeOvertime: includeOvertime,
+            includeOvertime: false,
             workdayMinutes: day.workdayMinutes,
             earningPerSecond: day.hourlyRate / 3600,
             selectedWeekdays: selectedWeekdays.sorted(),

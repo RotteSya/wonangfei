@@ -5,7 +5,7 @@ import Testing
 struct WageCalculatorTests {
     @Test("上班前金额为 0")
     func beforeWorkEarnsNothing() {
-        let day = sampleDay(now: DateComponents(hour: 8, minute: 30), includeOvertime: false)
+        let day = sampleDay(now: DateComponents(hour: 8, minute: 30))
 
         #expect(day.earnedToday == 0)
         #expect(day.elapsedPaidSeconds == 0)
@@ -13,31 +13,47 @@ struct WageCalculatorTests {
 
     @Test("午休不计薪")
     func lunchBreakIsNotPaid() {
-        let lunchStart = sampleDay(now: DateComponents(hour: 12, minute: 0), includeOvertime: false)
-        let duringLunch = sampleDay(now: DateComponents(hour: 12, minute: 30), includeOvertime: false)
+        let lunchStart = sampleDay(now: DateComponents(hour: 12, minute: 0))
+        let duringLunch = sampleDay(now: DateComponents(hour: 12, minute: 30))
 
         #expect(abs(duringLunch.earnedToday - lunchStart.earnedToday) < 0.001)
         #expect(duringLunch.elapsedPaidSeconds == lunchStart.elapsedPaidSeconds)
     }
 
-    @Test("下班后不计加班时，金额封顶")
-    func afterWorkWithoutOvertimeCapsEarnings() {
-        let atWorkEnd = sampleDay(now: DateComponents(hour: 18, minute: 30), includeOvertime: false)
-        let afterWork = sampleDay(now: DateComponents(hour: 20, minute: 0), includeOvertime: false)
+    @Test("下班后金额在配置边界封顶")
+    func afterWorkCapsEarnings() {
+        let atWorkEnd = sampleDay(now: DateComponents(hour: 18, minute: 30))
+        let afterWork = sampleDay(now: DateComponents(hour: 20, minute: 0))
 
         #expect(abs(afterWork.earnedToday - atWorkEnd.earnedToday) < 0.001)
         #expect(abs(afterWork.earnedToday - afterWork.targetToday) < 0.001)
         #expect(afterWork.progress == 1)
     }
 
-    @Test("下班后计加班时，金额继续增加")
-    func afterWorkWithOvertimeKeepsEarning() {
-        let atWorkEnd = sampleDay(now: DateComponents(hour: 18, minute: 30), includeOvertime: true)
-        let afterWork = sampleDay(now: DateComponents(hour: 20, minute: 0), includeOvertime: true)
+    @Test("下班前一毫秒仍计薪，边界到达后不再增长")
+    func offDutyBoundaryIsExactToTheMillisecond() {
+        let before = sampleDay(now: DateComponents(hour: 18, minute: 29, second: 59, nanosecond: 999_000_000))
+        let atBoundary = sampleDay(now: DateComponents(hour: 18, minute: 30))
+        let after = sampleDay(now: DateComponents(hour: 18, minute: 30, nanosecond: 1_000_000))
 
-        #expect(afterWork.earnedToday > atWorkEnd.earnedToday)
-        #expect(afterWork.earnedToday > afterWork.targetToday)
-        #expect(afterWork.progress == 1)
+        #expect(before.earnedToday < atBoundary.earnedToday)
+        #expect(abs(atBoundary.earnedToday - atBoundary.targetToday) < 0.000_001)
+        #expect(after.earnedToday == atBoundary.earnedToday)
+        #expect(after.elapsedPaidSeconds == atBoundary.elapsedPaidSeconds)
+        #expect(after.status == .done)
+    }
+
+    @Test("休眠跨过下班后重算仍封顶，午夜后新日归零")
+    func delayedWakeAndMidnightUseWallClockBoundaries() {
+        let atBoundary = sampleDay(now: DateComponents(hour: 18, minute: 30))
+        let delayedWake = sampleDay(now: DateComponents(hour: 23, minute: 59, second: 59))
+        let nextMidnight = sampleDay(now: DateComponents(hour: 0, minute: 0))
+
+        #expect(delayedWake.earnedToday == atBoundary.earnedToday)
+        #expect(delayedWake.elapsedPaidSeconds == atBoundary.elapsedPaidSeconds)
+        #expect(nextMidnight.earnedToday == 0)
+        #expect(nextMidnight.elapsedPaidSeconds == 0)
+        #expect(nextMidnight.status == .before)
     }
 
     @Test("下班早于上班时返回零值结果")
@@ -50,7 +66,6 @@ struct WageCalculatorTests {
             lunchStart: .minuteInDay(12 * 60),
             lunchEnd: .minuteInDay(13 * 60),
             hasLunchBreak: true,
-            includeOvertime: true,
             now: DateComponents(hour: 18, minute: 31)
         )
 
@@ -72,7 +87,6 @@ struct WageCalculatorTests {
             lunchStart: .minuteInDay(8 * 60),
             lunchEnd: .minuteInDay(9 * 60),
             hasLunchBreak: true,
-            includeOvertime: false,
             now: DateComponents(hour: 10, minute: 0)
         )
 
@@ -90,7 +104,6 @@ struct WageCalculatorTests {
             lunchStart: .minuteInDay(19 * 60),
             lunchEnd: .minuteInDay(20 * 60),
             hasLunchBreak: true,
-            includeOvertime: false,
             now: DateComponents(hour: 18, minute: 30)
         )
 
@@ -108,7 +121,6 @@ struct WageCalculatorTests {
             lunchStart: .minuteInDay(9 * 60),
             lunchEnd: .minuteInDay(10 * 60),
             hasLunchBreak: true,
-            includeOvertime: false,
             now: DateComponents(hour: 10, minute: 30)
         )
 
@@ -116,7 +128,7 @@ struct WageCalculatorTests {
         #expect(day.elapsedPaidSeconds == 30 * 60)
     }
 
-    private func sampleDay(now: DateComponents, includeOvertime: Bool) -> WageDay {
+    private func sampleDay(now: DateComponents) -> WageDay {
         WageCalculator.compute(
             monthlySalary: 22_000,
             workdaysPerMonth: 22,
@@ -125,10 +137,10 @@ struct WageCalculatorTests {
             lunchStart: .minuteInDay(12 * 60),
             lunchEnd: .minuteInDay(13 * 60),
             hasLunchBreak: true,
-            includeOvertime: includeOvertime,
             now: now
         )
     }
+
 }
 
 @MainActor
@@ -151,7 +163,6 @@ struct WageStateBackfillTests {
                 lunchStartMinute: 12 * 60,
                 lunchEndMinute: 13 * 60,
                 hasLunchBreak: true,
-                includeOvertime: false,
                 selectedWeekdays: Set(0...6)
             )
         )
@@ -268,6 +279,7 @@ struct WageStateSettlementTests {
 
         #expect(state.isTodaySettled == false)
     }
+
 }
 
 struct RecordsAggregationTests {
@@ -492,8 +504,8 @@ struct WidgetProjectionTests {
         #expect(DateComponents.calendar.component(.minute, from: nextStart) == 30)
     }
 
-    @Test("Widget timeline 会封顶较长的加班分钟 entries")
-    func widgetTimelineCapsLongOvertimeWindow() throws {
+    @Test("Widget timeline 会封顶较长的未来分钟 entries")
+    func widgetTimelineCapsLongProjectionWindow() throws {
         let now = try #require(dateOnFixedDay(hour: 10, minute: 0))
         let snapshot = widgetSnapshot(
             hidesSensitiveInfo: false,
@@ -546,6 +558,25 @@ struct WidgetProjectionTests {
         #expect(plan.reloadDate > now)
         #expect(DateComponents.calendar.component(.hour, from: plan.reloadDate) == 9)
         #expect(DateComponents.calendar.component(.minute, from: plan.reloadDate) == 30)
+    }
+
+    @Test("Widget 旧快照的加班字段不能绕过下班上界")
+    func legacyOvertimeFlagCannotBypassWorkEnd() throws {
+        let atWorkEnd = try #require(dateOnFixedDay(hour: 18, minute: 30))
+        let afterWork = try #require(dateOnFixedDay(hour: 22, minute: 0))
+        let snapshot = widgetSnapshot(
+            hidesSensitiveInfo: false,
+            capturedAt: atWorkEnd,
+            earningPerSecond: 1,
+            includeOvertime: true
+        )
+
+        let atBoundary = snapshot.projected(at: atWorkEnd)
+        let afterBoundary = snapshot.projected(at: afterWork)
+
+        #expect(afterBoundary.earnedToday == atBoundary.earnedToday)
+        #expect(afterBoundary.elapsedPaidMinutes == atBoundary.elapsedPaidMinutes)
+        #expect(WNFWidgetTimeline.projectionEndDate(for: snapshot, now: atWorkEnd) == atWorkEnd)
     }
 }
 
@@ -677,7 +708,6 @@ private func aggregationInput(currentDate: Date, selectedWeekdays: Set<Int>) -> 
         lunchStartMinute: 12 * 60,
         lunchEndMinute: 13 * 60,
         hasLunchBreak: true,
-        includeOvertime: false,
         selectedWeekdays: selectedWeekdays
     )
 }

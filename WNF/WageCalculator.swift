@@ -30,7 +30,6 @@ enum WageCalculator {
         lunchStart: DateComponents,
         lunchEnd: DateComponents,
         hasLunchBreak: Bool,
-        includeOvertime: Bool,
         now: DateComponents
     ) -> WageDay {
         let startMinute = workStart.minutesInDay
@@ -39,8 +38,7 @@ enum WageCalculator {
         let rawLunchEnd = hasLunchBreak ? lunchEnd.minutesInDay : endMinute
         let lunchStartMinute = min(rawLunchStart, rawLunchEnd)
         let lunchEndMinute = max(rawLunchStart, rawLunchEnd)
-        let nowSecond = now.secondsInDay
-        let nowMinute = nowSecond / 60
+        let nowSecond = now.preciseSecondsInDay
 
         guard endMinute > startMinute else {
             return WageDay(
@@ -54,7 +52,7 @@ enum WageCalculator {
                 elapsedPaidSeconds: 0,
                 earnedToday: 0,
                 targetToday: 0,
-                status: nowMinute < startMinute ? .before : .done,
+                status: nowSecond < Double(startMinute * 60) ? .before : .done,
                 wallToEndMinutes: 0
             )
         }
@@ -70,30 +68,34 @@ enum WageCalculator {
         let lunchEndSecond = effectiveLunchEndMinute * 60
         let hasEffectiveLunch = lunchEndSecond > lunchStartSecond
 
-        var elapsedSeconds = 0
-        if nowSecond > startSecond {
-            let paidThroughSecond = includeOvertime ? nowSecond : min(nowSecond, endSecond)
-            elapsedSeconds = paidThroughSecond - startSecond
-            let lunchOverlap = hasEffectiveLunch ? max(0, min(paidThroughSecond, lunchEndSecond) - lunchStartSecond) : 0
-            elapsedSeconds = max(0, elapsedSeconds - lunchOverlap)
-        }
+        // The configured work window is the source of truth. `now` is sampled
+        // directly instead of accumulated from timer ticks, then clamped to the
+        // closed interval [start, end]. This makes background suspension, device
+        // sleep, delayed callbacks, and clock jumps incapable of adding time
+        // beyond the exact off-duty boundary.
+        let paidThroughSecond = min(max(nowSecond, Double(startSecond)), Double(endSecond))
+        let lunchOverlap = hasEffectiveLunch
+            ? max(0, min(paidThroughSecond, Double(lunchEndSecond)) - Double(lunchStartSecond))
+            : 0
+        let elapsedPaidDuration = max(0, paidThroughSecond - Double(startSecond) - lunchOverlap)
+        let elapsedSeconds = Int(elapsedPaidDuration.rounded(.down))
 
         let status: WorkStatus
-        if nowMinute < startMinute {
+        if nowSecond < Double(startSecond) {
             status = .before
-        } else if hasEffectiveLunch == false, nowMinute < endMinute {
+        } else if hasEffectiveLunch == false, nowSecond < Double(endSecond) {
             status = .morning
-        } else if nowMinute < effectiveLunchStartMinute {
+        } else if nowSecond < Double(lunchStartSecond) {
             status = .morning
-        } else if nowMinute < effectiveLunchEndMinute {
+        } else if nowSecond < Double(lunchEndSecond) {
             status = .lunch
-        } else if nowMinute < endMinute {
+        } else if nowSecond < Double(endSecond) {
             status = .afternoon
         } else {
             status = .done
         }
 
-        let earnedToday = hourlyRate / 3600 * Double(elapsedSeconds)
+        let earnedToday = hourlyRate / 3600 * elapsedPaidDuration
         let targetToday = hourlyRate / 60 * Double(workdayMinutes)
         return WageDay(
             startMinute: startMinute,
@@ -107,7 +109,7 @@ enum WageCalculator {
             earnedToday: earnedToday,
             targetToday: targetToday,
             status: status,
-            wallToEndMinutes: max(0, Int(ceil(Double(endSecond - nowSecond) / 60)))
+            wallToEndMinutes: max(0, Int(ceil((Double(endSecond) - nowSecond) / 60)))
         )
     }
 }
@@ -134,6 +136,15 @@ extension DateComponents {
 
     var secondsInDay: Int {
         minutesInDay * 60 + (second ?? 0)
+    }
+
+    /// Wall-clock position with sub-second precision. Work times are civil-time
+    /// settings, so the caller first resolves `Date` in the autoupdating local
+    /// calendar; the UTC offset never leaks into the salary boundary math.
+    var preciseSecondsInDay: TimeInterval {
+        let wholeSeconds = TimeInterval(secondsInDay)
+        let fractionalSecond = TimeInterval(nanosecond ?? 0) / 1_000_000_000
+        return wholeSeconds + fractionalSecond
     }
 
     var clockText: String {

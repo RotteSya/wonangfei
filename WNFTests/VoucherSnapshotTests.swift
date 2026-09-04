@@ -89,7 +89,6 @@ final class VoucherSnapshotTests: XCTestCase {
             lunchStart: DateComponents.minuteInDay(12 * 60),
             lunchEnd: DateComponents.minuteInDay(13 * 60),
             hasLunchBreak: true,
-            includeOvertime: false,
             now: DateComponents(hour: 15, minute: 24, second: 30)
         )
 

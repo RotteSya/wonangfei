@@ -3,9 +3,7 @@
 ## Comparison target
 
 - Source visual truth:
-  - Home: `/Users/shelingzhao/.codex/generated_images/01a05092-3791-7850-978f-0361d7f41ea7/exec-32b5acf4-2920-48f6-822c-43727be8a3c6.png`
-  - Records: `/Users/shelingzhao/.codex/generated_images/01a05092-3791-7850-978f-0361d7f41ea7/exec-16b26ba5-1335-4c28-9fed-3b1e24bc28b4.png`
-  - Settings: `/Users/shelingzhao/.codex/generated_images/01a05092-3791-7850-978f-0361d7f41ea7/exec-d9f0cb1e-1965-49f0-a257-751b55a10c09.png`
+  - Home, Records, and Settings: external Codex-generated references retained outside the repository.
 - Final implementation evidence:
   - Home: `build/verification/visual/home-working-final-pass2b.png`
   - Records: `build/verification/visual/test-ui-attachments-pass3/5F45F416-67F0-40C7-B177-6ED5E19B4ADC.png`

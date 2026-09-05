@@ -41,6 +41,7 @@ final class ClockOutFlowUITests: XCTestCase {
 
         let share = appAfterDeadline.buttons["分享卡片"]
         XCTAssertTrue(share.waitForExistence(timeout: 8), "一次下班应进入结算仪式")
+        XCTAssertTrue(appAfterDeadline.buttons["揣兜里"].exists, "结算卡只保留明确的仪式收尾")
 
         let window = appAfterDeadline.windows.firstMatch
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08)).tap()

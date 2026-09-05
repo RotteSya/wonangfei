@@ -368,7 +368,7 @@ final class WageState: ObservableObject {
         rememberObservedSnapshot(now)
         clockOutPhase = derivedClockOutPhase(now: now)
         scheduleClockOutDeadlineTimer(from: now)
-        reconcileOvertimeReminder(deadline: nextRuntime.overtimeEnd)
+        reconcileClockOutReminder()
         Task { @MainActor in
             WNFLiveActivityController.reconcile(state: self, now: now)
         }
@@ -380,7 +380,7 @@ final class WageState: ObservableObject {
         persistDailySnapshot(for: now, capturedAt: now)
         rememberObservedSnapshot(now)
         markTodaySettled()
-        reconcileOvertimeReminder(deadline: nil)
+        reconcileClockOutReminder()
         scheduleClockOutDeadlineTimer(from: now)
     }
 
@@ -731,18 +731,22 @@ final class WageState: ObservableObject {
         let enabled = clockOutReminderEnabled
         let workEnd = workEnd
         let selectedWeekdays = selectedWeekdays
+        let overtimeDeadline: Date?
+        if case .overtimeRunning(let until, _) = clockOutPhase {
+            overtimeDeadline = until
+        } else {
+            overtimeDeadline = nil
+        }
         Task { @MainActor in
             await ClockOutReminderService.shared.reconcile(
                 enabled: enabled,
                 workEnd: workEnd,
                 selectedWeekdays: selectedWeekdays
             )
-        }
-    }
-
-    private func reconcileOvertimeReminder(deadline: Date?) {
-        Task { @MainActor in
-            await ClockOutReminderService.shared.reconcileOvertimeDeadline(deadline)
+            await ClockOutReminderService.shared.reconcileOvertimeDeadline(
+                enabled: enabled,
+                deadline: overtimeDeadline
+            )
         }
     }
 

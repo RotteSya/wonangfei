@@ -16,6 +16,37 @@ struct WNFClockParseTests {
     }
 }
 
+struct ClockOutReminderPolicyTests {
+    @Test("加班提醒同时受 App 开关和截止时间约束")
+    func overtimeDeadlineRequiresEnabledFutureDeadline() throws {
+        let now = try #require(dateOnFixedDay(hour: 19, minute: 0))
+        let future = try #require(dateOnFixedDay(hour: 20, minute: 0))
+        let past = try #require(dateOnFixedDay(hour: 18, minute: 0))
+
+        #expect(
+            ClockOutReminderService.schedulableOvertimeDeadline(
+                enabled: false,
+                deadline: future,
+                now: now
+            ) == nil
+        )
+        #expect(
+            ClockOutReminderService.schedulableOvertimeDeadline(
+                enabled: true,
+                deadline: past,
+                now: now
+            ) == nil
+        )
+        #expect(
+            ClockOutReminderService.schedulableOvertimeDeadline(
+                enabled: true,
+                deadline: future,
+                now: now
+            ) == future
+        )
+    }
+}
+
 struct ClockOutRuntimeEngineTests {
     @Test("同一截止 revision 只自动弹一次，关闭后不再弹")
     func dismissKeepsSameRevisionFromAutoPrompting() throws {

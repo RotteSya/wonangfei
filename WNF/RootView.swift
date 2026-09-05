@@ -321,7 +321,7 @@ struct RootView: View {
                     hidesSensitiveInfo: $settlementHidesSensitiveInfo,
                     isPreparingShare: isPreparingShareActivity,
                     onShare: presentSettlementSystemShare,
-                    onSaveAsAsset: dismissSettlement,
+                    onTearComplete: dismissSettlement,
                     onDismiss: dismissSettlement
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

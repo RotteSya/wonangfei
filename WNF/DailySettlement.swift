@@ -342,7 +342,7 @@ struct DailySettlementOverlay: View {
     @Binding var hidesSensitiveInfo: Bool
     var isPreparingShare: Bool
     var onShare: () -> Void
-    var onSaveAsAsset: () -> Void
+    var onTearComplete: () -> Void
     var onDismiss: () -> Void
 
     @State private var phase: Phase = .prep
@@ -507,11 +507,11 @@ struct DailySettlementOverlay: View {
     private var actionRow: some View {
         HStack(spacing: 12) {
             settlementActionButton(
-                title: "下班！",
-                systemImage: "tray.and.arrow.down.fill",
+                title: "揣兜里",
+                systemImage: "checkmark",
                 style: .primary
             ) {
-                performClockOutTear()
+                performReceiptTear()
             }
 
             settlementActionButton(
@@ -620,7 +620,7 @@ struct DailySettlementOverlay: View {
     }
 
     @MainActor
-    private func performClockOutTear() {
+    private func performReceiptTear() {
         guard phase == .reveal else { return }
 
         let snapshotCard = DailySettlementShareCard(
@@ -636,7 +636,7 @@ struct DailySettlementOverlay: View {
         renderer.scale = UIScreen.main.scale
 
         guard let image = renderer.uiImage else {
-            onSaveAsAsset()
+            onTearComplete()
             return
         }
 
@@ -678,7 +678,7 @@ struct DailySettlementOverlay: View {
             }
 
             try? await sleep(seconds: 0.42)
-            onSaveAsAsset()
+            onTearComplete()
         }
     }
 

@@ -96,9 +96,19 @@ final class ClockOutReminderService {
 
     /// One-shot reminder for the current overtime deadline. Missing notification
     /// permission must not affect in-app stop/decision behavior.
-    func reconcileOvertimeDeadline(_ deadline: Date?) async {
+    func reconcileOvertimeDeadline(
+        enabled: Bool,
+        deadline: Date?,
+        now: Date = Date()
+    ) async {
         center.removePendingNotificationRequests(withIdentifiers: [Self.overtimeNotificationID])
-        guard let deadline, deadline > Date() else { return }
+        guard let deadline = Self.schedulableOvertimeDeadline(
+            enabled: enabled,
+            deadline: deadline,
+            now: now
+        ) else {
+            return
+        }
 
         let status = await currentAuthorizationStatus()
         guard status == .authorized || status == .provisional || status == .ephemeral else {
@@ -111,7 +121,7 @@ final class ClockOutReminderService {
         content.body = "这轮加的班到点了，进来领走。"
         content.sound = .default
 
-        let interval = max(1, deadline.timeIntervalSinceNow)
+        let interval = max(1, deadline.timeIntervalSince(now))
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
         let request = UNNotificationRequest(
             identifier: Self.overtimeNotificationID,
@@ -124,6 +134,15 @@ final class ClockOutReminderService {
         } catch {
             Self.logger.error("Failed to schedule overtime reminder: \(String(describing: error), privacy: .public)")
         }
+    }
+
+    nonisolated static func schedulableOvertimeDeadline(
+        enabled: Bool,
+        deadline: Date?,
+        now: Date
+    ) -> Date? {
+        guard enabled, let deadline, deadline > now else { return nil }
+        return deadline
     }
 
     private func cancelAllClockOutNotifications() async {

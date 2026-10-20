@@ -6,7 +6,8 @@ final class ClockOutFlowUITests: XCTestCase {
     }
 
     func testClockOutDecisionOvertimeAndSettlement() throws {
-        let app = launchClockOutShell(now: "2026-08-17T19:00:00")
+        let stateID = UUID().uuidString
+        let app = launchClockOutShell(now: "2026-08-17T19:00:00", stateID: stateID)
 
         let confirm = app.descendants(matching: .any)["clockout.confirm"].firstMatch
         XCTAssertTrue(confirm.waitForExistence(timeout: 8), "大号下班决策应在截止后出现")
@@ -34,7 +35,7 @@ final class ClockOutFlowUITests: XCTestCase {
         XCTAssertFalse(confirm.exists)
 
         app.terminate()
-        let appAfterDeadline = launchClockOutShell(now: "2026-08-17T20:00:01")
+        let appAfterDeadline = launchClockOutShell(now: "2026-08-17T20:00:01", stateID: stateID)
         let confirmAgain = appAfterDeadline.descendants(matching: .any)["clockout.confirm"].firstMatch
         XCTAssertTrue(confirmAgain.waitForExistence(timeout: 8), "加班截止后应再次出现大号下班决策")
         confirmAgain.tap()

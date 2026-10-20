@@ -1,23 +1,25 @@
 import XCTest
 
 func launchMainShell() -> XCUIApplication {
-    let app = XCUIApplication()
-    app.launchArguments += [
-        "-wnf.onboarding.completed", "1",
-        "-wnf.test.suppressClockOut"
-    ]
-    app.launchEnvironment["WNF_SKIP_ONBOARDING"] = "1"
-    app.launch()
-    skipOnboardingIfNeeded(app)
-    return app
+    launchApp(
+        arguments: ["-wnf.test.suppressClockOut"],
+        stateID: UUID().uuidString
+    )
 }
 
-func launchClockOutShell(now: String) -> XCUIApplication {
+func launchClockOutShell(now: String, stateID: String) -> XCUIApplication {
+    launchApp(
+        arguments: ["-wnf.test.now", now],
+        stateID: stateID
+    )
+}
+
+private func launchApp(arguments: [String], stateID: String) -> XCUIApplication {
     let app = XCUIApplication()
     app.launchArguments += [
         "-wnf.onboarding.completed", "1",
-        "-wnf.test.now", now
-    ]
+        "-wnf.test.stateID", stateID
+    ] + arguments
     app.launchEnvironment["WNF_SKIP_ONBOARDING"] = "1"
     app.launch()
     skipOnboardingIfNeeded(app)

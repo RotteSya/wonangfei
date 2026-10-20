@@ -54,7 +54,7 @@ Usage: ./scripts/wnf <command>
                  selected simulator, 4 targets, tracked scheme). Stops before any build.
   bootstrap      Ensure the selected iOS Simulator exists. Name mode creates it when the
                  runtime is already installed. Id mode only validates that id.
-  static-gate    Tracked-file, plist, metadata, and resource checks used by verify
+  static-gate    Tracked-file, project membership, version, doc link, font, plist, metadata, and resource checks used by verify
   build          Debug App+Widget
   test-unit      WNFTests
   test-ui        WNFUITests
@@ -1097,6 +1097,294 @@ cmd_bootstrap() {
   stage_finish PASS 0
 }
 
+check_project_facts_python() {
+  python3 - "$REPO_ROOT" <<'PY'
+"""Static checks for scripts/wnf. Run against a repo root."""
+import hashlib
+import os
+import re
+import subprocess
+import sys
+
+repo = sys.argv[1]
+errors = []
+
+def err(msg):
+    errors.append(msg)
+
+def parse_pbx(path):
+    lines = open(path, encoding="utf-8").read().splitlines()
+    objects = {}
+    single = re.compile(r"^\t\t([A-F0-9]{24}) /\* .* \*/ = \{(.+)\};$")
+    start = re.compile(r"^\t\t([A-F0-9]{24}) /\* .* \*/ = \{$")
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        one = single.match(line)
+        if one:
+            objects[one.group(1)] = one.group(2)
+            index += 1
+            continue
+        begun = start.match(line)
+        if not begun:
+            index += 1
+            continue
+        oid = begun.group(1)
+        depth = 1
+        body = []
+        index += 1
+        while index < len(lines) and depth > 0:
+            current = lines[index]
+            depth += current.count("{") - current.count("}")
+            if depth > 0:
+                body.append(current)
+            index += 1
+        objects[oid] = "\n".join(body)
+    return objects
+
+def field(body, name):
+    match = re.search(r"\b%s = ([^;]+);" % re.escape(name), body)
+    if not match:
+        return None
+    raw = match.group(1).strip()
+    if raw.startswith('"') and raw.endswith('"'):
+        return raw[1:-1]
+    return raw
+
+def list_ids(body, name):
+    match = re.search(r"\b%s = \((.*?)\);" % re.escape(name), body, re.S)
+    if not match:
+        return []
+    return re.findall(r"([A-F0-9]{24})", match.group(1))
+
+def unquote(value):
+    if value is None:
+        return None
+    value = value.strip()
+    if value.startswith('"') and value.endswith('"'):
+        return value[1:-1]
+    return value
+
+objects = parse_pbx(os.path.join(repo, "WNF.xcodeproj/project.pbxproj"))
+
+parents = {}
+for oid, body in objects.items():
+    if "isa = PBXGroup" not in body and "isa = PBXVariantGroup" not in body:
+        continue
+    for child in list_ids(body, "children"):
+        parents[child] = oid
+
+def group_path(oid):
+    parts = []
+    seen = set()
+    current = oid
+    while current and current not in seen:
+        seen.add(current)
+        body = objects.get(current, "")
+        path = unquote(field(body, "path"))
+        source = unquote(field(body, "sourceTree")) or "<group>"
+        if path and source not in ("BUILT_PRODUCTS_DIR", "SDKROOT", "SOURCE_ROOT"):
+            parts.append(path)
+        if source == "SOURCE_ROOT":
+            break
+        current = parents.get(current)
+    parts.reverse()
+    return os.path.normpath(os.path.join(*parts)) if parts else ""
+
+file_paths = {}
+for oid, body in objects.items():
+    if "isa = PBXFileReference" not in body:
+        continue
+    source = unquote(field(body, "sourceTree")) or "<group>"
+    path = unquote(field(body, "path"))
+    if source == "BUILT_PRODUCTS_DIR" or not path:
+        file_paths[oid] = None
+        continue
+    if source == "SOURCE_ROOT":
+        file_paths[oid] = os.path.normpath(path)
+        continue
+    parent = parents.get(oid)
+    base = group_path(parent) if parent else ""
+    file_paths[oid] = os.path.normpath(os.path.join(base, path)) if base else os.path.normpath(path)
+
+build_files = {}
+for oid, body in objects.items():
+    if "isa = PBXBuildFile" not in body:
+        continue
+    ref = field(body, "fileRef")
+    if ref:
+        build_files[oid] = ref.split()[0]
+
+targets = {}
+for oid, body in objects.items():
+    if "isa = PBXNativeTarget" not in body:
+        continue
+    name = unquote(field(body, "name"))
+    targets[name] = oid
+
+def phase_files(target_name, isa):
+    body = objects[targets[target_name]]
+    paths = []
+    for phase_id in list_ids(body, "buildPhases"):
+        phase = objects[phase_id]
+        if "isa = %s" % isa not in phase:
+            continue
+        for build_id in list_ids(phase, "files"):
+            ref = build_files.get(build_id)
+            paths.append(file_paths.get(ref))
+    return paths
+
+membership = {}
+for target in ("WNF", "WNFWidget", "WNFTests", "WNFUITests"):
+    seen = {}
+    for rel in phase_files(target, "PBXSourcesBuildPhase"):
+        if rel is None:
+            continue
+        seen.setdefault(rel, 0)
+        seen[rel] += 1
+        membership.setdefault(rel, set()).add(target)
+        full = os.path.join(repo, rel)
+        if not os.path.isfile(full):
+            err("missing source %s in %s" % (rel, target))
+    for rel, count in seen.items():
+        if count > 1:
+            err("%s compiles %s %d times" % (target, rel, count))
+    for rel in phase_files(target, "PBXResourcesBuildPhase"):
+        if rel is None:
+            continue
+        full = os.path.join(repo, rel)
+        if not os.path.exists(full):
+            err("missing resource %s in %s" % (rel, target))
+
+tracked = subprocess.check_output(["git", "ls-files", "*.swift", "*.metal"], cwd=repo, text=True).splitlines()
+
+def expected_targets(rel):
+    if rel.startswith("WNFTests/"):
+        return {"WNFTests"}
+    if rel.startswith("WNFUITests/"):
+        return {"WNFUITests"}
+    if rel.startswith("WNFWidget/"):
+        return {"WNFWidget"}
+    if rel == "WNF/WidgetShared.swift":
+        return {"WNF", "WNFWidget"}
+    if rel.startswith("WNF/") and rel.endswith((".swift", ".metal")):
+        return {"WNF"}
+    return None
+
+for rel in tracked:
+    expect = expected_targets(rel)
+    if expect is None:
+        continue
+    got = membership.get(rel, set())
+    if got != expect:
+        err("target membership %s expected %s got %s" % (rel, sorted(expect), sorted(got)))
+
+def version_pair(target_name):
+    body = objects[targets[target_name]]
+    config_list = field(body, "buildConfigurationList").split()[0]
+    pairs = {}
+    for config_id in list_ids(objects[config_list], "buildConfigurations"):
+        config = objects[config_id]
+        name = unquote(field(config, "name"))
+        marketing = unquote(field(config, "MARKETING_VERSION"))
+        build = unquote(field(config, "CURRENT_PROJECT_VERSION"))
+        pairs[name] = (marketing, build)
+    return pairs
+
+app_versions = version_pair("WNF")
+widget_versions = version_pair("WNFWidget")
+if set(app_versions) != {"Debug", "Release"} or set(widget_versions) != {"Debug", "Release"}:
+    err("WNF/WNFWidget configs are %s / %s" % (sorted(app_versions), sorted(widget_versions)))
+else:
+    values = list(app_versions.values()) + list(widget_versions.values())
+    if any(item is None or "" in item or None in item for item in values):
+        err("missing MARKETING_VERSION or CURRENT_PROJECT_VERSION: %s %s" % (app_versions, widget_versions))
+    elif len(set(values)) != 1:
+        err("WNF and WNFWidget Debug/Release versions differ: %s %s" % (app_versions, widget_versions))
+
+def github_anchor(heading):
+    text = heading.strip().lower()
+    text = re.sub(r"[^\w\u4e00-\u9fff\- ]", "", text, flags=re.UNICODE)
+    text = text.replace(" ", "-")
+    return text
+
+def headings(path):
+    found = []
+    for line in open(path, encoding="utf-8"):
+        match = re.match(r"^(#{1,6})\s+(.*)$", line)
+        if match:
+            found.append(github_anchor(match.group(2)))
+    return found
+
+link_re = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
+for doc in ("README.md", "AGENTS.md"):
+    text = open(os.path.join(repo, doc), encoding="utf-8").read()
+    for target in link_re.findall(text):
+        target = target.strip()
+        if target.startswith(("http://", "https://", "mailto:")):
+            continue
+        path_part, _, anchor = target.partition("#")
+        if path_part.startswith("build/") or path_part.startswith("/"):
+            err("%s links to non-repo evidence %s" % (doc, target))
+            continue
+        if not path_part:
+            dest = os.path.join(repo, doc)
+        else:
+            dest = os.path.normpath(os.path.join(repo, os.path.dirname(doc), path_part))
+        if not os.path.exists(dest):
+            err("%s broken link %s" % (doc, target))
+            continue
+        if anchor and os.path.isfile(dest) and dest.endswith(".md"):
+            if github_anchor(anchor) not in headings(dest) and anchor not in headings(dest):
+                err("%s missing anchor %s in %s" % (doc, anchor, path_part or doc))
+    if re.search(r"build/verification/visual/", text):
+        err("%s depends on untracked visual evidence" % doc)
+
+font_hashes = {
+    "WNF/Fonts/ZCOOLQingKeHuangYou-Regular.ttf": None,
+    "WNF/Fonts/JetBrainsMono-Regular.ttf": None,
+    "WNF/Fonts/JetBrainsMono-Bold.ttf": None,
+}
+ack_path = os.path.join(repo, "docs/acknowledgements.html")
+ack = open(ack_path, encoding="utf-8").read()
+for rel in font_hashes:
+    digest = hashlib.sha256(open(os.path.join(repo, rel), "rb").read()).hexdigest()
+    name = os.path.basename(rel)
+    if digest not in ack:
+        err("SHA-256 of %s (%s) is not in docs/acknowledgements.html" % (name, digest))
+
+pages = [
+    "docs/index.html",
+    "docs/privacy.html",
+    "docs/terms.html",
+    "docs/support.html",
+    "docs/acknowledgements.html",
+    "docs/.nojekyll",
+]
+for rel in pages:
+    if not os.path.isfile(os.path.join(repo, rel)):
+        err("missing site file %s" % rel)
+
+href_re = re.compile(r"""href=["']([^"']+)["']""", re.I)
+for rel in pages:
+    if not rel.endswith(".html"):
+        continue
+    text = open(os.path.join(repo, rel), encoding="utf-8").read()
+    for href in href_re.findall(text):
+        if href.startswith(("http://", "https://", "mailto:", "#")):
+            continue
+        dest = os.path.normpath(os.path.join(repo, "docs", href.split("#", 1)[0]))
+        if not os.path.isfile(dest):
+            err("%s broken local link %s" % (rel, href))
+
+if errors:
+    sys.stderr.write("\n".join(errors) + "\n")
+    sys.exit(1)
+print("static extra ok")
+print("sources", len(membership))
+PY
+}
+
 cmd_static_gate() {
   local log="${LOG_DIR}/static-gate.log"
   local rc=0
@@ -1122,6 +1410,8 @@ cmd_static_gate() {
     check_onboarding_images
     printf 'canonical legal HTML + fonts\n'
     check_canonical_files
+    printf 'project membership, versions, doc links, font hashes, site links\n'
+    check_project_facts_python
     printf 'metadata 1.0/1.1/1.2 present (parsed above)\n'
   ) >"$log" 2>&1
   rc=$?

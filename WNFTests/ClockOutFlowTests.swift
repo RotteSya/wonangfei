@@ -3,6 +3,24 @@ import SQLite3
 import Testing
 @testable import WNF
 
+struct WNFUITestIsolationTests {
+    @Test("UI 测试状态号是一段路径安全的标识")
+    func stateIDIsASinglePathToken() {
+        #expect(WNFUITestIsolation.normalizedStateID(from: ["-wnf.test.stateID", "run-1"]) == "run-1")
+        #expect(WNFUITestIsolation.normalizedStateID(from: ["-wnf.test.stateID", "../x"]) == nil)
+        #expect(WNFUITestIsolation.normalizedStateID(from: ["-wnf.test.stateID", "-next"]) == nil)
+        #expect(WNFUITestIsolation.normalizedStateID(from: ["-wnf.test.stateID"]) == nil)
+
+        let url = WNFUITestIsolation.databaseURL(for: "run-1")
+        #expect(url.lastPathComponent == "DailyRecords.sqlite")
+        #expect(url.pathComponents.contains("WNFUITest"))
+        #expect(url.pathComponents.contains("run-1"))
+        let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        #expect(url.path.hasPrefix(root.path))
+    }
+}
+
 struct WNFClockParseTests {
     @Test("测试时钟能解析本地 ISO 时间")
     func parsesLocalISODate() throws {

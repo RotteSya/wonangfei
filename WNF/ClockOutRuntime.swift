@@ -85,6 +85,54 @@ enum WNFClock {
     }
 }
 
+/// UI tests pass `-wnf.test.stateID` so wage settings and daily records stay
+/// out of the standard defaults and the App Group database.
+enum WNFUITestIsolation {
+    static let stateIDArgument = "-wnf.test.stateID"
+
+    struct Resolved {
+        var defaults: UserDefaults
+        var databaseURL: URL?
+    }
+
+    @MainActor
+    static func resolved(fallingBack defaults: UserDefaults) -> Resolved {
+        guard let stateID = normalizedStateID(from: ProcessInfo.processInfo.arguments),
+              let suite = UserDefaults(suiteName: "wnf.uitest.\(stateID)")
+        else {
+            return Resolved(defaults: defaults, databaseURL: nil)
+        }
+        return Resolved(defaults: suite, databaseURL: databaseURL(for: stateID))
+    }
+
+    static func normalizedStateID(from arguments: [String]) -> String? {
+        guard let index = arguments.firstIndex(of: stateIDArgument),
+              arguments.indices.contains(index + 1)
+        else {
+            return nil
+        }
+        let raw = arguments[index + 1]
+        guard (1...64).contains(raw.count), raw.hasPrefix("-") == false else { return nil }
+        let scalars = raw.unicodeScalars
+        let letters = CharacterSet.alphanumerics
+        guard scalars.allSatisfy({ $0.isASCII && (letters.contains($0) || $0 == "-") }),
+              scalars.contains(where: { letters.contains($0) })
+        else {
+            return nil
+        }
+        return raw
+    }
+
+    static func databaseURL(for stateID: String) -> URL {
+        let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        return root
+            .appendingPathComponent("WNFUITest", isDirectory: true)
+            .appendingPathComponent(stateID, isDirectory: true)
+            .appendingPathComponent("DailyRecords.sqlite")
+    }
+}
+
 enum ClockOutRuntimeEngine {
     static let overtimeStep: TimeInterval = 15 * 60
     static let defaultOvertimeDuration: TimeInterval = 60 * 60

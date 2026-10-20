@@ -19,6 +19,19 @@ final class JellyTourUITests: XCTestCase {
         add(attachment)
     }
 
+    private func requireHittable(_ element: XCUIElement, _ message: String, timeout: TimeInterval = 4) {
+        XCTAssertTrue(element.waitForExistence(timeout: timeout), message)
+        XCTAssertTrue(element.isHittable, message)
+    }
+
+    private func waitUntilSelected(_ element: XCUIElement, _ message: String) {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isSelected == true"),
+            object: element
+        )
+        XCTAssertEqual(XCTWaiter().wait(for: [expectation], timeout: 3), .completed, message)
+    }
+
     func testGrandTour() throws {
         let app = launchMainShell()
         let t0 = Date()
@@ -56,29 +69,36 @@ final class JellyTourUITests: XCTestCase {
 
         // 5. Scrub the chart slowly left → right.
         let chart = app.descendants(matching: .any)["records.chart"].firstMatch
-        if chart.waitForExistence(timeout: 4) {
-            mark("chart-scrub", t0)
-            let chartLeft = chart.coordinate(withNormalizedOffset: CGVector(dx: 0.06, dy: 0.5))
-            let chartRight = chart.coordinate(withNormalizedOffset: CGVector(dx: 0.94, dy: 0.5))
-            chartLeft.press(forDuration: 0.1, thenDragTo: chartRight, withVelocity: 160, thenHoldForDuration: 0.2)
-            sleep(1)
-        } else {
-            // The chart may be below the fold on smaller devices.
-            app.swipeUp()
-            mark("chart-scrub-after-scroll", t0)
-            sleep(1)
+        if chart.waitForExistence(timeout: 2) == false || chart.isHittable == false {
+            window.swipeUp()
         }
+        requireHittable(chart, "records chart should be on screen", timeout: 4)
+        mark("chart-scrub", t0)
+        let chartLeft = chart.coordinate(withNormalizedOffset: CGVector(dx: 0.06, dy: 0.5))
+        let chartRight = chart.coordinate(withNormalizedOffset: CGVector(dx: 0.94, dy: 0.5))
+        chartLeft.press(forDuration: 0.1, thenDragTo: chartRight, withVelocity: 160, thenHoldForDuration: 0.2)
+        sleep(1)
 
         // 6. Switch periods: 周 then 年 (bars regrow with stagger).
+        let month = app.buttons["records.period.month"].firstMatch
         let week = app.buttons["records.period.week"].firstMatch
-        if week.waitForExistence(timeout: 3) {
-            mark("period-week", t0)
-            week.tap()
-            sleep(2)
-            mark("period-year", t0)
-            app.buttons["records.period.year"].firstMatch.tap()
-            sleep(2)
+        let year = app.buttons["records.period.year"].firstMatch
+        if week.isHittable == false {
+            window.swipeDown()
         }
+        requireHittable(month, "month period should be on screen")
+        requireHittable(week, "week period should be on screen")
+        requireHittable(year, "year period should be on screen")
+        waitUntilSelected(month, "records should open on the month period")
+        mark("period-week", t0)
+        week.tap()
+        waitUntilSelected(week, "week period should become selected")
+        XCTAssertFalse(month.isSelected)
+        mark("period-year", t0)
+        year.tap()
+        waitUntilSelected(year, "year period should become selected")
+        XCTAssertFalse(week.isSelected)
+        sleep(1)
 
         // 7. The retention layer must remain reachable below the data cards.
         let badges = app.descendants(matching: .any)["records.badges"].firstMatch
@@ -103,31 +123,33 @@ final class JellyTourUITests: XCTestCase {
 
         // 9. Tab-bar taps (pill morph + jelly kick): 记录 → 我的 → 首页.
         let tabRecords = app.buttons["tab.records"].firstMatch
-        XCTAssertTrue(tabRecords.waitForExistence(timeout: 3), "tab bar should exist")
+        let tabSettings = app.buttons["tab.settings"].firstMatch
+        let tabHome = app.buttons["tab.home"].firstMatch
+        requireHittable(tabRecords, "records tab should be hittable", timeout: 3)
+        requireHittable(tabSettings, "settings tab should be hittable", timeout: 3)
+        requireHittable(tabHome, "home tab should be hittable", timeout: 3)
         mark("tab-records", t0)
         tabRecords.tap()
-        sleep(2)
+        requireHittable(app.buttons["records.period.month"].firstMatch, "records period should show after the records tab")
         mark("tab-settings", t0)
-        app.buttons["tab.settings"].firstMatch.tap()
-        sleep(2)
+        tabSettings.tap()
+        let salary = app.staticTexts["月薪 · 税后"].firstMatch
+        XCTAssertTrue(salary.waitForExistence(timeout: 4), "settings should show the salary row")
         mark("tab-home", t0)
-        app.buttons["tab.home"].firstMatch.tap()
-        sleep(2)
+        tabHome.tap()
+        requireHittable(app.descendants(matching: .any)["home.money"].firstMatch, "home amount should show after the home tab")
 
         // 10. Share card genie in/out (regression check for the overlay stack).
         let share = app.buttons["home.share"].firstMatch
-        XCTAssertTrue(share.waitForExistence(timeout: 3))
+        requireHittable(share, "share button should be hittable", timeout: 3)
         mark("share-open", t0)
         share.tap()
-        sleep(3)
-        mark("share-close", t0)
         let cancel = app.buttons["share.cancel"].firstMatch
-        if cancel.waitForExistence(timeout: 2) {
-            cancel.tap()
-        } else {
-            window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.18)).tap()
-        }
-        sleep(2)
+        requireHittable(cancel, "share cancel should be hittable", timeout: 4)
+        mark("share-close", t0)
+        cancel.tap()
+        XCTAssertTrue(cancel.waitForNonExistence(timeout: 4), "share card should close")
+        requireHittable(app.descendants(matching: .any)["home.money"].firstMatch, "home amount should return after share closes")
 
         mark("tour-done", t0)
     }

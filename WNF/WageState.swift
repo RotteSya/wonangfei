@@ -135,8 +135,12 @@ final class WageState: ObservableObject {
     private var liveDayCache: (fingerprint: LiveDayFingerprint, secondBucket: Int, day: WageDay)?
 
     init(userDefaults: UserDefaults = .standard, dailyRecordStore: DailyRecordSQLiteStore? = nil) {
-        self.userDefaults = userDefaults
-        self.dailyRecordStore = dailyRecordStore ?? DailyRecordSQLiteStore(userDefaults: userDefaults)
+        let isolated = WNFUITestIsolation.resolved(fallingBack: userDefaults)
+        self.userDefaults = isolated.defaults
+        self.dailyRecordStore = dailyRecordStore ?? DailyRecordSQLiteStore(
+            userDefaults: isolated.defaults,
+            databaseURL: isolated.databaseURL
+        )
 
         let now = WNFClock.now
         let usesTestClock = WNFClock.isLaunchFrozen

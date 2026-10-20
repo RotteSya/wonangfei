@@ -14,15 +14,27 @@ func launchClockOutShell(now: String, stateID: String) -> XCUIApplication {
     )
 }
 
-private func launchApp(arguments: [String], stateID: String) -> XCUIApplication {
+func launchOnboardingShell(stateID: String) -> XCUIApplication {
+    launchApp(arguments: ["-wnf.test.suppressClockOut"], stateID: stateID, skipsOnboarding: false)
+}
+
+private func launchApp(
+    arguments: [String],
+    stateID: String,
+    skipsOnboarding: Bool = true
+) -> XCUIApplication {
     let app = XCUIApplication()
     app.launchArguments += [
-        "-wnf.onboarding.completed", "1",
         "-wnf.test.stateID", stateID
     ] + arguments
-    app.launchEnvironment["WNF_SKIP_ONBOARDING"] = "1"
+    if skipsOnboarding {
+        app.launchArguments += ["-wnf.onboarding.completed", "1"]
+        app.launchEnvironment["WNF_SKIP_ONBOARDING"] = "1"
+    }
     app.launch()
-    skipOnboardingIfNeeded(app)
+    if skipsOnboarding {
+        skipOnboardingIfNeeded(app)
+    }
     return app
 }
 

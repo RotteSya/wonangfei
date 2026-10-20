@@ -16,7 +16,7 @@
 
 默认模拟器由脚本里的设备名和 runtime 版本派生。`WNF_DESTINATION` 只接受 `./scripts/wnf help` 里的两种形式。`.xcodebuildmcp/config.yaml` 是可选工具配置，不是第二套验证配置。分支前缀：`feat/` 行为，`fix/` 缺陷，`tweak/` 视觉、文案、手感、素材。
 
-UI 测试经 `UITestSupport.launchMainShell()` 传入 `-wnf.onboarding.completed` 跳过引导。每次启动另带一个新的 `-wnf.test.stateID`。
+主流程 UI 测试经 `UITestSupport.launchMainShell()` 传入 `-wnf.onboarding.completed` 跳过引导。每个测试使用独立 `-wnf.test.stateID`，同一测试内验证重启时复用这个 id。首次引导测试不传跳过参数。
 
 ## 事实归谁
 
@@ -122,7 +122,7 @@ L3 要保住这些 identifier：`home.money`、`home.share`、`home.privacy`、`
 
 这些检查各自证明的范围：
 
-- 主流程 UI 测试主动跳过首次引导。
+- 主流程 UI 测试主动跳过首次引导；`testOnboardingCompletionSurvivesIsolatedRestart` 验证首次进入、完成后重启和新会话隔离。
 - `VoucherSnapshotTests` 只确认分享卡能栅格化、方向对，不拿参考图做像素回归。
 - 静止截图不能证明首页视频循环，也不能证明切后台再回来。
 - Widget 和灵动岛的模型测试不等于系统真的画出了那块界面。

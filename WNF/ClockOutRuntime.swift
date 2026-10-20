@@ -96,8 +96,11 @@ enum WNFUITestIsolation {
     }
 
     @MainActor
-    static func resolved(fallingBack defaults: UserDefaults) -> Resolved {
-        guard let stateID = normalizedStateID(from: ProcessInfo.processInfo.arguments),
+    static func resolved(
+        fallingBack defaults: UserDefaults,
+        arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> Resolved {
+        guard let stateID = normalizedStateID(from: arguments),
               let suite = UserDefaults(suiteName: "wnf.uitest.\(stateID)")
         else {
             return Resolved(defaults: defaults, databaseURL: nil)

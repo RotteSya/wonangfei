@@ -8,6 +8,33 @@ final class JellyTourUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testOnboardingCompletionSurvivesIsolatedRestart() throws {
+        let stateID = UUID().uuidString
+        let app = launchOnboardingShell(stateID: stateID)
+        let skip = app.buttons["跳到最后一步"]
+        requireHittable(skip, "a new session should start with onboarding", timeout: 8)
+        skip.tap()
+        let finish = app.buttons["开始使用"]
+        requireHittable(finish, "the last onboarding page should be reachable")
+        finish.tap()
+        let money = app.descendants(matching: .any)["home.money"].firstMatch
+        XCTAssertTrue(money.waitForExistence(timeout: 8))
+        let entranceFinished = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isHittable == true"), object: money
+        )
+        XCTAssertEqual(XCTWaiter().wait(for: [entranceFinished], timeout: 8), .completed)
+        app.terminate()
+
+        let restored = launchOnboardingShell(stateID: stateID)
+        XCTAssertTrue(restored.descendants(matching: .any)["home.money"].firstMatch.waitForExistence(timeout: 8))
+        XCTAssertFalse(restored.buttons["跳到最后一步"].exists)
+        restored.terminate()
+
+        let fresh = launchOnboardingShell(stateID: UUID().uuidString)
+        XCTAssertTrue(fresh.buttons["跳到最后一步"].waitForExistence(timeout: 8))
+        fresh.terminate()
+    }
+
     private func mark(_ label: String, _ start: Date) {
         print("TOUR-MARK \(String(format: "%07.2f", Date().timeIntervalSince(start)))s \(label)")
     }

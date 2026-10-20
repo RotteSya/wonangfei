@@ -134,6 +134,7 @@ if command_name == "store-check":
 
 manifest = {
     "run_id": run_id,
+    "command": command_name,
     "commit": commit,
     "dirty": bool(porcelain.strip()),
     "started_at": now.isoformat(timespec="seconds"),
@@ -200,6 +201,7 @@ manifest_finalize() {
   fi
   python3 - "$MANIFEST" "$rc" <<'PY'
 import json, os, sys
+from datetime import datetime
 
 path, rc_text = sys.argv[1], sys.argv[2]
 rc = int(rc_text)
@@ -213,6 +215,8 @@ if rc != 0 or any(status == "failed" for status in stages.values()):
     data["overall_status"] = "failed"
 else:
     data["overall_status"] = "passed"
+data["exit_code"] = rc
+data["finished_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
 temporary = path + ".tmp"
 with open(temporary, "w", encoding="utf-8") as fh:
     json.dump(data, fh, indent=2, ensure_ascii=False)
@@ -954,6 +958,13 @@ def find_device_id(device_id):
         )
     if found.get("isAvailable") is False or found.get("isUnavailable") is True:
         fail("simulator id %s exists but is unavailable." % device_id)
+    runtime = next(
+        (item for item in simctl_json("list", "runtimes").get("runtimes", [])
+         if item.get("identifier") == runtime_id),
+        None,
+    )
+    if runtime is None or not ios_runtime(runtime) or runtime.get("isAvailable") is not True:
+        fail("simulator id %s must use an available iOS runtime." % device_id)
     return found, runtime_id
 
 if mode == "id":
@@ -1030,7 +1041,7 @@ cmd_doctor() {
     printf 'destination: %s\n' "$DESTINATION"
     printf 'destination mode: %s\n' "$DEST_MODE"
     echo
-    for cmd in git python3 sips xcrun xcodebuild; do
+    for cmd in git python3 sips plutil xcrun xcodebuild; do
       if command -v "$cmd" >/dev/null 2>&1; then
         printf 'command: %s\n' "$cmd"
       else
@@ -1113,49 +1124,17 @@ def err(msg):
     errors.append(msg)
 
 def parse_pbx(path):
-    lines = open(path, encoding="utf-8").read().splitlines()
-    objects = {}
-    single = re.compile(r"^\t\t([A-F0-9]{24}) /\* .* \*/ = \{(.+)\};$")
-    start = re.compile(r"^\t\t([A-F0-9]{24}) /\* .* \*/ = \{$")
-    index = 0
-    while index < len(lines):
-        line = lines[index]
-        one = single.match(line)
-        if one:
-            objects[one.group(1)] = one.group(2)
-            index += 1
-            continue
-        begun = start.match(line)
-        if not begun:
-            index += 1
-            continue
-        oid = begun.group(1)
-        depth = 1
-        body = []
-        index += 1
-        while index < len(lines) and depth > 0:
-            current = lines[index]
-            depth += current.count("{") - current.count("}")
-            if depth > 0:
-                body.append(current)
-            index += 1
-        objects[oid] = "\n".join(body)
-    return objects
+    # Xcode project files are OpenStep plists; use Apple's parser rather than
+    # relying on indentation, UUID spelling, or comments in the serialization.
+    import json
+    payload = subprocess.check_output(["plutil", "-convert", "json", "-o", "-", path])
+    return json.loads(payload)["objects"]
 
 def field(body, name):
-    match = re.search(r"\b%s = ([^;]+);" % re.escape(name), body)
-    if not match:
-        return None
-    raw = match.group(1).strip()
-    if raw.startswith('"') and raw.endswith('"'):
-        return raw[1:-1]
-    return raw
+    return body.get(name, body.get("buildSettings", {}).get(name))
 
 def list_ids(body, name):
-    match = re.search(r"\b%s = \((.*?)\);" % re.escape(name), body, re.S)
-    if not match:
-        return []
-    return re.findall(r"([A-F0-9]{24})", match.group(1))
+    return body.get(name, [])
 
 def unquote(value):
     if value is None:
@@ -1169,7 +1148,7 @@ objects = parse_pbx(os.path.join(repo, "WNF.xcodeproj/project.pbxproj"))
 
 parents = {}
 for oid, body in objects.items():
-    if "isa = PBXGroup" not in body and "isa = PBXVariantGroup" not in body:
+    if body.get("isa") not in ("PBXGroup", "PBXVariantGroup"):
         continue
     for child in list_ids(body, "children"):
         parents[child] = oid
@@ -1180,10 +1159,10 @@ def group_path(oid):
     current = oid
     while current and current not in seen:
         seen.add(current)
-        body = objects.get(current, "")
+        body = objects.get(current, {})
         path = unquote(field(body, "path"))
         source = unquote(field(body, "sourceTree")) or "<group>"
-        if path and source not in ("BUILT_PRODUCTS_DIR", "SDKROOT", "SOURCE_ROOT"):
+        if path and source not in ("BUILT_PRODUCTS_DIR", "SDKROOT"):
             parts.append(path)
         if source == "SOURCE_ROOT":
             break
@@ -1193,7 +1172,7 @@ def group_path(oid):
 
 file_paths = {}
 for oid, body in objects.items():
-    if "isa = PBXFileReference" not in body:
+    if body.get("isa") != "PBXFileReference":
         continue
     source = unquote(field(body, "sourceTree")) or "<group>"
     path = unquote(field(body, "path"))
@@ -1209,7 +1188,7 @@ for oid, body in objects.items():
 
 build_files = {}
 for oid, body in objects.items():
-    if "isa = PBXBuildFile" not in body:
+    if body.get("isa") != "PBXBuildFile":
         continue
     ref = field(body, "fileRef")
     if ref:
@@ -1217,7 +1196,7 @@ for oid, body in objects.items():
 
 targets = {}
 for oid, body in objects.items():
-    if "isa = PBXNativeTarget" not in body:
+    if body.get("isa") != "PBXNativeTarget":
         continue
     name = unquote(field(body, "name"))
     targets[name] = oid
@@ -1227,11 +1206,14 @@ def phase_files(target_name, isa):
     paths = []
     for phase_id in list_ids(body, "buildPhases"):
         phase = objects[phase_id]
-        if "isa = %s" % isa not in phase:
+        if phase.get("isa") != isa:
             continue
         for build_id in list_ids(phase, "files"):
             ref = build_files.get(build_id)
-            paths.append(file_paths.get(ref))
+            rel = file_paths.get(ref)
+            if rel is None:
+                err("unresolved %s file %s in %s" % (isa, build_id, target_name))
+            paths.append(rel)
     return paths
 
 membership = {}
@@ -1256,7 +1238,7 @@ for target in ("WNF", "WNFWidget", "WNFTests", "WNFUITests"):
         if not os.path.exists(full):
             err("missing resource %s in %s" % (rel, target))
 
-tracked = subprocess.check_output(["git", "ls-files", "*.swift", "*.metal"], cwd=repo, text=True).splitlines()
+tracked = subprocess.check_output(["git", "ls-files", "--cached", "--others", "--exclude-standard", "*.swift", "*.metal"], cwd=repo, text=True).splitlines()
 
 def expected_targets(rel):
     if rel.startswith("WNFTests/"):
@@ -1396,6 +1378,7 @@ cmd_static_gate() {
     require_cmd git
     require_cmd python3
     require_cmd sips
+    require_cmd plutil
     require_cmd xcodebuild
     printf 'working tree + committed branch diff hygiene\n'
     git_diff_check
@@ -1510,8 +1493,8 @@ store_check_local() {
 
 cmd_store_check() {
   local log="${LOG_DIR}/store-check.log"
-  local review_dir="${VERIFY_DIR}/store-check/review"
-  local pull_dir="${VERIFY_DIR}/store-check/pull"
+  local review_dir="${RUN_DIR}/store-check/review"
+  local pull_dir="${RUN_DIR}/store-check/pull"
   local rc=0
   ensure_dirs
   mkdir -p "$review_dir" "$pull_dir"
@@ -1566,6 +1549,7 @@ main() {
     printf 'FAIL  missing command: python3\n'
     exit 1
   fi
+  require_cmd git
   resolve_destination
   case "$1" in
     doctor|bootstrap|static-gate|build|test-unit|test-ui|analyze|release-check|verify|store-check)

@@ -9,6 +9,7 @@ struct WNFApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(state)
+                .defaultAppStorage(state.userDefaults)
                 .onChange(of: scenePhase) { _, newPhase in
                     if newPhase == .active {
                         state.resumeCalendarDayTimer()

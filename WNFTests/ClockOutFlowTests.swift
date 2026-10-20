@@ -4,6 +4,36 @@ import Testing
 @testable import WNF
 
 struct WNFUITestIsolationTests {
+    @MainActor
+    @Test("隔离会话从自己的设置读取，重启保留修改且不污染原域")
+    func isolatedSettingsSurviveRestart() throws {
+        let stateID = UUID().uuidString
+        let fallbackName = "wnf.tests.fallback.\(stateID)"
+        let suiteName = "wnf.uitest.\(stateID)"
+        let fallback = try #require(UserDefaults(suiteName: fallbackName))
+        let suite = try #require(UserDefaults(suiteName: suiteName))
+        let database = WNFUITestIsolation.databaseURL(for: stateID)
+        defer {
+            fallback.removePersistentDomain(forName: fallbackName)
+            suite.removePersistentDomain(forName: suiteName)
+            try? FileManager.default.removeItem(at: database.deletingLastPathComponent())
+        }
+        fallback.set(11_000, forKey: StorageKey.monthlySalary)
+        suite.set(23_000, forKey: StorageKey.monthlySalary)
+        let arguments = ["-wnf.test.stateID", stateID]
+        let first = WageState(userDefaults: fallback, launchArguments: arguments)
+        defer { first.pauseCalendarDayTimer() }
+        #expect(first.monthlySalary == 23_000)
+        first.monthlySalary = 31_000
+
+        let restored = WageState(userDefaults: fallback, launchArguments: arguments)
+        defer { restored.pauseCalendarDayTimer() }
+        #expect(restored.monthlySalary == 31_000)
+        #expect(suite.double(forKey: StorageKey.monthlySalary) == 31_000)
+        #expect(fallback.double(forKey: StorageKey.monthlySalary) == 11_000)
+        #expect(FileManager.default.fileExists(atPath: database.path))
+    }
+
     @Test("UI 测试状态号是一段路径安全的标识")
     func stateIDIsASinglePathToken() {
         #expect(WNFUITestIsolation.normalizedStateID(from: ["-wnf.test.stateID", "run-1"]) == "run-1")

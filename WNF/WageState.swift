@@ -134,9 +134,15 @@ final class WageState: ObservableObject {
     private var calculationCache: (fingerprint: CalculationFingerprint, secondBucket: Int, day: WageDay)?
     private var liveDayCache: (fingerprint: LiveDayFingerprint, secondBucket: Int, day: WageDay)?
 
-    init(userDefaults: UserDefaults = .standard, dailyRecordStore: DailyRecordSQLiteStore? = nil) {
-        let isolated = WNFUITestIsolation.resolved(fallingBack: userDefaults)
-        self.userDefaults = isolated.defaults
+    init(
+        userDefaults: UserDefaults = .standard,
+        dailyRecordStore: DailyRecordSQLiteStore? = nil,
+        launchArguments: [String] = ProcessInfo.processInfo.arguments
+    ) {
+        let isolated = WNFUITestIsolation.resolved(fallingBack: userDefaults, arguments: launchArguments)
+        // Read and write the same domain, including when restoring a UI-test session.
+        let userDefaults = isolated.defaults
+        self.userDefaults = userDefaults
         self.dailyRecordStore = dailyRecordStore ?? DailyRecordSQLiteStore(
             userDefaults: isolated.defaults,
             databaseURL: isolated.databaseURL

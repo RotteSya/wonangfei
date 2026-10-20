@@ -19,7 +19,6 @@ func launchClockOutShell(now: String) -> XCUIApplication {
         "-wnf.test.now", now
     ]
     app.launchEnvironment["WNF_SKIP_ONBOARDING"] = "1"
-    app.launchEnvironment["WNF_TEST_NOW"] = now
     app.launch()
     skipOnboardingIfNeeded(app)
     return app

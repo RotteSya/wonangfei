@@ -123,47 +123,6 @@ struct StatusChip: View {
     }
 }
 
-struct MetricTile: View {
-    var label: String
-    var value: String
-    var subtitle: String?
-    var accent: Color = WNFTheme.yellow
-    var big = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(label)
-                    .font(.system(size: 12, weight: .heavy))
-                    .foregroundStyle(WNFTheme.muted)
-                Spacer()
-                Circle()
-                    .fill(accent)
-                    .frame(width: 7, height: 7)
-            }
-
-            Text(value)
-                .font(WNFTheme.mono(big ? 22 : 18))
-                .foregroundStyle(WNFTheme.ink)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-                .contentTransition(.numericText())
-                .animation(.snappy(duration: 0.32), value: value)
-
-            if let subtitle {
-                Text(subtitle)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(WNFTheme.muted)
-                    .lineLimit(1)
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, minHeight: big ? 94 : 84, alignment: .topLeading)
-        .background(WNFTheme.surface, in: RoundedRectangle(cornerRadius: 20))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(WNFTheme.hairline, lineWidth: 0.5))
-    }
-}
-
 struct SectionCard<Content: View>: View {
     var title: String
     @ViewBuilder var content: Content

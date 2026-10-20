@@ -248,13 +248,6 @@ struct SettingsView: View {
         UIApplication.shared.open(url)
     }
 
-    private static func dailyHoursText(paidMinutes: Int) -> String {
-        let hours = Double(paidMinutes) / 60
-        return hours.truncatingRemainder(dividingBy: 1) == 0
-            ? "\(Int(hours))"
-            : String(format: "%.1f", hours)
-    }
-
     private var profileBanner: some View {
         HStack(spacing: 15) {
             Image("HeroMascot")

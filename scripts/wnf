@@ -21,10 +21,13 @@ ASC_APP_ID="6780135826"
 EDITABLE_ASC_VERSION="1.2"
 
 VERIFY_DIR="${REPO_ROOT}/build/verification"
-DERIVED_DATA="${VERIFY_DIR}/DerivedData"
-LOG_DIR="${VERIFY_DIR}/logs"
-RESULT_DIR="${VERIFY_DIR}/results"
-PRODUCTS_DIR="${VERIFY_DIR}/products"
+RUN_ID=""
+RUN_DIR=""
+MANIFEST=""
+DERIVED_DATA=""
+LOG_DIR=""
+RESULT_DIR=""
+PRODUCTS_DIR=""
 
 SWIFT_FLAGS=(
   SWIFT_TREAT_WARNINGS_AS_ERRORS=YES
@@ -67,7 +70,10 @@ Usage: ./scripts/wnf <command>
                    Any other form is an error. The default is iPhone 17 on iOS 26.5.
                    Name and OS overrides are shared by doctor and bootstrap.
 
-Logs and xcresults: build/verification/
+Each command creates build/verification/runs/<run-id>/ with manifest.json,
+logs, results, products, and DerivedData. build/verification/latest points at
+that run, including a failed one. Older runs stay where they are.
+
 A machine that already has the required Xcode components can start this flow
 and see a failing stage immediately. Downloading Xcode, a runtime, or the
 Metal toolchain is separate and is not done by this script.
@@ -90,6 +96,139 @@ ensure_dirs() {
   mkdir -p "$LOG_DIR" "$RESULT_DIR" "$PRODUCTS_DIR" "$DERIVED_DATA"
 }
 
+begin_run() {
+  local command_name="$1"
+  local lines=""
+  lines=$(python3 - "$REPO_ROOT" "$command_name" "$VERIFY_DIR" "$DESTINATION" <<'PY'
+import json, os, subprocess, sys, uuid
+from datetime import datetime
+
+repo, command_name, verify_dir, destination = sys.argv[1:5]
+now = datetime.now().astimezone()
+commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip()
+short = subprocess.check_output(["git", "rev-parse", "--short=12", "HEAD"], cwd=repo, text=True).strip()
+porcelain = subprocess.check_output(["git", "status", "--porcelain"], cwd=repo, text=True)
+try:
+    xcode_raw = subprocess.check_output(["xcodebuild", "-version"], text=True, stderr=subprocess.STDOUT)
+    xcode_version = " ".join(line.strip() for line in xcode_raw.splitlines() if line.strip())
+except (OSError, subprocess.CalledProcessError) as exc:
+    xcode_version = "unavailable (%s)" % exc
+
+run_id = "%s-%s-%s" % (now.strftime("%Y%m%dT%H%M%S%z"), short, uuid.uuid4().hex[:8])
+run_dir = os.path.join(verify_dir, "runs", run_id)
+for name in ("logs", "results", "products", "DerivedData"):
+    os.makedirs(os.path.join(run_dir, name), exist_ok=True)
+
+stages = {
+    "doctor": "not_run",
+    "bootstrap": "not_run",
+    "static-gate": "not_run",
+    "build": "not_run",
+    "test-unit": "not_run",
+    "test-ui": "not_run",
+    "analyze": "not_run",
+    "release-check": "not_run",
+}
+if command_name == "store-check":
+    stages["store-check"] = "not_run"
+
+manifest = {
+    "run_id": run_id,
+    "commit": commit,
+    "dirty": bool(porcelain.strip()),
+    "started_at": now.isoformat(timespec="seconds"),
+    "xcode_version": xcode_version,
+    "destination": destination,
+    "overall_status": "running",
+    "stages": stages,
+}
+manifest_path = os.path.join(run_dir, "manifest.json")
+with open(manifest_path, "w", encoding="utf-8") as fh:
+    json.dump(manifest, fh, indent=2, ensure_ascii=False)
+    fh.write("\n")
+
+latest = os.path.join(verify_dir, "latest")
+if os.path.islink(latest) or not os.path.lexists(latest):
+    if os.path.lexists(latest):
+        os.remove(latest)
+    os.symlink(os.path.join("runs", run_id), latest)
+else:
+    sys.stderr.write("build/verification/latest exists and is not a symlink; left it untouched\n")
+
+print(run_id)
+print(run_dir)
+PY
+)
+  RUN_ID=$(printf '%s\n' "$lines" | sed -n '1p')
+  RUN_DIR=$(printf '%s\n' "$lines" | sed -n '2p')
+  LOG_DIR="${RUN_DIR}/logs"
+  RESULT_DIR="${RUN_DIR}/results"
+  PRODUCTS_DIR="${RUN_DIR}/products"
+  DERIVED_DATA="${RUN_DIR}/DerivedData"
+  MANIFEST="${RUN_DIR}/manifest.json"
+  trap 'on_exit' EXIT
+  printf 'run: %s\n' "$(relpath "$RUN_DIR")"
+}
+
+manifest_mark() {
+  local stage="$1"
+  local status="$2"
+  if [[ -z "$MANIFEST" || ! -f "$MANIFEST" ]]; then
+    return 0
+  fi
+  python3 - "$MANIFEST" "$stage" "$status" <<'PY'
+import json, os, sys
+
+path, stage, status = sys.argv[1:4]
+with open(path, encoding="utf-8") as fh:
+    data = json.load(fh)
+data.setdefault("stages", {})[stage] = status
+if status == "failed":
+    data["overall_status"] = "failed"
+temporary = path + ".tmp"
+with open(temporary, "w", encoding="utf-8") as fh:
+    json.dump(data, fh, indent=2, ensure_ascii=False)
+    fh.write("\n")
+os.replace(temporary, path)
+PY
+}
+
+manifest_finalize() {
+  local rc="$1"
+  if [[ -z "$MANIFEST" || ! -f "$MANIFEST" ]]; then
+    return 0
+  fi
+  python3 - "$MANIFEST" "$rc" <<'PY'
+import json, os, sys
+
+path, rc_text = sys.argv[1], sys.argv[2]
+rc = int(rc_text)
+with open(path, encoding="utf-8") as fh:
+    data = json.load(fh)
+stages = data.setdefault("stages", {})
+for name, status in list(stages.items()):
+    if status == "running":
+        stages[name] = "failed" if rc != 0 else "passed"
+if rc != 0 or any(status == "failed" for status in stages.values()):
+    data["overall_status"] = "failed"
+else:
+    data["overall_status"] = "passed"
+temporary = path + ".tmp"
+with open(temporary, "w", encoding="utf-8") as fh:
+    json.dump(data, fh, indent=2, ensure_ascii=False)
+    fh.write("\n")
+os.replace(temporary, path)
+PY
+}
+
+on_exit() {
+  local rc=$?
+  manifest_finalize "$rc" || true
+  if [[ "$IN_VERIFY" -eq 1 ]]; then
+    print_verify_summary "$rc"
+  fi
+}
+
 append_summary() {
   local name="$1" status="$2" elapsed="$3" bundle="$4"
   local bundle_disp="-"
@@ -100,7 +239,7 @@ append_summary() {
 }
 
 print_verify_summary() {
-  local rc=$?
+  local rc="${1:-$?}"
   local elapsed=0
   if [[ -n "${VERIFY_START:-}" ]]; then
     elapsed=$(( $(now_s) - VERIFY_START ))
@@ -129,6 +268,7 @@ stage_start() {
   if [[ -n "$STAGE_BUNDLE" ]]; then
     printf '    result-bundle: %s\n' "$(relpath "$STAGE_BUNDLE")"
   fi
+  manifest_mark "$STAGE_NAME" "running"
 }
 
 print_diag() {
@@ -163,9 +303,11 @@ stage_finish() {
   printf '%s  %s  %ss  result-bundle: %s\n' "$status" "$STAGE_NAME" "$elapsed" "$bundle_disp"
   append_summary "$STAGE_NAME" "$status" "$elapsed" "$STAGE_BUNDLE"
   if [[ "$status" != PASS ]]; then
+    manifest_mark "$STAGE_NAME" "failed"
     print_diag "$STAGE_LOG"
     exit "$rc"
   fi
+  manifest_mark "$STAGE_NAME" "passed"
 }
 
 fail_stage() {
@@ -1015,7 +1157,6 @@ cmd_verify() {
   IN_VERIFY=1
   VERIFY_START=$(now_s)
   ensure_dirs
-  trap 'print_verify_summary' EXIT
   cmd_doctor
   cmd_bootstrap
   cmd_static_gate
@@ -1109,6 +1250,16 @@ main() {
     exit 1
   fi
   resolve_destination
+  case "$1" in
+    doctor|bootstrap|static-gate|build|test-unit|test-ui|analyze|release-check|verify|store-check)
+      begin_run "$1"
+      ;;
+    *)
+      printf 'unknown command: %s\n\n' "$1"
+      usage
+      exit 2
+      ;;
+  esac
   case "$1" in
     doctor) cmd_doctor ;;
     bootstrap) cmd_bootstrap ;;

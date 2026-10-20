@@ -1,151 +1,144 @@
 # WNF · 窝囊费
 
-## 1. 身份卡
+上班时薪实时滚动的原生 SwiftUI iOS App。已上架 App Store（ASC App ID `6780135826`）。只做 iPhone、竖屏，最低 iOS 17.0。零第三方代码依赖：Apple 框架、系统 SQLite、`WNF/Fonts/` 里三份 OFL 字体。
 
-上班时薪实时滚动的原生 SwiftUI iOS App。已上架 App Store（ASC App ID `6780135826`）。
+交接只看这一份。工程、代码和资源各自拥有事实；`scripts/wnf` 检查它们是否还对得上。某次验证的结果写在那次运行的 `manifest.json`，不写进本文。
 
-| 项 | 值 |
-|---|---|
-| 二进制版本 | 以 `WNF.xcodeproj/project.pbxproj` 的 `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` 为准（当前 1.1 / 2） |
-| 可编辑 ASC 版本 | 1.2（`metadata/version/1.2`） |
-| 工程 | `WNF.xcodeproj` |
-| 已跟踪 scheme | 只有 `WNF`（`WNF.xcodeproj/xcshareddata/xcschemes/WNF.xcscheme`）。`xcodebuild -list` 里可能出现本地自动生成的 `WNFWidget`，不要 check-in |
-| Targets | `WNF` / `WNFWidget` / `WNFTests` / `WNFUITests` |
-| Bundle IDs | `com.wonangfei.app` · `.widget` · `.tests` · `.uitests` |
-| App Group | `group.com.wonangfei.app`（`WNFShared.appGroupID`） |
-| 最低系统 | iOS 17.0；仅 iPhone、仅竖屏（`TARGETED_DEVICE_FAMILY = 1`，`Info.plist` `UISupportedInterfaceOrientations`） |
-| 依赖 | 零第三方代码/包依赖；包含 3 个 OFL 字体二进制。Apple 框架 + 系统 SQLite（`OTHER_LDFLAGS = -lsqlite3`）+ `WNF/Fonts/` 下三份 TTF |
+## 开始工作
 
-文案：短、自嘲、具体（如「再忍忍，钱在涨。」）。禁用「提升效率」「智能洞察」「数据驱动」。分支前缀只有 `feat/`（行为）· `fix/`（缺陷）· `tweak/`（视觉/文案/手感/素材）。色板只活在 `WNFTheme`，不是 CSS。
-
-## 2. 五分钟启动
-
-唯一命令：
+具备所需 Xcode 组件的机器，用下面这一条启动正确流程，并在失败时直接看到是哪一段：
 
 ```sh
 ./scripts/wnf verify
 ```
 
-需要 macOS、Xcode、iOS 26.5 runtime。默认 destination 是 `platform=iOS Simulator,name=iPhone 17,OS=26.5`。失败时先跑 `./scripts/wnf doctor` 看环境含义，不要另写 xcodebuild 菜谱。
+失败先看 `./scripts/wnf doctor`。doctor 会执行 Metal 编译器；缺组件时它停在构建之前，并打印安装命令。脚本不下载 Xcode、runtime 或 Metal toolchain。
 
-UI 测试经 `UITestSupport.launchMainShell()` 传入启动参数 `-wnf.onboarding.completed` 跳过引导，**不必**先在模拟器里点完 Onboarding。
+默认模拟器由脚本里的设备名和 runtime 版本派生。`WNF_DESTINATION` 只接受 `./scripts/wnf help` 里的两种形式。`.xcodebuildmcp/config.yaml` 是可选工具配置，不是第二套验证配置。分支前缀：`feat/` 行为，`fix/` 缺陷，`tweak/` 视觉、文案、手感、素材。
 
-## 3. 权威来源矩阵
+UI 测试经 `UITestSupport.launchMainShell()` 传入 `-wnf.onboarding.completed` 跳过引导。每次启动另带一个新的 `-wnf.test.stateID`。
 
-| 事实 | 唯一所有者 |
+## 事实归谁
+
+| 事实 | 所有者 |
 |---|---|
-| 构建/测试命令 | `scripts/wnf` |
-| targets、版本、bundle ID | `project.pbxproj` |
-| UserDefaults keys | `StorageKey` |
-| 生产默认值 | `Default` in `WageState.swift` |
-| App/Widget schema 与状态 label | `WidgetShared.swift`（`WorkStatus.label`） |
-| 活跃持久化 | `DailyRecordSQLiteStore` |
-| 公共法务内容 | `docs/privacy.html` / `docs/terms.html` / `docs/acknowledgements.html` |
-| 当前 ASC 编辑内容 | `metadata/version/1.2` |
-| 历史 ASC 快照 | `metadata/version/1.0` / `1.1`（远端不可变快照） |
-| 许可 | `docs/acknowledgements.html` |
+| 构建、测试、bootstrap、环境判断 | `scripts/wnf` |
+| target、版本、bundle ID、链接设置 | `WNF.xcodeproj/project.pbxproj` |
+| App 私有持久化键 | `StorageKey` |
+| App Group、Widget 快照键、共享模型 | `WNFShared` / `WidgetShared.swift` |
+| 生产默认值 | `WageState.swift` 的 `Default` |
+| 六个工作状态文案 | `WorkStatus.label` |
+| 迁移与保留策略 | `DailyRecordSQLiteStore` |
+| 首页正在播放的视频 | `HomeMascotVideoClip.all` |
+| 气泡固定文案 | `WorkStatusPresentation.quotes` |
+| 公共法务与字体许可 | `docs/` 里对应 HTML |
+| 当前可编辑商店文案 | `metadata/version/1.2` |
 
-不要把 key 表、月薪默认值或 xcodebuild 菜谱再抄一份到别处。
+已跟踪 scheme 只有 `WNF`。`xcodebuild -list` 可能多一个本地生成的 `WNFWidget`，不要 check-in。历史商店快照留在 `metadata/version/1.0` 和 `1.1`。
 
-## 4. 运行架构
+## 运行架构
 
-`WNFApp` → `WageState` → `RootView`。
+```text
+WNFApp
+  ├─ 持有 WageState，处理 scene 生命周期
+  ├─ RootView → 引导 / 首页 / 记录 / 设置 / 独占结算 overlay
+  └─ 当日快照汇流 → WidgetSnapshotWriter + LiveActivityController
 
-- App 把当日快照写入 App Group 键 `wnf.widget.wage.snapshot.v1`（`WNFWidgetSnapshotWriter` / `WNFShared.widgetSnapshotKey`）；`WNFWidget` 只读，永不回写。Widget 预览用 `WNFWidgetSnapshot.sample`，视图保留 `containerBackground(for: .widget)`。
-- 同一汇流点调用 `WNFLiveActivityController.reconcile` 更新灵动岛。
-- 活跃存储是 App Group SQLite `DailyRecords.sqlite`（`DailyRecordSQLiteStore`）：近 `retainedDailyRecordCount`（400）天每日明细，更早收成月汇总。旧 UserDefaults JSON 只是迁移路径。
-- 跨日：离开 `.active` 时 `WageState.persistCurrentDaySnapshot()`；`currentDate` 前进时 `advanceCalendarDay` 关闭旧日，并按 last-observed 设置补记中间日。
-- `RecordsView` 周/月/年图必须从 `RecordAggregationInput` 聚合，不要写死倍率。
-- `FoundationModels` 只在具备能力的 iOS 26+ 设备上给气泡文案（`BubbleQuoteEngine`）；否则用静态 quotes。不是网络依赖。
+WageState
+  ├─ WageCalculator：工资计算
+  ├─ ClockOutRuntimeEngine：截止、加班、关闭与结算状态
+  ├─ DailyRecordSQLiteStore：明细、月汇总、旧数据迁移
+  └─ ClockOutReminderService：提醒协调
 
-跨 target 唯一共享源：`WNF/WidgetShared.swift`（schema v3 + `WorkStatus` + Live Activity attributes）。Widget 投影截止用 `overtimeEnd`；没有明确加班截止时仍封顶于正常下班时间。
+WNFWidget
+  └─ 只读共享快照，通过 WidgetShared 的规则投影
+```
 
-| 层 | 文件 | 职责 |
+`DailySettlement.swift` 同时有结算模型和 SwiftUI 展示。`RecordsView.swift` 同时有 `RecordAggregationInput` 和记录页；周/月/年图从这里聚合。跨 target 共享源是 `WNF/WidgetShared.swift`。Widget 只读 App Group，投影截止用 `overtimeEnd`；没有明确加班截止时仍封顶于正常下班时间。
+
+气泡文案按 `WorkStatus` 在 `WorkStatusPresentation.quotes` 里本地轮换。下午那组的首句是「我先眯会儿，钱还在涨。」
+
+## 改哪里
+
+| 改动 | 入口 | 接着看 | 验证 |
+|---|---|---|---|
+| 工资、午休、工作日 | `WageCalculator` | `WageState` | `test-unit` |
+| 到点、加班、跨日、结算 | `ClockOutRuntime` / `ClockOutFlow` | `RootView`、`WageState` | `test-unit`，再 `test-ui` |
+| 记录图 | `RecordsView` 里的 `RecordAggregationInput` | 存储层 | `test-unit` |
+| 首页视频 | `HomeMascotVideoClip.all` | `HomeMascotVideoController` | `release-check`，并看循环播放 |
+| Widget / 灵动岛数据 | `WidgetShared.swift` | `WidgetSnapshotWriter`、`WNFLiveActivityController` | `test-unit` |
+| 状态文案或气泡 | `WorkStatus.label` 或 `quotes` | 展示层只读这些表 | `test-unit` |
+| 颜色、圆角、字 | `WNFTheme` | 见下面的色板边界 | `test-ui` |
+| 商店文案 | `metadata/version/1.2` | 不要改 1.0 / 1.1 | `static-gate` |
+
+## 不可破坏的契约
+
+结算：到达当日 `ClockOutRuntimeState.baseWorkEndMinute` 后工资封顶。金额语义不依赖 App 一直活着；记录在 App 再次可执行时，经恢复、`reconcileClockOut()` 和跨日关闭补齐，不承诺进程已经终止时立刻写盘。同一天第一次进入到点状态，首页弹出下班决策（「下班！」「加班…」）。「下班！」立即 `confirmClockOut()`：保存快照并 `markTodaySettled()`，然后播放仪式。撕纸只是视觉收尾。关闭结算卡不撤销结算。「加班…」必须选明确时长，到期再停表并再弹一轮。关掉决策层则保持停表，这一轮不再自动强弹，首页留入口。次日不补弹旧日决策。当天的下班边界以运行快照为准；设置里改默认下班时间，从下一个工作日生效。个人时间态看 `WageState.isTodaySettled`。加班叠在同一基础时薪上，不改 `workdayMinutes` / `targetToday`。
+
+| 规则 | 原因 | 所有者 |
 |---|---|---|
-| 入口 | `WNFApp.swift` → `RootView.swift` | scene / 快照汇流；三页果冻 pager |
-| 状态 | `WageState.swift` | 共享 `ObservableObject`：设置、当日计算、记录、结算旗、`ClockOutPhase` |
-| 领域 | `WageCalculator.swift` · `ClockOutRuntime.swift` · `DailyRecordStorage.swift` · `DailySettlement.swift` | 纯工资数学与加班叠加；下班运行快照；SQLite + 旧 JSON 迁移；结算派生 |
-| 页面 | `HomeView.swift` · `RecordsView.swift` · `SettingsView.swift` · `OnboardingView.swift` · `ClockOutFlow.swift` | 首页 / 记录 / 我的 / 首启引导 / 下班决策与加班时长 |
-| 共享 | `Theme.swift` · `SharedViews.swift` · `WageFormatting.swift` · `WorkStatusPresentation.swift` | token、控件、格式化、quotes / 吉祥物（label 来自 `WorkStatus.label`） |
-| 特效 | `ShaderFX.swift` + `WNFShaders.metal` + `GenieEffect.metal` · `OdometerText.swift` · `PagerShell.swift` | 着色器包装、滑轮数字、pager / 手势仲裁 |
-| 凭证 | `Voucher.swift` · `ShareCard.swift` | 公文票据族、战报卡 genie |
-| 外延 | `WidgetSnapshotWriter.swift` · `LiveActivityController.swift` · `ClockOutReminder.swift` · `Legal.swift` | 快照写入、灵动岛、下班提醒、法务 WebView |
-| 其它 | `HomeMascotVideoSessionCoordinator.swift` · `BubbleQuoteEngine.swift` | 吉祥物视频会话、气泡文案 |
-| Widget | `WNFWidget/WNFWidget.swift` | 只读镜像；gallery 用 sample |
-| 测试 | `WNFTests/` · `WNFUITests/` | 工资/存储/结算/Widget/法务；`JellyTourUITests.testGrandTour` 巡演 |
+| `JellyStretch` 用普通 transform | shader layer effect 栅格化不了首页 `AVPlayerLayer` | `ShaderFX.JellyStretch` |
+| Odometer 传 `maxWidth` | `scaleEffect` 不减少布局宽度，大数字会把 TopBar 尾钮挤出屏 | `OdometerText` |
+| `TopBar` 在页面 `ScrollView` 之外 | scroll 的 delayed-touch 和 pager 手势会吞掉点击 | `HomeView` / `RecordsView` / `SettingsView` |
+| 首页装饰放进 page-sized `.background` 并裁剪 | 过大的同级视图会撑开布局、挤走 TopBar | `HomeView`、`RootView` |
+| `RecordsView` / `BarChart` 预览注入 `HorizontalGestureArbiter()` | 缺了会崩；生产由 `RootView` 注入 | `PagerShell` |
+| `WNFNumberPadSheet.initialText` 在 `.sheet` 内容里取 | 外面捕获的 `@State` 会过期 | `WNFNumberPadSheet` |
+| 常量黄面上的字用 `inkFixed` | `ink` 在深色模式变成奶油，黄底上看不清 | `WNFTheme.inkFixed` |
+| 金币层用 `backgroundPreferenceValue` | 掉落金币要留在进度标签和气泡下面 | `HomeView` |
+| `WNFConversion` 按日历日确定 | 同一天重复渲染必须是同一张凭证 | `WNFConversion` |
+| 公章盖日期和流水号 | 发放凭证不把章盖在金额上 | `DailySettlement` |
+| 分享 spinner 先让一帧刷新 | `ImageRenderer` 仍在主线程同步栅格化 | `RootView.presentSystemShare` |
+| 着色器时钟看 `isActive` 和 Reduce Motion | 离屏页和减少动态效果的用户不空转 | `ShaderFX` |
+| 结算 overlay 只由 RootView 管 | 「下班！」就是 `confirmClockOut()` | `RootView`、`WageState` |
+| 提醒、灵动岛、下班运行态不在 View 里 reconcile | 各自走自己的控制器 | `WageState`、`WNFLiveActivityController` |
+| 六个状态文案只有 `WorkStatus.label` | Widget 样例也用这张表 | `WidgetShared.swift` |
+| 法务页只加载 bundle 内 HTML | 设置里打开的就是本地那份 | `Legal.swift` |
+| Widget 不写 App Group | 快照单向流出 | `WNFWidget` |
+| 到点决策同一 revision 只自动弹一次 | 关掉后首页留入口，不追赶 | `RootView`、`ClockOutPhase` |
 
-## 5. 不可破坏契约
+色板：App 用 `WNFTheme`。Widget 用自己的 `WidgetPalette`。灵动岛用固定的黑金 `LiveActivityPalette`，不跟浅色/深色走。圆角：10–12 控件 / 18 缩略图 / 22 卡片 / 28 hero / 999 胶囊。发丝描边 `WNFTheme.hairline`。功能图标不用 emoji。战报和结算这些纸 overlay 用浅色。首页滑轮用系统圆体；`WNFTheme.display` 给标题和字标，`WNFTheme.mono` 给工资条数字。
 
-结算语义：**到点自动停表并保存记录；大号「下班！」一次完成结算仪式**。到达当日 `ClockOutRuntimeState.baseWorkEndMinute` 后工资封顶、记录写入，不依赖按钮或进程还活着。同一天首次进入到点状态时，首页弹出下班决策（主操作「下班！」，次操作「加班…」）。点「下班！」立即 `confirmClockOut()`（保存快照 + `markTodaySettled()`）并播放金币/盖章/凭证仪式；结算卡上的撕纸只是视觉收尾，关闭结算卡不撤销已结算。点「加班…」必须选明确时长，到期再次停表并再弹一轮。关闭决策层保持停表，当轮不再自动强弹，首页留入口。次日不补弹旧日决策。当日下班边界以运行快照为准，设置页改默认下班时间从下一工作日生效。个人时间态看 `WageState.isTodaySettled`。加班叠在相同基础时薪上，不改 `workdayMinutes` / `targetToday`。
+持久化：`StorageKey` 拥有 App 自己的 UserDefaults 键，包括引导完成键 `wnf.onboarding.completed`。`WNFShared` 拥有 App Group 和 Widget 快照键。启动参数 `-wnf.onboarding.completed`、`-wnf.test.now`、`-wnf.test.suppressClockOut`、`-wnf.test.stateID` 是测试入口。`WNF_SKIP_ONBOARDING` 由 RootView 读取。带了 `-wnf.test.stateID` 时，工资设置进 `wnf.uitest.<id>` 这套 UserDefaults，每日记录进 App 容器里的 `WNFUITest/<id>/DailyRecords.sqlite`。加班那条 UI 测试的两次启动共用同一个 id。
 
-| 约束 | 原因 | 所有者 |
-|---|---|---|
-| `JellyStretch` 是普通 transform，**不是** `distortionEffect` | shader layer effect 无法栅格化首页吉祥物的 `AVPlayerLayer` | `ShaderFX.JellyStretch` |
-| Odometer 必须传 `maxWidth` | `scaleEffect` 只缩小视觉，view 仍声明自然宽度；大数字会撑开 `VStack` 把 TopBar 尾钮挤出屏 | `OdometerText` / `OdometerMoneyText` |
-| `TopBar` 必须在页面 `ScrollView` **之外** | scroll 的 delayed-touch + pager `simultaneousGesture` 会吞掉点击 | `TopBar`（`HomeView` / `RecordsView` / `SettingsView`） |
-| 首页背景/同层装饰的固有尺寸不得超过页面 | 过大的 sibling 会撑大布局、居中内容、挤走 TopBar；装饰放进 `.background` 并 page-sized + clip | `HomeView` · pager `.clipped()`（`RootView`） |
-| 任何 `RecordsView` / `BarChart` 预览必须注入 `HorizontalGestureArbiter()` | 缺了会崩；生产由 `RootView` 注入 | `HorizontalGestureArbiter`（`PagerShell`） |
-| `WNFNumberPadSheet.initialText` 在 `.sheet` 内容里调 provider | 捕获的 `@State` 会 stale | `WNFNumberPadSheet` |
-| 常量黄面上的字用 `inkFixed`，不用 `ink` | `ink` 深色模式翻成奶油，黄底上被冲淡 | `WNFTheme.inkFixed` |
-| 金币层挂 `backgroundPreferenceValue`，不要改回 overlay | 掉落金币不得盖住进度标签和气泡 | `HomeView` |
-| `WNFConversion` 按日历日确定，渲染时不得随机 | 同一天重渲必须同一张凭证 | `WNFConversion` |
-| 公章骑年压月：盖日期/流水号，**永不**盖金额 | 发放凭证的视觉契约 | `DailySettlement` |
-| 分享 spinner 预热是感知反馈，不是渲染并发修复 | `ImageRenderer` 仍在 MainActor 同步栅格化；先让一帧刷新 loading | `RootView.presentSystemShare` |
-| 着色器时钟必须 `isActive` + Reduce Motion 门控 | 离屏 pager 页与 Reduce Motion 用户零帧 | `ShaderFX.GoldShimmer` 等 |
-| 结算由 RootView 独占 overlay | 到点决策或首页入口触发；「下班！」= `confirmClockOut()` | `RootView` · `WageState` |
-| 提醒 / Live Activity / 下班运行态的 reconcile 不进 View | 分别走 `WageState.reconcileClockOutReminder()`、`WNFLiveActivityController.reconcile`、`WageState.reconcileClockOut()` | `ClockOutReminderService` · `WNFLiveActivityController` · `WageState` |
-| 六个工作状态文案只有一张表 | 改文案只改这一处 | `WorkStatus.label`（`WidgetShared.swift`） |
-| 法务页只加载 bundle 内 HTML，无网络回退 | 设置里打开就是本地那份 | `Legal.swift` / `LegalWebNavigationPolicy` |
-| Widget 永不写入 App Group | 单向数据流 | `WNFWidget` |
-| 到点弹下班决策，不追赶 | 同一 revision 只自动弹一次；关闭后首页留入口 | `RootView` · `ClockOutPhase` |
+资源：引导五张图必须 1536×1024 且带 alpha：`OnboardingP1`、`OnboardingP2`、`OnboardingP4`、`OnboardingLunchSleep`、`OnboardingLunchWake`。首页视频集合以 `HomeMascotVideoClip.all` 为准，当前是 `home-typing`。四个 stitchable shader 都有 `ShaderLibrary` 调用：`wnfGoldShimmer`、`wnfPaperGrain`、`wnfMoltenGold`、`genie`。
 
-圆角：10–12 控件 / 18 缩略图 / 22 卡片 / 28 hero / 999 胶囊。发丝描边 `WNFTheme.hairline`。不用 emoji 当功能图标。纸 overlay（战报 genie、结算层）强制浅色。首页滑轮保持系统圆体；`WNFTheme.display` 只标题/字标，`WNFTheme.mono` 走工资条数字。
+升级兼容留着：旧 JSON / recovery / backup 路径、`DailyWageRecord` 缺字段默认值、Widget 旧 schema 和 `includeOvertime`。新装不走这些路径，不能据此删掉。
 
-## 6. 验证与变更矩阵
+引导用 `TabView(.page)`，法务用 `NavigationStack` sheet。记录页顶上的黄色汇总是一整条，不是叠起来的色带。
 
-构建与测试命令的唯一入口是 `scripts/wnf`。不要把「N passed」写进文档或脚本。
+## 验证
 
-| 改动 | 要跑 |
+| 改动 | 命令 |
 |---|---|
-| 任何改动 | `./scripts/wnf build`（Debug） |
-| 状态 / 存储 / 工资数学 / Widget | `./scripts/wnf test-unit`（L2） |
-| 布局 / 手势 / 分享 / tab | `./scripts/wnf test-ui`（L3） |
-| 发布相关、bundle 内容、签名无关的 Release 警告 | `./scripts/wnf release-check` |
-| 交 PR / 交接 | `./scripts/wnf verify`（doctor → bootstrap → 静态门禁 → build → L2 → L3 → analyze → release-check） |
+| 任何改动 | `./scripts/wnf build` |
+| 状态、存储、工资、Widget | `./scripts/wnf test-unit` |
+| 布局、手势、分享、tab | `./scripts/wnf test-ui` |
+| bundle 内容、签名无关的 Release 构建 | `./scripts/wnf release-check` |
+| 交接 | `./scripts/wnf verify` |
 
-L3 依赖这些 a11y identifier，重构必须保留：`home.money` · `home.share` · `home.privacy` · `tab.home` / `tab.records` / `tab.settings` · `records.period.week|month|year` · `records.chart` · `share.cancel` · `settings.legal.privacy` / `settings.legal.terms` · `clockout.overlay` / `clockout.confirm` / `clockout.overtime` / `clockout.dismiss` · `overtime.duration` / `overtime.confirm` / `overtime.cancel`。`JellyTourUITests.testGrandTour` 兼布局护栏（TopBar 被挤出屏会 off-screen 失败）。`VoucherSnapshotTests` 是 render-smoke，不是参考图回归。
+每次运行写入 `build/verification/runs/<run-id>/`。`build/verification/latest` 指向最近一次，失败也指向它。后面没跑到的阶段在 manifest 里是 `not_run`。`./scripts/wnf store-check` 只读核对商店元数据，不在 `verify` 里面，也不做 apply、submit 或远端删除。
 
-`./scripts/wnf store-check` 是可选的只读 ASC 核对，**不**计入 `verify`。
+L3 要保住这些 identifier：`home.money`、`home.share`、`home.privacy`、`tab.home`、`tab.records`、`tab.settings`、`records.period.week`、`records.period.month`、`records.period.year`、`records.chart`、`share.cancel`、`settings.legal.privacy`、`settings.legal.terms`、`clockout.overlay`、`clockout.confirm`、`clockout.overtime`、`clockout.dismiss`、`overtime.duration`、`overtime.confirm`、`overtime.cancel`。`JellyTourUITests.testGrandTour` 同时看守 TopBar 还在屏内。
 
-## 7. 发布边界
+这些检查各自证明的范围：
 
-- ASC App ID `6780135826`；可编辑版本 1.2。不要把 `appInfoId` 写死进仓库（现场有两个 live ID，用时动态解析）。
-- 公共 URL（ASC 已提交，**不可随意改**）：<https://rottesya.github.io/wonangfei/> · `/privacy.html` · `/support.html`
-- 截图：`store/screenshots/`（规范 6.9" 竖屏 1320×2868 成套；不要把 `framed/` 当规范源）
-- 元数据 diff 用 `asc metadata pull` / `plan`；cleanup / handover **禁止** `apply`、submit、远端删除
-- 支持邮箱 `raysyadesu@gmail.com`；版权 © 2026 SHE LINGZHAO
-- App 名「窝囊费」（不要加长成「窝囊费 - 上班实时数钱」）；副标题 `上班实时数钱，摸鱼也在回血`
-- 关键词不要重复 App 名或副标题里已有的词
-- 分级 4+ · 财务（`LSApplicationCategoryType` = `public.app-category.finance`）
-- `metadata/version/1.0` 与 `1.1` 是已 `READY_FOR_DISTRIBUTION` 的快照，留下；商店文案只能改 1.2
+- 主流程 UI 测试主动跳过首次引导。
+- `VoucherSnapshotTests` 只确认分享卡能栅格化、方向对，不拿参考图做像素回归。
+- 静止截图不能证明首页视频循环，也不能证明切后台再回来。
+- Widget 和灵动岛的模型测试不等于系统真的画出了那块界面。
+- 默认巡演是一台模拟器上的一条路径。
 
-## 8. 资产与许可
+## 发布与许可
 
-Asset Catalog 用 **imageset 名** 引用，不是 PNG 文件名。引导五张必须 1536×1024 + alpha：`OnboardingP1` · `OnboardingP2` · `OnboardingP4` · `OnboardingLunchSleep` · `OnboardingLunchWake`。白矩形 = alpha 丢了；软光晕是预期。
+可编辑版本是 `metadata/version/1.2`。不要把 `appInfoId` 写进仓库。公共 URL 已提交：<https://rottesya.github.io/wonangfei/>、`/privacy.html`、`/support.html`。截图规范源是 `store/screenshots/` 的 6.9 寸竖屏 1320×2868。支持邮箱 `raysyadesu@gmail.com`。版权 © 2026 SHE LINGZHAO。App 名「窝囊费」。副标题 `上班实时数钱，摸鱼也在回血`。关键词不要重复这个名字或副标题里已经有的词。分级 4+，类别 `public.app-category.finance`。
 
-首页视频以 `HomeMascotVideoClip.all` 为准，当前是 `home-typing.mov`。它已经是 HEVC。剩下的是码率优化，退出标准在技术债里。
+字体许可和 SHA-256 在 `docs/acknowledgements.html`。`WNFTheme.display` 是站酷庆科黄油体，`WNFTheme.mono` 是 JetBrains Mono。
 
-字体：`WNFTheme.display` = 站酷庆科黄油体（标题）；`WNFTheme.mono` = JetBrains Mono（工资条数字）。SHA-256 与 OFL 全文在 `docs/acknowledgements.html`。
+## 还没做完
 
-四个 stitchable shader 全活：`wnfGoldShimmer` / `wnfPaperGrain` / `wnfMoltenGold`（`WNFShaders.metal`）+ `genie`（`GenieEffect.metal`）。Swift 侧 `ShaderLibrary.<name>(…)`。不要把每个调用点再列一遍。
-
-## 9. 已接受技术债
-
-只留未完成项，且带退出标准。
-
-- **ZCOOL subsetting**：全字形 TTF ~8.3MB，撑大 IPA。退出：可重复的 glyph corpus、动态白名单、许可文本保留、有视觉回归。
-- **视频码率**：首页 `home-typing.mov` 码率偏高，撑大安装包。退出：6 或 8 Mbps 的无音轨 `hvc1`，时长、帧率、尺寸不变，loop/seek 正常，SSIM≥0.98，单文件≤15MB，Release 模拟器 bundle ≤62MB。达不到就留原片。
-- **Git 历史包**约 188MB（已删的 `assets/`、`HomeSprite.mov`、旧 mp4）。未经所有者批准不要改写历史，不是一句 `git filter-repo` 的事。
-- **无 CI**：验证就是 `./scripts/wnf verify`。
-- Live Activity UI 是方案无关的黑金工牌（`WNFLiveActivity` / `LiveActivityPalette`），不要让它跟 light/dark。
-- 引导 `TabView(.page)` 与法务 `NavigationStack` sheet：已接受的 stock。
+| 问题 | 影响 | 退出标准 |
+|---|---|---|
+| 站酷字体是全字形 TTF | IPA 被字库撑大 | 可重复的 glyph corpus、动态白名单、许可文本还在、有视觉回归 |
+| 首页视频码率高 | 安装包偏大 | 6 或 8 Mbps 的无音轨 `hvc1`，时长、帧率、尺寸不变，循环和 seek 正常，SSIM≥0.98，单文件≤15MB，Release 模拟器 bundle ≤62MB。达不到就留原片 |
+| Git 历史里留着已删的大资源 | 完整克隆比当前工作树大 | 所有者批准后才能改写历史 |
+| 没有 CI | 验证靠本机 `./scripts/wnf verify` | 有一条和这个脚本等价的远端流水线 |

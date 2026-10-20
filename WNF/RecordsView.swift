@@ -769,7 +769,8 @@ private struct PeriodSwitcher: View {
 }
 
 /// The big ¥ watermark on the hero card, breathing almost imperceptibly so
-/// the card feels alive even when the totals aren't changing.
+/// the card feels alive even when the totals aren't changing. It hangs over
+/// the year segment, so hit testing stays off.
 private struct BreathingWatermark: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var swollen = false
@@ -786,6 +787,7 @@ private struct BreathingWatermark: View {
                     swollen = true
                 }
             }
+            .allowsHitTesting(false)
             .accessibilityHidden(true)
     }
 }

@@ -24,12 +24,8 @@ final class JellyTourUITests: XCTestCase {
         XCTAssertTrue(element.isHittable, message)
     }
 
-    private func waitUntilSelected(_ element: XCUIElement, _ message: String) {
-        let expectation = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "isSelected == true"),
-            object: element
-        )
-        XCTAssertEqual(XCTWaiter().wait(for: [expectation], timeout: 3), .completed, message)
+    private func requireText(_ app: XCUIApplication, _ text: String, _ message: String) {
+        XCTAssertTrue(app.staticTexts[text].firstMatch.waitForExistence(timeout: 3), message)
     }
 
     func testGrandTour() throws {
@@ -89,15 +85,15 @@ final class JellyTourUITests: XCTestCase {
         requireHittable(month, "month period should be on screen")
         requireHittable(week, "week period should be on screen")
         requireHittable(year, "year period should be on screen")
-        waitUntilSelected(month, "records should open on the month period")
+        requireText(app, "本月窝囊费", "records should open on the month total")
         mark("period-week", t0)
         week.tap()
-        waitUntilSelected(week, "week period should become selected")
-        XCTAssertFalse(month.isSelected)
+        requireText(app, "本周窝囊费", "week period should show the week total")
+        XCTAssertFalse(app.staticTexts["本月窝囊费"].firstMatch.exists)
         mark("period-year", t0)
         year.tap()
-        waitUntilSelected(year, "year period should become selected")
-        XCTAssertFalse(week.isSelected)
+        requireText(app, "本年窝囊费", "year period should show the year total")
+        XCTAssertFalse(app.staticTexts["本周窝囊费"].firstMatch.exists)
         sleep(1)
 
         // 7. The retention layer must remain reachable below the data cards.
@@ -148,8 +144,22 @@ final class JellyTourUITests: XCTestCase {
         requireHittable(cancel, "share cancel should be hittable", timeout: 4)
         mark("share-close", t0)
         cancel.tap()
-        XCTAssertTrue(cancel.waitForNonExistence(timeout: 4), "share card should close")
-        requireHittable(app.descendants(matching: .any)["home.money"].firstMatch, "home amount should return after share closes")
+        // The panel stays mounted and slides off. Closed means it no longer
+        // takes taps, and the home amount does.
+        let homeAmount = app.descendants(matching: .any)["home.money"].firstMatch
+        let cardClosed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isHittable == false"),
+            object: cancel
+        )
+        let homeReturned = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isHittable == true"),
+            object: homeAmount
+        )
+        XCTAssertEqual(
+            XCTWaiter().wait(for: [cardClosed, homeReturned], timeout: 4),
+            .completed,
+            "share card should close"
+        )
 
         mark("tour-done", t0)
     }

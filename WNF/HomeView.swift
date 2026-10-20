@@ -77,13 +77,12 @@ private struct HeroHomePage: View {
         return false
     }
 
-    /// Height of the transparent margin baked into the bottom of the home
-    /// mascot video asset (the cow art does not reach the frame's bottom edge).
-    /// This is a property of the asset, not the device. Measured precisely by
-    /// walking the alpha channel up from the bottom of a sampled 1080×1080
-    /// frame: both `home-typing.mov` and `home-bored.mov` have a 77 px
-    /// transparent bottom margin → 77 × (285 / 1080) ≈ 20pt when aspect-fit
-    /// into the 285pt mascot stage. If the assets change, re-measure and update.
+    /// Height of the transparent margin baked into the bottom of `home-typing.mov`
+    /// (the cow art does not reach the frame's bottom edge).
+    /// This is a property of the asset, not the device. Measured by walking
+    /// the alpha channel up from the bottom of a sampled 1080×1080 frame:
+    /// 77 px of transparent bottom margin → 77 × (285 / 1080) ≈ 20pt when
+    /// aspect-fit into the 285pt mascot stage. Re-measure if the asset changes.
     private static let mascotAssetBottomInset: CGFloat = 20
 
     /// Padding that plants the cow's visible feet exactly on the tab bar's top

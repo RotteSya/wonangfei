@@ -133,7 +133,7 @@ L3 依赖这些 a11y identifier，重构必须保留：`home.money` · `home.sha
 
 Asset Catalog 用 **imageset 名** 引用，不是 PNG 文件名。引导五张必须 1536×1024 + alpha：`OnboardingP1` · `OnboardingP2` · `OnboardingP4` · `OnboardingLunchSleep` · `OnboardingLunchWake`。白矩形 = alpha 丢了；软光晕是预期。
 
-吉祥物视频 `home-typing.mov` / `home-bored.mov`：已经是 HEVC Main、1080×1080、30fps、约 15s、约 16 Mbps。剩下的是码率优化 + 视觉门禁，**不是**「转成 HEVC」。
+首页视频以 `HomeMascotVideoClip.all` 为准，当前是 `home-typing.mov`。它已经是 HEVC。剩下的是码率优化，退出标准在技术债里。
 
 字体：`WNFTheme.display` = 站酷庆科黄油体（标题）；`WNFTheme.mono` = JetBrains Mono（工资条数字）。SHA-256 与 OFL 全文在 `docs/acknowledgements.html`。
 
@@ -144,7 +144,7 @@ Asset Catalog 用 **imageset 名** 引用，不是 PNG 文件名。引导五张�
 只留未完成项，且带退出标准。
 
 - **ZCOOL subsetting**：全字形 TTF ~8.3MB，撑大 IPA。退出：可重复的 glyph corpus、动态白名单、许可文本保留、有视觉回归。
-- **视频码率**：两份 HEVC 合计约 59MB（约 16 Mbps），IPA 约 88MB。退出：6 或 8 Mbps 的 `hvc1` 无音轨，时长/帧率/尺寸不变，loop/seek 正常，SSIM≥0.98，单文件≤15MB，Release 模拟器 bundle ≤62MB；达不到就留原片。
+- **视频码率**：首页 `home-typing.mov` 码率偏高，撑大安装包。退出：6 或 8 Mbps 的无音轨 `hvc1`，时长、帧率、尺寸不变，loop/seek 正常，SSIM≥0.98，单文件≤15MB，Release 模拟器 bundle ≤62MB。达不到就留原片。
 - **Git 历史包**约 188MB（已删的 `assets/`、`HomeSprite.mov`、旧 mp4）。未经所有者批准不要改写历史，不是一句 `git filter-repo` 的事。
 - **无 CI**：验证就是 `./scripts/wnf verify`。
 - Live Activity UI 是方案无关的黑金工牌（`WNFLiveActivity` / `LiveActivityPalette`），不要让它跟 light/dark。

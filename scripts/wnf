@@ -721,17 +721,6 @@ find_release_app() {
   return 1
 }
 
-bundle_has() {
-  local app="$1"
-  local name="$2"
-  if [[ -e "${app}/${name}" ]]; then
-    return 0
-  fi
-  local hit=""
-  hit=$(find "$app" -name "$name" -print 2>/dev/null | sed -n '1p')
-  [[ -n "$hit" ]]
-}
-
 audit_release_bundle() {
   local app="$1"
   local missing=0
@@ -740,36 +729,40 @@ audit_release_bundle() {
     printf 'Release .app not found: %s\n' "$app"
     return 1
   fi
+  # Bundle.main.url(forResource:) and UIAppFonts resolve these at the app root.
   for name in \
     ZCOOLQingKeHuangYou-Regular.ttf \
     JetBrainsMono-Regular.ttf \
     JetBrainsMono-Bold.ttf \
     home-typing.mov \
-    home-bored.mov \
     privacy.html \
     terms.html \
     acknowledgements.html \
     PrivacyInfo.xcprivacy
   do
-    if ! bundle_has "$app" "$name"; then
-      printf 'bundle missing %s\n' "$name"
+    if [[ ! -f "${app}/${name}" ]]; then
+      printf 'app root missing %s\n' "$name"
       missing=1
     fi
   done
+  local bored=""
+  bored=$(find "$app" -name 'home-bored.mov' -print 2>/dev/null | sed -n '1p')
+  if [[ -n "$bored" ]]; then
+    printf 'bundle still contains home-bored.mov: %s\n' "$bored"
+    missing=1
+  fi
   if [[ ! -d "${app}/PlugIns/WNFWidget.appex" ]]; then
     printf 'bundle missing PlugIns/WNFWidget.appex\n'
     missing=1
   fi
   local metallib=""
-  metallib=$(find "$app" -name '*.metallib' -print 2>/dev/null | sed -n '1p')
+  metallib=$(find "$app" -maxdepth 1 -name '*.metallib' -print 2>/dev/null | sed -n '1p')
   if [[ -z "$metallib" ]]; then
-    printf 'bundle missing metallib\n'
+    printf 'app root missing metallib\n'
     missing=1
   fi
   for name in privacy.html terms.html acknowledgements.html; do
     if [[ ! -f "${app}/${name}" ]]; then
-      printf 'bundle %s not at app root (needed for cmp)\n' "$name"
-      missing=1
       continue
     fi
     if ! cmp -s "${app}/${name}" "${REPO_ROOT}/docs/${name}"; then
@@ -777,6 +770,40 @@ audit_release_bundle() {
       missing=1
     fi
   done
+  python3 - "$app" <<'PY'
+import os
+import sys
+
+app = sys.argv[1]
+names = [
+    "ZCOOLQingKeHuangYou-Regular.ttf",
+    "JetBrainsMono-Regular.ttf",
+    "JetBrainsMono-Bold.ttf",
+    "home-typing.mov",
+    "privacy.html",
+    "terms.html",
+    "acknowledgements.html",
+    "PrivacyInfo.xcprivacy",
+]
+print("resource bytes:")
+for name in names:
+    path = os.path.join(app, name)
+    if os.path.isfile(path):
+        print("  %s %d" % (name, os.path.getsize(path)))
+for name in sorted(os.listdir(app)):
+    if name.endswith(".metallib"):
+        print("  %s %d" % (name, os.path.getsize(os.path.join(app, name))))
+total = 0
+for root, _dirs, files in os.walk(app):
+    for filename in files:
+        path = os.path.join(root, filename)
+        try:
+            total += os.path.getsize(path)
+        except OSError:
+            pass
+print("simulator app file bytes: %d" % total)
+print("simulator .app file bytes are not an IPA size")
+PY
   return "$missing"
 }
 

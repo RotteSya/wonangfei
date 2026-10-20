@@ -1,4 +1,3 @@
-import AppIntents
 import OSLog
 import SwiftUI
 import UIKit
@@ -30,46 +29,50 @@ private extension UIColor {
     }
 }
 
-struct WNFWidgetConfigurationIntent: WidgetConfigurationIntent {
-    static var title: LocalizedStringResource { "窝囊费小组件" }
-    static var description: IntentDescription { IntentDescription("显示今日窝囊费。") }
-}
-
 private struct WNFWidgetEntry: TimelineEntry {
     var date: Date
     var snapshot: WNFWidgetSnapshot
     var isPreview: Bool
+    var hasData = true
 }
 
-private struct WNFWidgetProvider: AppIntentTimelineProvider {
+private struct WNFWidgetProvider: TimelineProvider {
     private let logger = Logger(subsystem: "com.wonangfei.app.widget", category: "snapshot")
 
     func placeholder(in context: Context) -> WNFWidgetEntry {
         WNFWidgetEntry(date: Date(), snapshot: .sample, isPreview: true)
     }
 
-    func snapshot(for configuration: WNFWidgetConfigurationIntent, in context: Context) async -> WNFWidgetEntry {
-        WNFWidgetEntry(
+    func getSnapshot(in context: Context, completion: @escaping (WNFWidgetEntry) -> Void) {
+        let snapshot = context.isPreview ? WNFWidgetSnapshot.sample : loadSnapshot()
+        completion(WNFWidgetEntry(
             date: Date(),
-            snapshot: context.isPreview ? .sample : loadSnapshot() ?? .sample,
-            isPreview: context.isPreview
-        )
+            snapshot: snapshot ?? .sample,
+            isPreview: context.isPreview,
+            hasData: snapshot != nil
+        ))
     }
 
-    func timeline(for configuration: WNFWidgetConfigurationIntent, in context: Context) async -> Timeline<WNFWidgetEntry> {
-        let snapshot = context.isPreview ? WNFWidgetSnapshot.sample : loadSnapshot() ?? .sample
+    func getTimeline(in context: Context, completion: @escaping (Timeline<WNFWidgetEntry>) -> Void) {
         let now = Date()
+        guard let snapshot = context.isPreview ? WNFWidgetSnapshot.sample : loadSnapshot() else {
+            completion(Timeline(
+                entries: [WNFWidgetEntry(date: now, snapshot: .sample, isPreview: false, hasData: false)],
+                policy: .after(now.addingTimeInterval(15 * 60))
+            ))
+            return
+        }
         let plan = WNFWidgetTimeline.plan(for: snapshot, now: now, isPreview: context.isPreview)
         let entries = plan.entryDates.map {
             WNFWidgetEntry(date: $0, snapshot: snapshot.projected(at: $0), isPreview: context.isPreview)
         }
         let policy: TimelineReloadPolicy = context.isPreview ? .never : .after(plan.reloadDate)
-        return Timeline(entries: entries, policy: policy)
+        completion(Timeline(entries: entries, policy: policy))
     }
 
     private func loadSnapshot() -> WNFWidgetSnapshot? {
         guard let userDefaults = UserDefaults(suiteName: WNFShared.appGroupID) else {
-            logger.error("Widget App Group defaults unavailable; using sample snapshot.")
+            logger.error("Widget App Group defaults unavailable; showing setup message.")
             return nil
         }
 
@@ -80,7 +83,7 @@ private struct WNFWidgetProvider: AppIntentTimelineProvider {
         do {
             return try JSONDecoder().decode(WNFWidgetSnapshot.self, from: data)
         } catch {
-            logger.error("Widget snapshot decode failed; using sample snapshot. error=\(String(describing: error), privacy: .public)")
+            logger.error("Widget snapshot decode failed; showing setup message. error=\(String(describing: error), privacy: .public)")
             return nil
         }
     }
@@ -99,15 +102,29 @@ private struct WNFWidgetView: View {
 
     @ViewBuilder
     private var content: some View {
-        switch family {
-        case .accessoryInline:
-            Text(inlineText)
-        case .accessoryRectangular:
-            rectangularView
-        case .systemMedium:
-            mediumView
-        default:
-            smallView
+        if !entry.hasData {
+            if family == .accessoryInline {
+                Text("窝囊费 · 打开 App 同步")
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("窝囊费")
+                        .font(.headline)
+                    Text("打开 App 同步今日工资")
+                        .font(.caption)
+                }
+                .foregroundStyle(WidgetPalette.ink)
+            }
+        } else {
+            switch family {
+            case .accessoryInline:
+                Text(inlineText)
+            case .accessoryRectangular:
+                rectangularView
+            case .systemMedium:
+                mediumView
+            default:
+                smallView
+            }
         }
     }
 
@@ -194,7 +211,7 @@ struct WNFWidget: Widget {
     let kind = "WNFWidget"
 
     var body: some WidgetConfiguration {
-        AppIntentConfiguration(kind: kind, intent: WNFWidgetConfigurationIntent.self, provider: WNFWidgetProvider()) { entry in
+        StaticConfiguration(kind: kind, provider: WNFWidgetProvider()) { entry in
             WNFWidgetView(entry: entry)
         }
         .configurationDisplayName("窝囊费")

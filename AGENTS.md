@@ -14,6 +14,8 @@
 
 失败先看 `./scripts/wnf doctor`。doctor 会执行 Metal 编译器；缺组件时它停在构建之前，并打印安装命令。脚本不下载 Xcode、runtime 或 Metal toolchain。
 
+Debug 模拟器构建使用无需开发者证书的 ad-hoc 签名，保留 App Group 权限；不要为省略签名而让 Widget 失去共享容器。Release 包审计仍使用无签名构建。Widget 缺少真实快照时提示打开 App 同步，示例金额只用于预览。
+
 默认模拟器由脚本里的设备名和 runtime 版本派生。`WNF_DESTINATION` 只接受 `./scripts/wnf help` 里的两种形式。`.xcodebuildmcp/config.yaml` 是可选工具配置，不是第二套验证配置。分支前缀：`feat/` 行为，`fix/` 缺陷，`tweak/` 视觉、文案、手感、素材。
 
 主流程 UI 测试经 `UITestSupport.launchMainShell()` 传入 `-wnf.onboarding.completed` 跳过引导。每个测试使用独立 `-wnf.test.stateID`，同一测试内验证重启时复用这个 id。首次引导测试不传跳过参数。

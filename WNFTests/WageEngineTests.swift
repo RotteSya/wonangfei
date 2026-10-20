@@ -789,3 +789,12 @@ private func monthKey(for date: Date) -> String {
     let components = DateComponents.calendar.dateComponents([.year, .month], from: date)
     return String(format: "%04d-%02d", components.year ?? 0, components.month ?? 0)
 }
+
+struct SharedContainerTests {
+    @Test("运行包具有真实 App Group 容器，防止无签名构建伪通过")
+    func installedAppCanResolveSharedContainer() {
+        #expect(FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: WNFShared.appGroupID
+        ) != nil)
+    }
+}

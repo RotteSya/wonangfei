@@ -482,18 +482,27 @@ final class HomeMascotVideoController: ObservableObject {
     }
 
     func start() {
-        if isPlaybackRequested, !player.items().isEmpty {
-            player.play()
-            return
-        }
-
         isPlaybackRequested = true
         fillQueue()
         player.play()
     }
 
     func pauseTemporarily() {
+        isPlaybackRequested = false
         player.pause()
+    }
+
+    func handleMemoryWarning() {
+        guard isPlaybackRequested else {
+            pauseAndRelease()
+            return
+        }
+
+        // Keep the playing item and one successor so a memory warning cannot
+        // strand the visible mascot or interrupt the next loop boundary.
+        for item in player.items().dropFirst(2) {
+            player.remove(item)
+        }
     }
 
     func pauseAndRelease() {
@@ -566,7 +575,7 @@ final class HomeMascotVideoController: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.pauseAndRelease()
+                self?.handleMemoryWarning()
             }
         }
     }

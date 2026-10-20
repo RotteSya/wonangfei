@@ -334,6 +334,13 @@ xcode_common() {
   local bundle="$3"
   shift 3
 
+  local signing_flags=("${UNSIGNED_FLAGS[@]}")
+  if [[ "$configuration" == Debug ]]; then
+    # Simulator ad-hoc signing needs no certificate/account, but preserves
+    # App Group entitlements so App and Widget actually share their snapshot.
+    signing_flags=(CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=YES CODE_SIGN_IDENTITY=-)
+  fi
+
   rm -rf "$bundle"
   mkdir -p "$(dirname "$log")" "$(dirname "$bundle")" "$DERIVED_DATA"
 
@@ -346,7 +353,7 @@ xcode_common() {
     -derivedDataPath "$DERIVED_DATA" \
     -resultBundlePath "$bundle" \
     "${SWIFT_FLAGS[@]}" \
-    "${UNSIGNED_FLAGS[@]}" \
+    "${signing_flags[@]}" \
     COMPILER_INDEX_STORE_ENABLE=NO \
     "$@" \
     >"$log" 2>&1

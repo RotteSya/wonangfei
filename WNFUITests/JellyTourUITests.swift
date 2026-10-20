@@ -8,6 +8,29 @@ final class JellyTourUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testForegroundRestoresHomeAndPreservesSelectedTab() throws {
+        let app = launchMainShell()
+        let home = app.buttons["home.share"]
+        requireHittable(home, "home should be ready before backgrounding", timeout: 8)
+        for cycle in 1...3 {
+            XCUIDevice.shared.press(.home)
+            XCTAssertTrue(app.wait(for: .runningBackground, timeout: 5))
+            app.activate()
+            requireHittable(home, "home controls should recover after backgrounding", timeout: 8)
+            attachScreen("foreground-home-\(cycle)")
+        }
+
+        app.buttons["tab.records"].tap()
+        requireHittable(app.buttons["records.period.month"], "records should be visible")
+        XCUIDevice.shared.press(.home)
+        XCTAssertTrue(app.wait(for: .runningBackground, timeout: 5))
+        app.activate()
+        requireHittable(app.buttons["records.period.month"], "foregrounding should preserve records")
+        app.buttons["tab.home"].tap()
+        requireHittable(home, "home should recover after restoring another tab")
+        attachScreen("foreground-records-back-home")
+    }
+
     func testOnboardingCompletionSurvivesIsolatedRestart() throws {
         let stateID = UUID().uuidString
         let app = launchOnboardingShell(stateID: stateID)

@@ -82,7 +82,9 @@ struct WNFWidgetSnapshot: Codable, Equatable {
             workdayMinutes: 480,
             earningPerSecond: 888.88 / Double(188 * 60),
             selectedWeekdays: Array(0...4),
-            statusLabel: "正在搬砖",
+            // 188 paid minutes passes the 150-minute morning block, so the gallery
+            // sample is an afternoon scene and uses that status label.
+            statusLabel: WorkStatus.afternoon.label,
             hidesSensitiveInfo: false,
             overtimeEnd: nil,
             overtimeSeconds: 0

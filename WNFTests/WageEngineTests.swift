@@ -597,6 +597,13 @@ struct WidgetSnapshotTests {
 }
 
 struct WorkStatusLabelTests {
+    @Test("Widget 样例的状态文案来自 WorkStatus.label")
+    func widgetSampleStatusUsesAfternoonLabel() {
+        let sample = WNFWidgetSnapshot.sample
+        #expect(sample.elapsedPaidMinutes == 188)
+        #expect(sample.statusLabel == WorkStatus.afternoon.label)
+    }
+
     @Test("WorkStatus.label 覆盖六个状态文案")
     func workStatusLabelsMatchContract() {
         #expect(WorkStatus.off.label == "今天不用窝囊")

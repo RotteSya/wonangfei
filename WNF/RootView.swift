@@ -92,12 +92,12 @@ struct RootView: View {
     @State private var clockOutDecisionPresented = false
     @State private var overtimePickerPresented = false
     @State private var tabBarFloorHeight: CGFloat = 0
-    @AppStorage("wnf.onboarding.completed") private var onboardingCompleted = false
+    @AppStorage(StorageKey.onboardingCompleted) private var onboardingCompleted = false
 
     /// Launch argument `-wnf.onboarding.completed` is read-only (NSArgumentDomain / ProcessInfo), never persisted.
     private var hasCompletedOnboarding: Bool {
         onboardingCompleted
-            || UserDefaults.standard.bool(forKey: "wnf.onboarding.completed")
+            || UserDefaults.standard.bool(forKey: StorageKey.onboardingCompleted)
             || ProcessInfo.processInfo.arguments.contains("-wnf.onboarding.completed")
             || ProcessInfo.processInfo.environment["WNF_SKIP_ONBOARDING"] == "1"
             || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil

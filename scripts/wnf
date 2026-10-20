@@ -8,9 +8,15 @@ cd "$REPO_ROOT"
 
 PROJECT="WNF.xcodeproj"
 SCHEME="WNF"
-DESTINATION="${WNF_DESTINATION:-platform=iOS Simulator,name=iPhone 17,OS=26.5}"
-IOS_RUNTIME_VERSION="26.5"
-SIM_NAME="iPhone 17"
+# Default device and runtime live only here. DESTINATION is derived from them
+# unless WNF_DESTINATION selects another supported iOS Simulator target.
+DEFAULT_SIM_NAME="iPhone 17"
+DEFAULT_IOS_RUNTIME="26.5"
+DEST_MODE="name"
+SIM_NAME="$DEFAULT_SIM_NAME"
+IOS_RUNTIME_VERSION="$DEFAULT_IOS_RUNTIME"
+SIM_ID=""
+DESTINATION="platform=iOS Simulator,name=${DEFAULT_SIM_NAME},OS=${DEFAULT_IOS_RUNTIME}"
 ASC_APP_ID="6780135826"
 EDITABLE_ASC_VERSION="1.2"
 
@@ -41,8 +47,11 @@ usage() {
   cat <<'EOF'
 Usage: ./scripts/wnf <command>
 
-  doctor         Read-only environment check (Xcode, iOS 26.5, iPhone 17 type, 4 targets, tracked scheme)
-  bootstrap      Create an iPhone 17 simulator for iOS 26.5 if the runtime exists and none is present
+  doctor         Read-only environment check (developer dir, commands, Metal toolchain,
+                 selected simulator, 4 targets, tracked scheme). Stops before any build.
+  bootstrap      Ensure the selected iOS Simulator exists. Name mode creates it when the
+                 runtime is already installed. Id mode only validates that id.
+  static-gate    Tracked-file, plist, metadata, and resource checks used by verify
   build          Debug App+Widget
   test-unit      WNFTests
   test-ui        WNFUITests
@@ -52,7 +61,16 @@ Usage: ./scripts/wnf <command>
   store-check    OPTIONAL. Read-only ASC metadata pull/validate/plan + URL/screenshot presence.
                  Never apply, submit, or remote-delete. Not part of verify.
 
+  WNF_DESTINATION  Optional simulator override. Two forms are accepted:
+                     platform=iOS Simulator,name=<device>,OS=<version>
+                     platform=iOS Simulator,id=<udid>
+                   Any other form is an error. The default is iPhone 17 on iOS 26.5.
+                   Name and OS overrides are shared by doctor and bootstrap.
+
 Logs and xcresults: build/verification/
+A machine that already has the required Xcode components can start this flow
+and see a failing stage immediately. Downloading Xcode, a runtime, or the
+Metal toolchain is separate and is not done by this script.
 EOF
 }
 
@@ -620,53 +638,210 @@ audit_release_bundle() {
   return "$missing"
 }
 
-bootstrap_simulator() {
-  python3 - "$SIM_NAME" "$IOS_RUNTIME_VERSION" <<'PY'
+resolve_destination() {
+  local assignments="" rc=0
+  set +e
+  assignments=$(python3 - "$DEFAULT_SIM_NAME" "$DEFAULT_IOS_RUNTIME" <<'PY'
+import os, shlex, sys
+
+default_name, default_os = sys.argv[1], sys.argv[2]
+raw = os.environ.get("WNF_DESTINATION", "").strip()
+
+def fail(msg):
+    sys.stderr.write(msg + "\n")
+    sys.exit(1)
+
+def emit(key, value):
+    print("%s=%s" % (key, shlex.quote(value)))
+
+if not raw:
+    mode, name, osver, ident = "name", default_name, default_os, ""
+    dest = "platform=iOS Simulator,name=%s,OS=%s" % (name, osver)
+else:
+    fields = {}
+    for part in [item.strip() for item in raw.split(",")]:
+        if not part:
+            continue
+        if "=" not in part:
+            fail(
+                "unsupported WNF_DESTINATION %r\n"
+                "Use platform=iOS Simulator,name=<device>,OS=<version> "
+                "or platform=iOS Simulator,id=<udid>" % raw
+            )
+        key, value = part.split("=", 1)
+        key, value = key.strip(), value.strip()
+        if not key or key in fields:
+            fail("unsupported WNF_DESTINATION %r" % raw)
+        fields[key] = value
+    unknown = sorted(set(fields) - {"platform", "name", "OS", "id"})
+    if unknown:
+        fail(
+            "unsupported WNF_DESTINATION keys %s in %r\n"
+            "Use platform=iOS Simulator,name=<device>,OS=<version> "
+            "or platform=iOS Simulator,id=<udid>" % (", ".join(unknown), raw)
+        )
+    platform = fields.get("platform")
+    if platform is not None and platform != "iOS Simulator":
+        fail("unsupported WNF_DESTINATION platform %r. Only iOS Simulator is supported." % platform)
+    has_id = "id" in fields
+    has_name = "name" in fields
+    has_os = "OS" in fields
+    if has_id and (has_name or has_os):
+        fail("WNF_DESTINATION cannot combine id with name or OS: %r" % raw)
+    if has_id:
+        ident = fields["id"]
+        if not ident:
+            fail("WNF_DESTINATION id is empty")
+        mode, name, osver = "id", "", ""
+        dest = "platform=iOS Simulator,id=%s" % ident
+    elif has_name or has_os:
+        if not (has_name and has_os) or not fields.get("name") or not fields.get("OS"):
+            fail("WNF_DESTINATION name mode requires both name and OS: %r" % raw)
+        mode, name, osver, ident = "name", fields["name"], fields["OS"], ""
+        dest = "platform=iOS Simulator,name=%s,OS=%s" % (name, osver)
+    elif platform is not None:
+        fail(
+            "WNF_DESTINATION %r has no name/OS or id. "
+            "Refusing to fall back to the default simulator." % raw
+        )
+    else:
+        fail("unsupported WNF_DESTINATION %r" % raw)
+
+emit("DEST_MODE", mode)
+emit("SIM_NAME", name)
+emit("IOS_RUNTIME_VERSION", osver)
+emit("SIM_ID", ident)
+emit("DESTINATION", dest)
+PY
+)
+  rc=$?
+  set -e
+  if [[ $rc -ne 0 ]]; then
+    exit "$rc"
+  fi
+  eval "$assignments"
+}
+
+# action is "check" (never create) or "ensure" (name mode may create).
+sim_destination_action() {
+  local action="$1"
+  python3 - "$action" "$DEST_MODE" "$SIM_NAME" "$IOS_RUNTIME_VERSION" "$SIM_ID" <<'PY'
 import json, subprocess, sys
 
-name, version = sys.argv[1], sys.argv[2]
+action, mode, name, version, ident = sys.argv[1:6]
 
 def simctl_json(*args):
     out = subprocess.check_output(["xcrun", "simctl", *args, "-j"])
     return json.loads(out)
 
-runtimes = simctl_json("list", "runtimes").get("runtimes", [])
-runtime = None
-for item in runtimes:
-    ver = str(item.get("version", ""))
-    label = item.get("name", "")
-    available = item.get("isAvailable", True)
-    if not available:
-        continue
-    if version in ver or version in label:
-        if "iOS" in label or item.get("identifier", "").find("iOS") >= 0:
-            runtime = item
-            break
-if runtime is None:
-    sys.stderr.write(
-        "iOS %s runtime is not installed. Install it from Xcode Settings > Platforms. "
-        "This script will not download Xcode or runtimes.\n" % version
+def fail(msg):
+    sys.stderr.write(msg + "\n")
+    sys.exit(1)
+
+def ios_runtime(item):
+    platform = item.get("platform") or ""
+    label = item.get("name") or ""
+    runtime_id = item.get("identifier") or ""
+    return (
+        platform == "iOS"
+        or label.startswith("iOS ")
+        or runtime_id.startswith("com.apple.CoreSimulator.SimRuntime.iOS-")
     )
-    sys.exit(1)
 
+def find_runtime(expected):
+    matches = []
+    for item in simctl_json("list", "runtimes").get("runtimes", []):
+        if item.get("isAvailable") is not True:
+            continue
+        if str(item.get("version", "")) != expected:
+            continue
+        if ios_runtime(item):
+            matches.append(item)
+    if not matches:
+        fail(
+            "iOS %s runtime is not installed or is unavailable. "
+            "Install it from Xcode Settings > Platforms. "
+            "This script will not download Xcode or runtimes." % expected
+        )
+    if len(matches) > 1:
+        fail("multiple available iOS runtimes match version %s exactly" % expected)
+    return matches[0]
+
+def find_device_id(device_id):
+    found = None
+    runtime_id = None
+    for rid, devices in simctl_json("list", "devices").get("devices", {}).items():
+        for dev in devices:
+            if dev.get("udid") == device_id:
+                found = dev
+                runtime_id = rid
+                break
+        if found is not None:
+            break
+    if found is None:
+        fail(
+            "simulator id %s was not found. "
+            "This script will not create the default simulator instead." % device_id
+        )
+    if found.get("isAvailable") is False or found.get("isUnavailable") is True:
+        fail("simulator id %s exists but is unavailable." % device_id)
+    return found, runtime_id
+
+if mode == "id":
+    device, runtime_id = find_device_id(ident)
+    print(
+        "simulator id %s (%s) runtime %s"
+        % (ident, device.get("name") or "unnamed", runtime_id)
+    )
+    sys.exit(0)
+
+if mode != "name":
+    fail("unsupported destination mode %s" % mode)
+
+runtime = find_runtime(version)
 types = simctl_json("list", "devicetypes").get("devicetypes", [])
-devtype = next((t for t in types if t.get("name") == name), None)
+devtype = next((item for item in types if item.get("name") == name), None)
 if devtype is None:
-    sys.stderr.write("Device type %s is not available in this Xcode.\n" % name)
-    sys.exit(1)
+    fail("device type %s is not available in this Xcode." % name)
 
-rid = runtime["identifier"]
+runtime_id = runtime["identifier"]
+print("runtime: %s (%s) available" % (runtime.get("name"), runtime_id))
+print("device type: %s present" % name)
+
+if action == "check":
+    sys.exit(0)
+if action != "ensure":
+    fail("unsupported simulator action %s" % action)
+
 devices = simctl_json("list", "devices", "available").get("devices", {})
-for dev in devices.get(rid, []):
-    if dev.get("name") == name and not dev.get("isUnavailable", False):
-        print("simulator already present: %s (%s)" % (name, rid))
+for dev in devices.get(runtime_id, []):
+    if dev.get("name") == name and dev.get("isUnavailable") is not True:
+        print("simulator already present: %s (%s)" % (name, runtime_id))
         sys.exit(0)
 
 subprocess.check_call(
-    ["xcrun", "simctl", "create", name, devtype["identifier"], rid]
+    ["xcrun", "simctl", "create", name, devtype["identifier"], runtime_id]
 )
-print("created simulator %s for %s" % (name, rid))
+print("created simulator %s for %s" % (name, runtime_id))
 PY
+}
+
+check_metal_toolchain() {
+  local metal_out="" metal_rc=0
+  metal_out=$(xcrun metal --version 2>&1) && metal_rc=0 || metal_rc=$?
+  if [[ $metal_rc -ne 0 ]]; then
+    printf '%s\n' "$metal_out"
+    if command -v xcodebuild >/dev/null 2>&1; then
+      xcodebuild -showComponent MetalToolchain || true
+    fi
+    printf 'Metal toolchain is missing or cannot execute. The metal path can exist while compilation still fails.\n'
+    printf 'Install the component, then rerun doctor:\n'
+    printf '  xcodebuild -downloadComponent MetalToolchain\n'
+    printf 'This script does not download Xcode, runtimes, or the Metal toolchain.\n'
+    return 1
+  fi
+  printf 'metal: %s\n' "$metal_out"
+  return 0
 }
 
 cmd_doctor() {
@@ -676,33 +851,58 @@ cmd_doctor() {
   stage_start doctor "" "$log"
   set +e
   (
-    set -euo pipefail
+    problems=0
     printf 'repo: %s\n' "$REPO_ROOT"
+    if [[ -n "${DEVELOPER_DIR:-}" ]]; then
+      printf 'developer dir: %s\n' "$DEVELOPER_DIR"
+    else
+      printf 'developer dir: %s\n' "$(xcode-select -p 2>/dev/null || printf 'unavailable')"
+    fi
+    printf 'destination: %s\n' "$DESTINATION"
+    printf 'destination mode: %s\n' "$DEST_MODE"
+    echo
+    for cmd in git python3 sips xcrun xcodebuild; do
+      if command -v "$cmd" >/dev/null 2>&1; then
+        printf 'command: %s\n' "$cmd"
+      else
+        printf 'missing command: %s\n' "$cmd"
+        problems=1
+      fi
+    done
+    echo
     if ! command -v xcodebuild >/dev/null 2>&1; then
-      printf 'xcodebuild not found\n'
+      printf 'xcodebuild is required before version, Metal, and simulator checks\n'
       exit 1
     fi
     xcodebuild -version
     echo
-    if ! xcrun simctl list runtimes available | grep -q "iOS ${IOS_RUNTIME_VERSION}"; then
-      printf 'iOS %s runtime not found (available runtimes):\n' "$IOS_RUNTIME_VERSION"
-      xcrun simctl list runtimes
+    if ! command -v xcrun >/dev/null 2>&1; then
+      printf 'xcrun is required before Metal and simulator checks\n'
       exit 1
     fi
-    printf 'runtime: iOS %s present\n' "$IOS_RUNTIME_VERSION"
-    if ! xcrun simctl list devicetypes | grep -F "iPhone 17 (" >/dev/null; then
-      printf 'iPhone 17 device type not found\n'
-      xcrun simctl list devicetypes
-      exit 1
+    if ! check_metal_toolchain; then
+      problems=1
     fi
-    printf 'device type: %s present\n' "$SIM_NAME"
     echo
-    xcodebuild -list -project "$PROJECT"
+    if ! sim_destination_action check; then
+      problems=1
+    fi
     echo
-    check_four_targets
-    printf 'targets: WNF WNFWidget WNFTests WNFUITests\n'
-    check_tracked_scheme
-    printf 'tracked scheme: WNF.xcscheme only\n'
+    if ! xcodebuild -list -project "$PROJECT"; then
+      problems=1
+    fi
+    echo
+    if ! check_four_targets; then
+      problems=1
+    else
+      printf 'targets: WNF WNFWidget WNFTests WNFUITests\n'
+    fi
+    if ! check_tracked_scheme; then
+      problems=1
+    else
+      printf 'tracked scheme: WNF.xcscheme only\n'
+    fi
+    exit "$problems"
   ) >"$log" 2>&1
   rc=$?
   set -e
@@ -718,7 +918,7 @@ cmd_bootstrap() {
   ensure_dirs
   stage_start bootstrap "" "$log"
   set +e
-  bootstrap_simulator >"$log" 2>&1
+  sim_destination_action ensure >"$log" 2>&1
   local rc=$?
   set -e
   cat "$log"
@@ -899,7 +1099,17 @@ main() {
     exit 2
   fi
   case "$1" in
-    -h|--help|help) usage ;;
+    -h|--help|help)
+      usage
+      return
+      ;;
+  esac
+  if ! command -v python3 >/dev/null 2>&1; then
+    printf 'FAIL  missing command: python3\n'
+    exit 1
+  fi
+  resolve_destination
+  case "$1" in
     doctor) cmd_doctor ;;
     bootstrap) cmd_bootstrap ;;
     static-gate) cmd_static_gate ;;
